@@ -27,7 +27,40 @@
   },
   "chat": {
     "title": "Chaty",
-    "empty": "Zatím žádné chaty. Nejdřív si vytvoř postavu."
+    "empty": "Zatím žádné chaty. Vytvoř první.",
+    "newChat": {
+      "button": "Nový chat",
+      "defaultTitle": "Nový chat",
+      "titleLabel": "Název",
+      "titlePlaceholder": "Např. Cesta do Ashfordu",
+      "connectionLabel": "Připojení",
+      "noConnectionsHint": "Nejdřív si v Nastavení → Připojení vytvoř alespoň jedno připojení.",
+      "create": "Vytvořit chat"
+    },
+    "list": {
+      "updatedAt": "Naposledy upraveno {{date}}",
+      "noConnection": "Bez připojení",
+      "deleteConfirm": "Opravdu smazat tento chat i s celou historií?"
+    },
+    "room": {
+      "backToList": "Zpět na chaty",
+      "connectionLabel": "Připojení:",
+      "empty": "Zatím žádné zprávy. Napiš první.",
+      "inputPlaceholder": "Napiš zprávu… (Enter odešle, Shift+Enter nový řádek)",
+      "send": "Odeslat",
+      "stop": "Zastavit",
+      "regenerate": "Přegenerovat",
+      "edit": "Upravit",
+      "save": "Uložit",
+      "cancel": "Zrušit",
+      "previousSwipe": "Předchozí varianta",
+      "nextSwipe": "Další varianta",
+      "swipeOf": "{{current}} / {{total}}",
+      "errors": {
+        "noConnection": "Tento chat nemá vybrané připojení. Nastav ho v seznamu chatů.",
+        "generic": "Chyba: {{message}}"
+      }
+    }
   },
   "characters": {
     "title": "Postavy",

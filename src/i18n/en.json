@@ -27,7 +27,40 @@
   },
   "chat": {
     "title": "Chats",
-    "empty": "No chats yet. Create a character first."
+    "empty": "No chats yet. Create your first one.",
+    "newChat": {
+      "button": "New chat",
+      "defaultTitle": "New chat",
+      "titleLabel": "Title",
+      "titlePlaceholder": "e.g. Journey to Ashford",
+      "connectionLabel": "Connection",
+      "noConnectionsHint": "First create at least one connection in Settings → Connections.",
+      "create": "Create chat"
+    },
+    "list": {
+      "updatedAt": "Last updated {{date}}",
+      "noConnection": "No connection",
+      "deleteConfirm": "Delete this chat and all its history?"
+    },
+    "room": {
+      "backToList": "Back to chats",
+      "connectionLabel": "Connection:",
+      "empty": "No messages yet. Write the first one.",
+      "inputPlaceholder": "Write a message… (Enter to send, Shift+Enter for a new line)",
+      "send": "Send",
+      "stop": "Stop",
+      "regenerate": "Regenerate",
+      "edit": "Edit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "previousSwipe": "Previous variant",
+      "nextSwipe": "Next variant",
+      "swipeOf": "{{current}} / {{total}}",
+      "errors": {
+        "noConnection": "This chat has no connection selected. Set one from the chat list.",
+        "generic": "Error: {{message}}"
+      }
+    }
   },
   "characters": {
     "title": "Characters",
