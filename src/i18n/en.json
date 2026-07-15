@@ -1,0 +1,109 @@
+{
+  "common": {
+    "appName": "MySillyTavern",
+    "nav": {
+      "chats": "Chats",
+      "characters": "Characters",
+      "personas": "Personas",
+      "lorebooks": "Lorebooks",
+      "settings": "Settings"
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "edit": "Edit",
+      "add": "Add",
+      "close": "Close",
+      "confirm": "Confirm",
+      "back": "Back"
+    },
+    "state": {
+      "loading": "Loading…",
+      "saving": "Saving…",
+      "empty": "Nothing here yet."
+    },
+    "comingSoon": "This screen ships in a later milestone."
+  },
+  "chat": {
+    "title": "Chats",
+    "empty": "No chats yet. Create a character first."
+  },
+  "characters": {
+    "title": "Characters",
+    "empty": "No characters yet."
+  },
+  "personas": {
+    "title": "Personas",
+    "empty": "No personas yet."
+  },
+  "lorebooks": {
+    "title": "Lorebooks",
+    "empty": "No lorebooks yet."
+  },
+  "memory": {
+    "title": "Memory",
+    "tabs": {
+      "facts": "Facts",
+      "summary": "Summary",
+      "prompt": "Lorebook & prompt"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "connections": "Connections",
+      "appearance": "Appearance"
+    },
+    "appearance": {
+      "language": "Language",
+      "languageCs": "Czech",
+      "languageEn": "English",
+      "theme": "Theme",
+      "themeDark": "Dark",
+      "themeLight": "Light"
+    },
+    "connections": {
+      "title": "Connections",
+      "subtitle": "Presets for API providers. The key is stored only in the system keyring, never in the database.",
+      "newButton": "New connection",
+      "empty": "No connections yet. Add one to test a connection.",
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "e.g. Gemini Free",
+        "provider": "Provider",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "Only for OpenAI-compatible APIs",
+        "baseUrlHint": "Leave empty to use the default OpenAI endpoint.",
+        "model": "Model",
+        "modelPlaceholder": "e.g. gemini-2.0-flash",
+        "temperature": "Temperature",
+        "topP": "Top P",
+        "maxTokens": "Max tokens",
+        "contextBudget": "Context budget",
+        "apiKey": "API key"
+      },
+      "providers": {
+        "gemini": "Gemini",
+        "openai": "OpenAI-compatible (ChatGPT, DeepSeek, OpenRouter)",
+        "claude": "Claude"
+      },
+      "apiKey": {
+        "placeholder": "Paste API key…",
+        "saved": "key saved ✓",
+        "notSaved": "no key saved",
+        "save": "Save key",
+        "delete": "Delete key",
+        "neverShown": "Once saved, the key is never shown again — only its presence is verified."
+      },
+      "test": {
+        "button": "Test connection",
+        "running": "Testing…",
+        "success": "Connection works. Reply: {{reply}}",
+        "failure": "Connection failed: {{message}}"
+      },
+      "deleteConfirm": "Delete this connection? Its saved key will be deleted too.",
+      "saved": "Connection saved."
+    }
+  }
+}

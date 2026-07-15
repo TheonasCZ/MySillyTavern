@@ -1,0 +1,109 @@
+{
+  "common": {
+    "appName": "MySillyTavern",
+    "nav": {
+      "chats": "Chaty",
+      "characters": "Postavy",
+      "personas": "Persony",
+      "lorebooks": "Lorebooky",
+      "settings": "Nastavení"
+    },
+    "actions": {
+      "save": "Uložit",
+      "cancel": "Zrušit",
+      "delete": "Smazat",
+      "edit": "Upravit",
+      "add": "Přidat",
+      "close": "Zavřít",
+      "confirm": "Potvrdit",
+      "back": "Zpět"
+    },
+    "state": {
+      "loading": "Načítání…",
+      "saving": "Ukládání…",
+      "empty": "Zatím tu nic není."
+    },
+    "comingSoon": "Tato obrazovka bude hotová v dalším milníku."
+  },
+  "chat": {
+    "title": "Chaty",
+    "empty": "Zatím žádné chaty. Nejdřív si vytvoř postavu."
+  },
+  "characters": {
+    "title": "Postavy",
+    "empty": "Zatím žádné postavy."
+  },
+  "personas": {
+    "title": "Persony",
+    "empty": "Zatím žádné persony."
+  },
+  "lorebooks": {
+    "title": "Lorebooky",
+    "empty": "Zatím žádné lorebooky."
+  },
+  "memory": {
+    "title": "Paměť",
+    "tabs": {
+      "facts": "Fakta",
+      "summary": "Shrnutí",
+      "prompt": "Lorebook & prompt"
+    }
+  },
+  "settings": {
+    "title": "Nastavení",
+    "sections": {
+      "connections": "Připojení",
+      "appearance": "Vzhled"
+    },
+    "appearance": {
+      "language": "Jazyk",
+      "languageCs": "Čeština",
+      "languageEn": "Angličtina",
+      "theme": "Motiv",
+      "themeDark": "Tmavý",
+      "themeLight": "Světlý"
+    },
+    "connections": {
+      "title": "Připojení",
+      "subtitle": "Předvolby pro API poskytovatele. Klíč se ukládá jen do systémového keyringu, nikdy do databáze.",
+      "newButton": "Nové připojení",
+      "empty": "Zatím žádné připojení. Přidej první, ať můžeš testovat spojení.",
+      "fields": {
+        "name": "Název",
+        "namePlaceholder": "Např. Gemini Free",
+        "provider": "Poskytovatel",
+        "baseUrl": "Base URL",
+        "baseUrlPlaceholder": "Jen pro OpenAI-kompatibilní API",
+        "baseUrlHint": "Nechte prázdné pro výchozí OpenAI endpoint.",
+        "model": "Model",
+        "modelPlaceholder": "Např. gemini-2.0-flash",
+        "temperature": "Temperature",
+        "topP": "Top P",
+        "maxTokens": "Max tokenů",
+        "contextBudget": "Rozpočet kontextu",
+        "apiKey": "API klíč"
+      },
+      "providers": {
+        "gemini": "Gemini",
+        "openai": "OpenAI-kompatibilní (ChatGPT, DeepSeek, OpenRouter)",
+        "claude": "Claude"
+      },
+      "apiKey": {
+        "placeholder": "Vlož API klíč…",
+        "saved": "klíč uložen ✓",
+        "notSaved": "klíč není uložen",
+        "save": "Uložit klíč",
+        "delete": "Smazat klíč",
+        "neverShown": "Klíč se po uložení už nikdy nezobrazí, jen ověří že existuje."
+      },
+      "test": {
+        "button": "Test spojení",
+        "running": "Testuji…",
+        "success": "Spojení funguje. Odpověď: {{reply}}",
+        "failure": "Spojení selhalo: {{message}}"
+      },
+      "deleteConfirm": "Opravdu smazat toto připojení? Smaže se i uložený klíč.",
+      "saved": "Připojení uloženo."
+    }
+  }
+}
