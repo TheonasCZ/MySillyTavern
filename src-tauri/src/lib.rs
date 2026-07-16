@@ -5,6 +5,7 @@ mod providers;
 
 use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
 use commands::chat::{chat_abort, chat_complete, chat_stream, StreamRegistry};
+use commands::files::{read_text_file, write_text_file};
 use commands::secrets::{delete_api_key, has_api_key, set_api_key};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -29,6 +30,8 @@ pub fn run() {
             export_card_png,
             read_card_json_file,
             ensure_placeholder_avatar,
+            read_text_file,
+            write_text_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
