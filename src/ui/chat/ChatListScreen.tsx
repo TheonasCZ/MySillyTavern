@@ -3,8 +3,9 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { greetingOptions, resolveGreeting } from "../../chat/systemPrompt";
+import { searchSnippet } from "../../chat/searchSnippet";
 import { getCharacter } from "../../db/repositories/charactersRepo";
-import { createMessage } from "../../db/repositories/messagesRepo";
+import { createMessage, searchMessages, type MessageSearchHit } from "../../db/repositories/messagesRepo";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
@@ -44,6 +45,22 @@ export function ChatListScreen() {
   const [newGreeting, setNewGreeting] = useState<string>("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchHits, setSearchHits] = useState<MessageSearchHit[] | null>(null);
+
+  // Debounced fulltext search across all chats' messages; cleared below
+  // two characters so casual typing doesn't fire queries.
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (term.length < 2) {
+      setSearchHits(null);
+      return;
+    }
+    const handle = setTimeout(() => {
+      void searchMessages(term).then((hits) => setSearchHits(hits));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -262,12 +279,51 @@ export function ChatListScreen() {
         </div>
       )}
 
+      <input
+        className="rounded-[var(--radius-md)] border px-3 py-2 text-sm"
+        style={inputStyle}
+        value={searchTerm}
+        placeholder={t("list.searchPlaceholder") ?? ""}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
+
+      {searchHits !== null && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
+            {t("list.searchResults", { count: searchHits.length })}
+          </h2>
+          {searchHits.length === 0 && (
+            <p className="text-sm" style={{ color: "var(--color-text-faint)" }}>
+              {t("list.searchEmpty")}
+            </p>
+          )}
+          {searchHits.map((hit) => {
+            const chat = chats.find((c) => c.id === hit.chatId);
+            return (
+              <button
+                key={hit.messageId}
+                type="button"
+                onClick={() => navigate(`/chat/${hit.chatId}`)}
+                className="flex flex-col gap-1 rounded-[var(--radius-md)] border px-4 py-2 text-left"
+                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
+              >
+                <span className="text-sm font-medium">{chat?.title ?? "…"}</span>
+                <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+                  {searchSnippet(hit.content, searchTerm.trim())}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {chats.length === 0 && !creating && (
         <p className="text-sm" style={{ color: "var(--color-text-faint)" }}>
           {t("empty")}
         </p>
       )}
 
+      {searchHits === null && (
       <ul className="flex flex-col gap-2">
         {chats.map((chat) => (
           <li
@@ -322,7 +378,11 @@ export function ChatListScreen() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: "var(--color-text-faint)" }}>
-              <span>{t("list.updatedAt", { date: formatDate(chat.updatedAt) })}</span>
+              <span>
+                {characters.find((c) => c.id === chat.characterId)?.name ?? "?"}
+                {" · "}
+                {t("list.updatedAt", { date: formatDate(chat.updatedAt) })}
+              </span>
               <select
                 className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
                 style={inputStyle}
@@ -353,6 +413,7 @@ export function ChatListScreen() {
           </li>
         ))}
       </ul>
+      )}
     </div>
   );
 }

@@ -15,6 +15,12 @@ import { listMessages, type Message } from "../db/repositories/messagesRepo";
 import { getSetting } from "../db/repositories/settingsRepo";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { DEFAULT_VERBATIM_WINDOW } from "../prompt/promptBuilder";
+import { listActivatableEntries } from "../db/repositories/lorebooksRepo";
+import {
+  syncFactEmbeddings,
+  syncLoreEmbeddings,
+  syncMessageChunkEmbeddings,
+} from "./embeddingsEngine";
 import { runExtraction } from "./extractor";
 import { runSummarization } from "./summarizer";
 
@@ -90,12 +96,34 @@ async function runDueWork(chatId: string): Promise<void> {
   const foldableEnd = messages.length - verbatimWindow; // exclusive upper bound
   const toFold =
     foldableEnd > lastSummarizedIdx + 1 ? messages.slice(lastSummarizedIdx + 1, foldableEnd) : [];
+  let folded: Message[] = [];
   if (toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD) {
     const connection = chat.connectionId ? await getConnection(chat.connectionId) : null;
     if (connection) {
       await runSummarization(chatId, connection, toFold);
       await setLastSummarizedMessageId(chatId, toFold[toFold.length - 1].id);
+      folded = toFold;
     }
+  }
+
+  // --- Embeddings (M7/M8) ---
+  // Facts and lore sync every pass, but only call the embedding API when a
+  // row is new or was edited since its last embedding — so manual edits
+  // from the memory panel get picked up too. Message chunks are embedded
+  // exactly once, right after their messages were folded into the summary.
+  try {
+    const connection = await resolveExtractionConnection(
+      chat.extractionConnectionId,
+      chat.connectionId,
+    );
+    await syncFactEmbeddings(chatId, connection);
+    if (folded.length > 0) {
+      await syncMessageChunkEmbeddings(chatId, connection, folded);
+    }
+    const loreEntries = await listActivatableEntries(chat.characterId, chatId);
+    await syncLoreEmbeddings(connection, loreEntries);
+  } catch (err) {
+    console.warn("embedding sync failed", err);
   }
 }
 

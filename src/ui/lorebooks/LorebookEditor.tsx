@@ -23,6 +23,7 @@ import { pickWorldInfoJsonFile, saveWorldInfoJsonFile } from "../../lorebooks/wo
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useLorebooksStore } from "../../stores/lorebooksStore";
+import { FieldHelp } from "../common/FieldHelp";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -83,7 +84,10 @@ function EntryRow({
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          {t("editor.entryFields.keys")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.keys")}
+            <FieldHelp text={t("editor.help.entryKeys")} />
+          </span>
           <input
             className="rounded-[var(--radius-sm)] border px-2 py-1.5"
             style={inputStyle}
@@ -93,7 +97,10 @@ function EntryRow({
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          {t("editor.entryFields.secondaryKeys")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.secondaryKeys")}
+            <FieldHelp text={t("editor.help.entrySecondaryKeys")} />
+          </span>
           <input
             className="rounded-[var(--radius-sm)] border px-2 py-1.5"
             style={inputStyle}
@@ -105,7 +112,10 @@ function EntryRow({
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.entryFields.content")}
+        <span className="flex items-center gap-1">
+          {t("editor.entryFields.content")}
+          <FieldHelp text={t("editor.help.entryContent")} />
+        </span>
         <textarea
           className="min-h-[5rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -115,7 +125,10 @@ function EntryRow({
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.entryFields.comment")}
+        <span className="flex items-center gap-1">
+          {t("editor.entryFields.comment")}
+          <FieldHelp text={t("editor.help.entryComment")} />
+        </span>
         <input
           className="rounded-[var(--radius-sm)] border px-2 py-1.5"
           style={inputStyle}
@@ -126,7 +139,10 @@ function EntryRow({
 
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm">
-          {t("editor.entryFields.priority")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.priority")}
+            <FieldHelp text={t("editor.help.entryPriority")} />
+          </span>
           <input
             type="number"
             className="w-20 rounded-[var(--radius-sm)] border px-2 py-1"
@@ -141,7 +157,10 @@ function EntryRow({
             checked={fields.alwaysOn}
             onChange={(e) => patch({ alwaysOn: e.target.checked })}
           />
-          {t("editor.entryFields.alwaysOn")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.alwaysOn")}
+            <FieldHelp text={t("editor.help.entryAlwaysOn")} />
+          </span>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -149,7 +168,10 @@ function EntryRow({
             checked={fields.caseSensitive}
             onChange={(e) => patch({ caseSensitive: e.target.checked })}
           />
-          {t("editor.entryFields.caseSensitive")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.caseSensitive")}
+            <FieldHelp text={t("editor.help.entryCaseSensitive")} />
+          </span>
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -157,7 +179,10 @@ function EntryRow({
             checked={fields.enabled}
             onChange={(e) => patch({ enabled: e.target.checked })}
           />
-          {t("editor.entryFields.enabled")}
+          <span className="flex items-center gap-1">
+            {t("editor.entryFields.enabled")}
+            <FieldHelp text={t("editor.help.entryEnabled")} />
+          </span>
         </label>
       </div>
 
@@ -383,7 +408,10 @@ export function LorebookEditor() {
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
       >
         <label className="flex flex-col gap-1 text-sm">
-          {t("editor.fields.name")}
+          <span className="flex items-center gap-1">
+            {t("editor.fields.name")}
+            <FieldHelp text={t("editor.help.name")} />
+          </span>
           <input
             className="rounded-[var(--radius-sm)] border px-2 py-1.5"
             style={inputStyle}
@@ -392,7 +420,10 @@ export function LorebookEditor() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          {t("editor.fields.description")}
+          <span className="flex items-center gap-1">
+            {t("editor.fields.description")}
+            <FieldHelp text={t("editor.help.description")} />
+          </span>
           <textarea
             className="min-h-[3rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
             style={inputStyle}

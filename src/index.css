@@ -18,6 +18,7 @@
 }
 
 html.dark {
+  color-scheme: dark;
   --color-bg: #14110f;
   --color-bg-elevated: #1a1613;
   --color-surface: #201a15;
@@ -39,6 +40,7 @@ html.dark {
 }
 
 html.light {
+  color-scheme: light;
   --color-bg: #f4ecdb;
   --color-bg-elevated: #faf4e7;
   --color-surface: #fffcf5;
@@ -74,6 +76,11 @@ body {
 
 * {
   border-color: var(--color-border);
+}
+
+select option {
+  background-color: var(--color-surface-2);
+  color: var(--color-text);
 }
 
 ::selection {

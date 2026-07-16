@@ -47,7 +47,10 @@
     "list": {
       "updatedAt": "Naposledy upraveno {{date}}",
       "noConnection": "Bez připojení",
-      "deleteConfirm": "Opravdu smazat tento chat i s celou historií?"
+      "deleteConfirm": "Opravdu smazat tento chat i s celou historií?",
+      "searchPlaceholder": "Hledat ve všech chatech…",
+      "searchResults": "Výsledky hledání ({{count}})",
+      "searchEmpty": "Žádná zpráva neodpovídá hledání."
     },
     "room": {
       "backToList": "Zpět na chaty",
@@ -74,7 +77,17 @@
         "offline": "Jsi offline. Zkontroluj připojení k internetu a zkus to znovu.",
         "retry": "Zkusit znovu",
         "generic": "Chyba: {{message}}"
-      }
+      },
+      "suggest": {
+        "button": "💡 Navrhni reakce",
+        "loading": "Přemýšlím…",
+        "tooltip": "Nech model navrhnout 3 možnosti, jak reagovat (stojí jeden dotaz navíc).",
+        "dismiss": "zavřít"
+      },
+      "branch": "⑂ větvit",
+      "branchHint": "Vytvoří kopii chatu končící touto zprávou — příběh se odsud může vydat jinou cestou, původní chat zůstane nedotčený.",
+      "branchConfirm": "Vytvořit větev příběhu od této zprávy? Původní chat zůstane beze změny.",
+      "branchSuffix": "(větev)"
     }
   },
   "characters": {
@@ -114,6 +127,19 @@
         "postHistoryInstructions": "Instrukce za historií",
         "creatorNotes": "Poznámky autora",
         "tags": "Tagy (oddělené čárkou)"
+      },
+      "help": {
+        "name": "Jméno postavy tak, jak ho AI používá při psaní za sebe a jak se zobrazuje v chatu.",
+        "description": "Základní popis postavy — vzhled, pozadí, klíčové vlastnosti. Posílá se AI v každém promptu, drž ho stručný a věcný.",
+        "personality": "Krátký souhrn povahových rysů (např. „tichá, ostražitá, suchý humor“). Pomáhá AI hrát postavu konzistentně napříč celým chatem.",
+        "scenario": "Popis výchozí situace nebo prostředí, ve kterém chat začíná. Nastavuje kontext dřív, než padne první zpráva.",
+        "firstMes": "Zpráva, kterou postava napíše jako první, když založíš nový chat. Je vidět hned, tak by měla ukázat tón i styl postavy.",
+        "alternateGreetings": "Další varianty úvodní zprávy, mezi kterými si můžeš při zakládání chatu vybrat místo té výchozí.",
+        "mesExample": "Ukázkové dialogy, které učí model stylu psaní a délce replik této postavy. Neposílají se jako viditelná zpráva v chatu.",
+        "systemPrompt": "Vlastní systémová instrukce jen pro tuto postavu — přepíše výchozí obecnou RP instrukci aplikace. Nech prázdné, pokud ti stačí výchozí chování.",
+        "postHistoryInstructions": "Text vložený do promptu až za celou historií chatu, těsně před odpovědí modelu. Používá se pro pravidla, která má model dodržet právě teď (např. formátování, připomenutí stylu).",
+        "creatorNotes": "Interní poznámky tvůrce karty. Do promptu se neposílají, slouží jen tobě (nebo komu kartu sdílíš).",
+        "tags": "Štítky pro filtrování a hledání v galerii postav. Na chování AI nemají vliv."
       }
     }
   },
@@ -129,6 +155,10 @@
         "namePlaceholder": "Např. Kai",
         "description": "Popis",
         "descriptionPlaceholder": "Kdo je hráč, jak vypadá, jaký má vztah k postavě…"
+      },
+      "help": {
+        "name": "Jméno, kterým tě AI oslovuje a kterým se nahradí zástupný symbol „user“ v kartách postav a lorebooku.",
+        "description": "Popis tvé role v příběhu — vzhled, pozadí, vztah k postavě. Posílá se AI jako součást systémové zprávy v každém promptu."
       },
       "descriptionHint": "Zobrazí se AI jako popis hráčovy persony v systémové zprávě.",
       "pickAvatar": "Vybrat avatar",
@@ -157,6 +187,18 @@
       "fields": {
         "name": "Název",
         "description": "Popis"
+      },
+      "help": {
+        "name": "Název lorebooku, jen pro tvou orientaci v seznamu. Na chování AI nemá vliv.",
+        "description": "Volitelný popis, k čemu lorebook slouží (např. „historie a geografie světa“). Slouží jen tobě.",
+        "entryKeys": "Klíčová slova, po jejichž výskytu v nedávném chatu se tento záznam aktivuje a vloží do promptu (tzv. World Info). Např. „hrad, král, trůn“.",
+        "entrySecondaryKeys": "Doplňková klíčová slova — pokud jsou vyplněná, záznam se aktivuje jen tehdy, když se v chatu objeví klíč i sekundární klíč zároveň (přesnější, ale přísnější spouštění).",
+        "entryContent": "Text, který se vloží do promptu, když se záznam aktivuje — fakt, popis místa, postavy, pravidlo světa apod.",
+        "entryComment": "Volitelná poznámka k záznamu jen pro tebe, do promptu se neposílá.",
+        "entryPriority": "Určuje pořadí, ve kterém se aktivované záznamy řadí, pokud se do rozpočtu kontextu nevejdou všechny. Vyšší priorita = větší šance, že se záznam do promptu dostane.",
+        "entryAlwaysOn": "Když je zapnuto, záznam se vloží do promptu vždy, bez ohledu na to, jestli se jeho klíčová slova v chatu objevila.",
+        "entryCaseSensitive": "Když je zapnuto, klíčová slova musí v chatu odpovídat i velikostí písmen (např. „Král“ se nespáruje s „král“).",
+        "entryEnabled": "Vypnutý záznam se nikdy neaktivuje, i kdyby jeho klíčová slova v chatu padla. Užitečné pro dočasné vypnutí bez smazání."
       },
       "linksTitle": "Přiřazení",
       "linksHint": "Lorebook lze přiřadit ke konkrétní postavě, konkrétnímu chatu, nebo globálně (pak platí ve všech chatech).",
@@ -189,7 +231,8 @@
     "tabs": {
       "facts": "Fakta",
       "summary": "Shrnutí",
-      "prompt": "Prompt"
+      "prompt": "Prompt",
+      "search": "Hledání"
     },
     "extractionConnection": {
       "label": "Extrakční připojení",
@@ -238,7 +281,27 @@
       "included": "zahrnuto",
       "none": "žádné",
       "trimmedTitle": "Co bylo ořezáno",
-      "noneTrimmed": "Nic nebylo ořezáno — všechno se vešlo do rozpočtu."
+      "noneTrimmed": "Nic nebylo ořezáno — všechno se vešlo do rozpočtu.",
+      "memories": "Vzpomínky"
+    },
+    "search": {
+      "placeholder": "Hledej ve vzpomínkách a faktech…",
+      "button": "Hledat",
+      "searching": "Hledám…",
+      "noResults": "Nic nenalezeno — možná ještě nic není zaindexováno.",
+      "unavailable": "Sémantické hledání není dostupné: připojení (extrakční nebo hlavní) musí být Gemini nebo OpenAI-kompatibilní, Claude embeddingy nenabízí.",
+      "kinds": {
+        "fact": "fakt",
+        "message": "vzpomínka"
+      },
+      "reindex": "Přeindexovat",
+      "reindexing": "Indexuji…",
+      "reindexed": "Přeindexováno {{count}} záznamů.",
+      "reindexHint": "Po změně embedding modelu přepočítá všechny vektory tohoto chatu.",
+      "backfill": "Doplnit staré scény",
+      "backfilling": "Zpracovávám…",
+      "backfilled": "Vytvořeno {{count}} nových scén.",
+      "backfillHint": "Jednorázově zaindexuje historii starého chatu, aby šla sémanticky vyhledávat."
     }
   },
   "settings": {
@@ -271,7 +334,22 @@
       "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",
       "extractionInterval": "Extrakční interval (počet zpráv)",
       "verbatimWindow": "Doslovné okno (počet zpráv)",
-      "saved": "Uloženo."
+      "saved": "Uloženo.",
+      "embedding": {
+        "title": "Sémantická paměť (embeddingy)",
+        "subtitle": "Vektorové vyhledávání relevantních faktů a starších scén. Vyžaduje Gemini nebo OpenAI-kompatibilní připojení.",
+        "model": "Embedding model",
+        "modelPlaceholder": "auto (dle poskytovatele)",
+        "topK": "Počet vzpomínek (top K)",
+        "minScore": "Minimální podobnost (0–1)"
+      },
+      "help": {
+        "extractionInterval": "Jak často (po kolika zprávách) engine projde nedávný chat a vytáhne z něj trvalé fakty (jména, vztahy, sliby…) do paměťového deníku. Nižší číslo = paměť se aktualizuje častěji, ale stojí to víc volání API.",
+        "verbatimWindow": "Kolik posledních zpráv zůstává v promptu doslovně, beze změny. Starší zprávy se místo toho shrnou do souhrnu, aby se ušetřilo místo v kontextu. Vyšší okno = AI vidí čerstvý dialog přesněji, ale spotřebuje víc tokenů.",
+        "embeddingModel": "Model, který převádí text na vektory pro sémantické vyhledávání ve vzpomínkách. Nech prázdné pro automatickou volbu podle poskytovatele připojení.",
+        "topK": "Kolik nejrelevantnějších vzpomínek se maximálně vloží do promptu při každé zprávě. Víc = bohatší kontext, ale víc spotřebovaných tokenů.",
+        "minScore": "Práh podobnosti (0–1), pod kterým se vzpomínka považuje za nerelevantní a nepoužije se. Vyšší hodnota = přísnější filtr, jen velmi podobné vzpomínky se použijí."
+      }
     },
     "appearance": {
       "language": "Jazyk",
@@ -301,6 +379,17 @@
         "contextBudget": "Rozpočet kontextu",
         "apiKey": "API klíč"
       },
+      "help": {
+        "name": "Vlastní název tohoto připojení, jen pro tvou orientaci v seznamu (např. „Gemini Free“). Na chování AI nemá vliv.",
+        "provider": "Kdo poskytuje API — Gemini, Claude, nebo OpenAI-kompatibilní služba (ChatGPT, DeepSeek, OpenRouter a další, co používají stejné rozhraní).",
+        "model": "Konkrétní model daného poskytovatele, který se bude volat (např. gemini-2.0-flash). Klikni na „Načíst modely“ pro výběr ze seznamu podporovaných modelů.",
+        "baseUrl": "Adresa API endpointu pro OpenAI-kompatibilní služby. Nech prázdné pro oficiální OpenAI, vyplň jen pokud používáš jinou kompatibilní službu (DeepSeek, OpenRouter, lokální server…).",
+        "temperature": "Vyšší hodnota = kreativnější a méně předvídatelné odpovědi. Pro věcné odpovědi nech nízkou (0.3–0.7), pro RP se hodí 0.8–1.0.",
+        "topP": "Omezuje výběr slov na nejpravděpodobnější část. Většinou nech výchozí; ladí se buď temperature, nebo top P, ne obojí.",
+        "maxTokens": "Maximální délka odpovědi modelu v tokenech. Vyšší hodnota umožní delší odpovědi, ale prodlouží čekání a zvýší cenu.",
+        "contextBudget": "Kolik tokenů kontextu (historie chatu, karta postavy, paměť…) se maximálně pošle modelu v jednom dotazu. Musí se vejít do limitu zvoleného modelu.",
+        "apiKey": "Přístupový klíč k API poskytovatele. Ukládá se šifrovaně v systémovém keyringu, nikdy v databázi aplikace, a po uložení se už nezobrazí."
+      },
       "providers": {
         "gemini": "Gemini",
         "openai": "OpenAI-kompatibilní (ChatGPT, DeepSeek, OpenRouter)",
@@ -321,7 +410,15 @@
         "failure": "Spojení selhalo: {{message}}"
       },
       "deleteConfirm": "Opravdu smazat toto připojení? Smaže se i uložený klíč.",
-      "saved": "Připojení uloženo."
+      "saved": "Připojení uloženo.",
+      "models": {
+        "load": "Načíst modely",
+        "loading": "Načítám modely…",
+        "choose": "— vyber model —",
+        "manual": "zadat ručně",
+        "pick": "vybrat ze seznamu",
+        "error": "Načtení modelů selhalo: {{message}}"
+      }
     }
   }
 }

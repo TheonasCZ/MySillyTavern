@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { getChat, type Chat } from "../../db/repositories/chatsRepo";
+import { branchChat, getChat, type Chat } from "../../db/repositories/chatsRepo";
+import { getCharacter, type Character } from "../../db/repositories/charactersRepo";
+import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -44,11 +46,16 @@ export function ChatScreen() {
     switchSwipe,
     stop,
     dismissError,
+    suggestions,
+    suggesting,
+    suggestReplies,
+    clearSuggestions,
   } = useChatStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
   const { setPersona } = useChatListStore();
   const [chat, setChat] = useState<Chat | null>(null);
+  const [character, setCharacter] = useState<Character | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
 
   useEffect(() => {
@@ -62,7 +69,10 @@ export function ChatScreen() {
   useEffect(() => {
     if (!id) return;
     void openChat(id);
-    void getChat(id).then(setChat);
+    void getChat(id).then((loaded) => {
+      setChat(loaded);
+      if (loaded) void getCharacter(loaded.characterId).then(setCharacter);
+    });
     return () => {
       void closeChat();
     };
@@ -74,6 +84,13 @@ export function ChatScreen() {
   const connection = chat?.connectionId
     ? connections.find((c) => c.id === chat.connectionId)
     : undefined;
+  const persona = chat?.personaId ? personas.find((p) => p.id === chat.personaId) : undefined;
+
+  const handleBranch = async (messageId: string) => {
+    if (!confirm(t("room.branchConfirm") ?? "")) return;
+    const branched = await branchChat(id, messageId, t("room.branchSuffix"));
+    if (branched) navigate(`/chat/${branched.id}`);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -178,6 +195,11 @@ export function ChatScreen() {
               streamingMessageId={streamingMessageId}
               streamingText={streamingText}
               interruptedMessageIds={interruptedMessageIds}
+              characterAvatarUrl={avatarSrc(character?.avatarPath ?? null)}
+              characterName={character?.name}
+              personaAvatarUrl={avatarSrc(persona?.avatarPath ?? null)}
+              personaName={persona?.name}
+              onBranch={(messageId) => void handleBranch(messageId)}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
               onLoadOlder={() => void loadOlderMessages()}
@@ -193,6 +215,10 @@ export function ChatScreen() {
             streaming={streaming}
             onSend={(content) => void sendMessage(content)}
             onStop={() => void stop()}
+            suggestions={suggestions}
+            suggesting={suggesting}
+            onSuggest={() => void suggestReplies()}
+            onClearSuggestions={clearSuggestions}
           />
         </div>
 

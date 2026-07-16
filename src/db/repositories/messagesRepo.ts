@@ -1,3 +1,4 @@
+import { foldForSearch } from "../../chat/searchSnippet";
 import { execute, newId, nowIso, query } from "../database";
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -154,4 +155,32 @@ export async function shiftActiveSwipe(message: Message, offset: number): Promis
 
 export async function deleteMessage(id: string): Promise<void> {
   await execute("DELETE FROM messages WHERE id = $1", [id]);
+}
+
+export interface MessageSearchHit {
+  chatId: string;
+  messageId: string;
+  content: string;
+  createdAt: string;
+}
+
+/** Case- and diacritics-insensitive substring search across all chats'
+ * messages ("vez" finds "Věž"), newest first. SQLite's NOCASE only folds
+ * ASCII, so the folding happens in TS — loading all message texts is plenty
+ * fast at this scale (an FTS index with an unaccent tokenizer would pay off
+ * only at hundreds of thousands of messages). */
+export async function searchMessages(term: string, limit = 50): Promise<MessageSearchHit[]> {
+  const target = foldForSearch(term);
+  if (!target) return [];
+  const rows = await query<{ chat_id: string; id: string; content: string; created_at: string }>(
+    "SELECT chat_id, id, content, created_at FROM messages ORDER BY created_at DESC",
+    [],
+  );
+  const hits: MessageSearchHit[] = [];
+  for (const r of rows) {
+    if (!foldForSearch(r.content).includes(target)) continue;
+    hits.push({ chatId: r.chat_id, messageId: r.id, content: r.content, createdAt: r.created_at });
+    if (hits.length >= limit) break;
+  }
+  return hits;
 }

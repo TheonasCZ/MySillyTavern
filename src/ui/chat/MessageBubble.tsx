@@ -25,10 +25,43 @@ interface Props {
    * completion) — shows a badge plus a "continue" action alongside
    * regenerate (plan §9). */
   isInterrupted?: boolean;
+  /** Avatar image URL of the message author (character or persona);
+   * falls back to an initial-letter circle when missing. */
+  avatarUrl?: string;
+  /** Author display name — used for the avatar fallback/alt text. */
+  authorName?: string;
+  /** Shown when set and not streaming — forks the story at this message. */
+  onBranch?: () => void;
   onEdit: (content: string) => void;
   onRegenerate: () => void;
   onContinue?: () => void;
   onSwipe: (offset: number) => void;
+}
+
+function Avatar({ url, name, isUser }: { url?: string; name?: string; isUser: boolean }) {
+  const initial = (name ?? "?").trim().charAt(0).toUpperCase() || "?";
+  return url ? (
+    <img
+      src={url}
+      alt={name ?? ""}
+      title={name}
+      className="h-9 w-9 shrink-0 rounded-full border object-cover"
+      style={{ borderColor: "var(--color-border-strong)" }}
+    />
+  ) : (
+    <span
+      title={name}
+      aria-hidden
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-medium"
+      style={{
+        borderColor: "var(--color-border-strong)",
+        backgroundColor: isUser ? "var(--color-accent)" : "var(--color-surface-2)",
+        color: isUser ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+      }}
+    >
+      {initial}
+    </span>
+  );
 }
 
 export function MessageBubble({
@@ -39,6 +72,9 @@ export function MessageBubble({
   canEdit,
   canRegenerate,
   isInterrupted = false,
+  avatarUrl,
+  authorName,
+  onBranch,
   onEdit,
   onRegenerate,
   onContinue,
@@ -63,7 +99,8 @@ export function MessageBubble({
   const showSwipeControls = !isUser && swipeCount > 1 && !isStreaming;
 
   return (
-    <div className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`flex w-full items-end gap-2 ${isUser ? "flex-row-reverse" : ""}`}>
+      <Avatar url={avatarUrl} name={authorName} isUser={isUser} />
       <div
         className="flex max-w-[75%] flex-col gap-1.5 rounded-[var(--radius-lg)] border px-4 py-3"
         style={{
@@ -142,6 +179,16 @@ export function MessageBubble({
             {canRegenerate && (
               <button type="button" onClick={onRegenerate} className="hover:opacity-80">
                 {t("room.regenerate")}
+              </button>
+            )}
+            {onBranch && (
+              <button
+                type="button"
+                onClick={onBranch}
+                title={t("room.branchHint") ?? ""}
+                className="hover:opacity-80"
+              >
+                {t("room.branch")}
               </button>
             )}
             {showSwipeControls && (

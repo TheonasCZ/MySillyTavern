@@ -10,6 +10,7 @@ import {
   type CharacterUpdate,
 } from "../../db/repositories/charactersRepo";
 import { useCharactersStore } from "../../stores/charactersStore";
+import { FieldHelp } from "../common/FieldHelp";
 import { avatarSrc } from "./avatarSrc";
 
 const inputStyle = {
@@ -36,12 +37,14 @@ function toDraft(character: Character): CharacterUpdate {
 
 function ListEditor({
   label,
+  help,
   values,
   onChange,
   addLabel,
   multiline,
 }: {
   label: string;
+  help?: string;
   values: string[];
   onChange: (values: string[]) => void;
   addLabel: string;
@@ -49,8 +52,12 @@ function ListEditor({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
+      <span
+        className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide"
+        style={{ color: "var(--color-text-faint)" }}
+      >
         {label}
+        {help && <FieldHelp text={help} />}
       </span>
       {values.map((value, i) => (
         <div key={i} className="flex items-start gap-2">
@@ -239,7 +246,10 @@ export function CardEditor() {
 
         <div className="flex flex-1 flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            {t("editor.fields.name")}
+            <span className="flex items-center gap-1">
+              {t("editor.fields.name")}
+              <FieldHelp text={t("editor.help.name")} />
+            </span>
             <input
               className="rounded-[var(--radius-sm)] border px-2 py-1.5"
               style={inputStyle}
@@ -255,7 +265,10 @@ export function CardEditor() {
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.description")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.description")}
+          <FieldHelp text={t("editor.help.description")} />
+        </span>
         <textarea
           className="min-h-[6rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -265,7 +278,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.personality")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.personality")}
+          <FieldHelp text={t("editor.help.personality")} />
+        </span>
         <textarea
           className="min-h-[4rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -275,7 +291,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.scenario")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.scenario")}
+          <FieldHelp text={t("editor.help.scenario")} />
+        </span>
         <textarea
           className="min-h-[4rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -285,7 +304,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.firstMes")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.firstMes")}
+          <FieldHelp text={t("editor.help.firstMes")} />
+        </span>
         <textarea
           className="min-h-[5rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -296,6 +318,7 @@ export function CardEditor() {
 
       <ListEditor
         label={t("editor.fields.alternateGreetings")}
+        help={t("editor.help.alternateGreetings")}
         values={draft.alternateGreetings}
         onChange={(alternateGreetings) => patch({ alternateGreetings })}
         addLabel={t("editor.addGreeting")}
@@ -303,7 +326,10 @@ export function CardEditor() {
       />
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.mesExample")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.mesExample")}
+          <FieldHelp text={t("editor.help.mesExample")} />
+        </span>
         <textarea
           className="min-h-[5rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm font-[var(--font-mono)]"
           style={inputStyle}
@@ -313,7 +339,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.systemPrompt")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.systemPrompt")}
+          <FieldHelp text={t("editor.help.systemPrompt")} />
+        </span>
         <textarea
           className="min-h-[4rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -326,7 +355,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.postHistoryInstructions")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.postHistoryInstructions")}
+          <FieldHelp text={t("editor.help.postHistoryInstructions")} />
+        </span>
         <textarea
           className="min-h-[3rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -336,7 +368,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.creatorNotes")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.creatorNotes")}
+          <FieldHelp text={t("editor.help.creatorNotes")} />
+        </span>
         <textarea
           className="min-h-[3rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}
@@ -346,7 +381,10 @@ export function CardEditor() {
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("editor.fields.tags")}
+        <span className="flex items-center gap-1">
+          {t("editor.fields.tags")}
+          <FieldHelp text={t("editor.help.tags")} />
+        </span>
         <input
           className="rounded-[var(--radius-sm)] border px-2 py-1.5"
           style={inputStyle}

@@ -19,8 +19,10 @@ import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/
 import { getSetting } from "../db/repositories/settingsRepo";
 import { getSummary } from "../db/repositories/summariesRepo";
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
+import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
+import { chatComplete } from "../providers/chatComplete";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { useConnectionsStore } from "./connectionsStore";
@@ -57,12 +59,14 @@ async function buildApiMessages(
   const persona = await resolveChatPersona(chat);
 
   let loreEntries: LoreEntryLike[] = [];
+  let activatableLore: LoreEntryLike[] = [];
   try {
     const [activatable, scanDepthSetting, tokenBudgetSetting] = await Promise.all([
       listActivatableEntries(chat.characterId, chat.id),
       getSetting("lore_scan_depth"),
       getSetting("lore_token_budget"),
     ]);
+    activatableLore = activatable;
     loreEntries = selectActiveEntries(
       activatable,
       history.map((m) => m.content),
@@ -89,6 +93,40 @@ async function buildApiMessages(
   const verbatimWindowSetting = await getSetting("verbatim_window").catch(() => null);
   const verbatimWindow = verbatimWindowSetting ? Number(verbatimWindowSetting) : DEFAULT_VERBATIM_WINDOW;
 
+  // Semantic retrieval (M7/M8): one embedding call over the conversation
+  // tail scores everything stored — facts get a relevance-aware trim order,
+  // the top-K older scenes come back as `[RELEVANTNÍ VZPOMÍNKY]`, and lore
+  // entries can activate semantically on top of keyword hits. Any failure
+  // (offline, Claude connection, nothing embedded yet) silently degrades to
+  // the non-semantic behavior.
+  let factRelevance: Record<string, number> | undefined;
+  let retrievedMemories: string[] = [];
+  const embeddingConnection = resolveConnection(chat.extractionConnectionId) ?? connection;
+  if (canEmbed(embeddingConnection)) {
+    try {
+      const selectedIds = new Set(loreEntries.map((e) => e.id));
+      const context = await retrieveSemanticContext({
+        chatId: chat.id,
+        connection: embeddingConnection,
+        queryTexts: history.slice(-3).map((m) => m.content),
+        candidateLoreIds: activatableLore.filter((e) => !selectedIds.has(e.id)).map((e) => e.id),
+      });
+      factRelevance = context.factRelevance;
+      retrievedMemories = context.memories;
+      if (context.loreEntryIds.length > 0) {
+        const byId = new Map(activatableLore.map((e) => [e.id, e]));
+        loreEntries = [
+          ...loreEntries,
+          ...context.loreEntryIds
+            .map((id) => byId.get(id))
+            .filter((e): e is LoreEntryLike => !!e),
+        ];
+      }
+    } catch (err) {
+      console.warn("semantic retrieval failed", err);
+    }
+  }
+
   const { messages, report } = buildPrompt({
     character,
     persona,
@@ -98,6 +136,8 @@ async function buildApiMessages(
     history: toApiMessages(history),
     contextBudget: connection?.contextBudget ?? 8000,
     verbatimWindow,
+    factRelevance,
+    retrievedMemories,
   });
 
   return { messages, report };
@@ -197,6 +237,11 @@ interface ChatState {
    * (plan §9: paginate, load last 100, scroll-up fetches more). */
   hasOlderMessages: boolean;
   loadingOlderMessages: boolean;
+  /** On-demand reply suggestions ("what could {{user}} do next") — filled by
+   * `suggestReplies`, cleared when a message is sent or the chat changes.
+   * Opt-in per press so it never burns tokens unasked (plan follow-up). */
+  suggestions: string[] | null;
+  suggesting: boolean;
 
   openChat: (chatId: string) => Promise<void>;
   closeChat: () => Promise<void>;
@@ -208,6 +253,8 @@ interface ChatState {
   switchSwipe: (messageId: string, offset: number) => Promise<void>;
   stop: () => Promise<void>;
   dismissError: () => void;
+  suggestReplies: () => Promise<void>;
+  clearSuggestions: () => void;
 }
 
 function resolveConnection(connectionId: string | null): ConnectionConfig | null {
@@ -248,6 +295,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   lastPromptReport: null,
   hasOlderMessages: false,
   loadingOlderMessages: false,
+  suggestions: null,
+  suggesting: false,
 
   openChat: async (chatId) => {
     if (get().streaming) {
@@ -264,6 +313,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       lastPromptReport: null,
       hasOlderMessages: false,
       loadingOlderMessages: false,
+      suggestions: null,
+      suggesting: false,
     });
     const [messages, total] = await Promise.all([
       listRecentMessages(chatId, MESSAGE_PAGE_SIZE),
@@ -327,7 +378,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     const userMessage = await createMessage(chatId, "user", trimmed);
-    set((s) => ({ messages: [...s.messages, userMessage] }));
+    set((s) => ({ messages: [...s.messages, userMessage], suggestions: null }));
     void touchChat(chatId);
 
     const { messages: apiMessages, report } = await buildApiMessages(chat, [...messages, userMessage]);
@@ -508,4 +559,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   dismissError: () => set({ error: null, errorRetryable: false, retry: null }),
+
+  /** Asks the model for 3 short ways the user could react next. Built on
+   * the exact same PromptBuilder context as a normal send (ledger facts,
+   * summary, lore), so suggestions know everything the character does —
+   * but only runs on explicit request, so it costs tokens only when used. */
+  suggestReplies: async () => {
+    const { chatId, messages, streaming, suggesting } = get();
+    if (!chatId || streaming || suggesting || messages.length === 0) return;
+
+    const chat = await getChat(chatId);
+    if (!chat) return;
+    const connection = resolveConnection(chat.connectionId);
+    if (!connection) {
+      set({ error: "no-connection", errorRetryable: false, retry: null });
+      return;
+    }
+
+    set({ suggesting: true, suggestions: null });
+    try {
+      const { messages: baseApiMessages } = await buildApiMessages(chat, messages);
+      const apiMessages: ChatMessage[] = [
+        ...baseApiMessages,
+        {
+          role: "user",
+          content:
+            "[Instrukce mimo příběh: Navrhni přesně 3 stručné možnosti, jak může hráčova postava v této situaci reagovat nebo co udělat dál. Každá možnost max 1–2 věty, psaná v první osobě za hráčovu postavu. Využij známá fakta a předměty z příběhu. Odpověz POUZE JSON polem tří řetězců, bez dalšího textu.]",
+        },
+      ];
+      const reply = await chatComplete(connection, apiMessages);
+      const suggestions = parseSuggestions(reply);
+      set({ suggestions });
+    } catch (err) {
+      set({ error: String(err), errorRetryable: false, retry: null });
+    } finally {
+      set({ suggesting: false });
+    }
+  },
+
+  clearSuggestions: () => set({ suggestions: null }),
 }));
+
+/** Extracts up to 3 suggestion strings from the model's reply. Prefers the
+ * requested JSON array (tolerating markdown fences / surrounding prose);
+ * falls back to numbered or bulleted lines when the model ignores the
+ * format, so the button still works with weaker models. */
+export function parseSuggestions(reply: string): string[] {
+  const jsonMatch = reply.match(/\[[\s\S]*\]/);
+  if (jsonMatch) {
+    try {
+      const parsed: unknown = JSON.parse(jsonMatch[0]);
+      if (Array.isArray(parsed)) {
+        const items = parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        if (items.length > 0) return items.slice(0, 3).map((s) => s.trim());
+      }
+    } catch {
+      // fall through to line-based parsing
+    }
+  }
+  return reply
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*•]\s*)/, "").trim())
+    .filter((line) => line.length > 0 && !/^```/.test(line))
+    .slice(0, 3);
+}

@@ -8,7 +8,9 @@ use commands::backup::{
     request_import_backup,
 };
 use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
-use commands::chat::{chat_abort, chat_complete, chat_stream, StreamRegistry};
+use commands::chat::{
+    chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
+};
 use commands::files::{read_text_file, write_text_file};
 use commands::secrets::{delete_api_key, has_api_key, set_api_key};
 
@@ -39,6 +41,8 @@ pub fn run() {
             chat_complete,
             chat_stream,
             chat_abort,
+            list_models,
+            embed_texts,
             import_card_png,
             export_card_png,
             read_card_json_file,

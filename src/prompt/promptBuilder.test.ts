@@ -257,6 +257,73 @@ describe("buildPrompt — trimming under budget pressure", () => {
     expect(messages[0].content).not.toContain("(event/Storm)");
   });
 
+  it("(d) with factRelevance cuts the least relevant fact in a category first", () => {
+    const facts = [
+      makeFact({ id: "f-high", category: "event", subject: "Crystal", fact: "Found a strange crystal." }),
+      makeFact({ id: "f-low", category: "event", subject: "Weather", fact: "It rained last week." }),
+      makeFact({ id: "f-mid", category: "event", subject: "Feast", fact: "A feast was held." }),
+    ];
+    const input = baseInput({
+      ledgerFacts: facts,
+      history: makeHistory(2),
+      contextBudget: 1,
+      factRelevance: { "f-high": 0.9, "f-low": 0.1, "f-mid": 0.5 },
+    });
+    const { report } = buildPrompt(input);
+
+    const cutOrder = report.trimmedNotes
+      .filter((n) => n.startsWith("Fakta:"))
+      .map((n) => /event\/(\w+)/.exec(n)?.[1]);
+    expect(cutOrder).toEqual(["Weather", "Feast", "Crystal"]);
+  });
+
+  it("(d) cuts facts missing from factRelevance before scored ones", () => {
+    const facts = [
+      makeFact({ id: "f-scored", category: "event", subject: "Crystal", fact: "Found a strange crystal." }),
+      makeFact({ id: "f-unscored", category: "event", subject: "Feast", fact: "A feast was held." }),
+    ];
+    const input = baseInput({
+      ledgerFacts: facts,
+      history: makeHistory(2),
+      contextBudget: 1,
+      factRelevance: { "f-scored": 0.2 },
+    });
+    const { report } = buildPrompt(input);
+
+    const cutOrder = report.trimmedNotes
+      .filter((n) => n.startsWith("Fakta:"))
+      .map((n) => /event\/(\w+)/.exec(n)?.[1]);
+    expect(cutOrder).toEqual(["Feast", "Crystal"]);
+  });
+
+  it("renders retrieved memories after the summary and trims them first", () => {
+    const roomy = buildPrompt(
+      baseInput({
+        summary: "Kai found a strange crystal months ago.",
+        retrievedMemories: ["Hráč: Vytáhnu krystal.\nVypravěč: Krystal se rozzáří."],
+      }),
+    );
+    expect(roomy.messages[0].content).toContain("[RELEVANTNÍ VZPOMÍNKY");
+    expect(roomy.messages[0].content).toContain("Krystal se rozzáří.");
+    expect(roomy.report.sections.memoriesIncluded).toBe(1);
+    const summaryIdx = roomy.messages[0].content.indexOf("[DOSAVADNÍ PŘÍBĚH]");
+    const memoriesIdx = roomy.messages[0].content.indexOf("[RELEVANTNÍ VZPOMÍNKY");
+    expect(memoriesIdx).toBeGreaterThan(summaryIdx);
+
+    const tight = buildPrompt(
+      baseInput({
+        retrievedMemories: ["První vzpomínka.", "Druhá vzpomínka."],
+        history: makeHistory(2),
+        contextBudget: 1,
+      }),
+    );
+    expect(tight.report.sections.memoriesIncluded).toBe(0);
+    expect(tight.report.sections.memoriesTotal).toBe(2);
+    expect(tight.messages[0].content).not.toContain("VZPOMÍNKY");
+    // Memories go before lore/history/summary in the trim order.
+    expect(tight.report.trimmedNotes[0]).toContain("Vzpomínky");
+  });
+
   it("(e) drops mes_example only as a last resort", () => {
     const input = baseInput({
       character: makeCharacter({ mesExample: "Elara: *draws her blade* Stand back." }),

@@ -13,7 +13,8 @@
  *      `post_history_instructions` as a trailing system message
  *
  * When the estimated token total exceeds `contextBudget`, trims in this
- * order until it fits (or the step is exhausted): (a) lore entries from
+ * order until it fits (or the step is exhausted): (a0) retrieved memories
+ * from least relevant, (a) lore entries from
  * lowest priority, (b) older verbatim messages (never below 4 most
  * recent), (c) summary text from its start, (d) ledger facts
  * event → quest → npc (world/player are never trimmed), (e) mes_example.
@@ -72,6 +73,15 @@ export interface PromptBuilderInput {
   contextBudget: number;
   /** Default 20 (`verbatim_window` setting). */
   verbatimWindow?: number;
+  /** Optional semantic relevance per fact id (cosine similarity from
+   * `memory/embeddingsEngine.ts`). When present, the fact-trimming pass
+   * cuts the *least relevant* fact within each trimmable category instead
+   * of the first one found; facts missing from the map are cut first. */
+  factRelevance?: Record<string, number>;
+  /** Semantically retrieved older scenes (most relevant first) — rendered
+   * as `[RELEVANTNÍ VZPOMÍNKY]` after the summary. Trimmed before anything
+   * else under budget pressure, least relevant (last) first. */
+  retrievedMemories?: string[];
 }
 
 export interface PromptReport {
@@ -89,6 +99,9 @@ export interface PromptReport {
     summaryTokens: number;
     summaryIncluded: boolean;
     summaryTruncated: boolean;
+    memoriesTokens: number;
+    memoriesIncluded: number;
+    memoriesTotal: number;
     historyTokens: number;
     historyMessagesIncluded: number;
     historyMessagesTotal: number;
@@ -171,6 +184,13 @@ function buildSummarySection(summary: string): string {
   return `[DOSAVADNÍ PŘÍBĚH]\n${summary.trim()}`;
 }
 
+function buildMemoriesSection(memories: string[]): string {
+  if (memories.length === 0) return "";
+  return `[RELEVANTNÍ VZPOMÍNKY — starší scény, doslovně]\n${memories
+    .map((m) => `---\n${m.trim()}`)
+    .join("\n")}`;
+}
+
 function assembleSystemMessage(sections: string[]): string {
   return sections.filter(Boolean).join("\n\n");
 }
@@ -191,6 +211,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   // Mutable working state for the trim passes below.
   let lore = [...input.loreEntries].sort((a, b) => a.priority - b.priority); // ascending: index 0 = lowest priority = first to cut
   let facts = [...activeFacts];
+  let memories = [...(input.retrievedMemories ?? [])]; // most relevant first
+  const memoriesTotal = memories.length;
   let summaryText = (input.summary ?? "").trim();
   let summaryTruncated = false;
   let mesExampleIncluded = character.mesExample.trim().length > 0;
@@ -206,6 +228,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const loreSectionEntries = [...lore].sort((a, b) => b.priority - a.priority);
     const loreSection = buildLoreSection(loreSectionEntries, charName, userName);
     const summarySection = buildSummarySection(summaryText);
+    const memoriesSection = buildMemoriesSection(memories);
 
     const systemText = assembleSystemMessage([
       systemCore,
@@ -213,6 +236,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       factsSection,
       loreSection,
       summarySection,
+      memoriesSection,
     ]);
 
     const messages: PromptMessage[] = [];
@@ -223,9 +247,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       messages.push({ role: "system", content: substitutePlaceholders(phi, charName, userName) });
     }
 
-    const sectionsTok = sectionTokens(systemCore, mesExampleSection, factsSection, loreSection, summarySection, historyIncluded, phi);
+    const sectionsTok = sectionTokens(systemCore, mesExampleSection, factsSection, loreSection, summarySection, memoriesSection, historyIncluded, phi);
     const totalTokens = sectionsTok.systemTokens + sectionsTok.factsTokens + sectionsTok.loreTokens +
-      sectionsTok.summaryTokens + sectionsTok.historyTokens;
+      sectionsTok.summaryTokens + sectionsTok.memoriesTokens + sectionsTok.historyTokens;
 
     return { messages, totalTokens, sectionsTokens: sectionsTok };
   }
@@ -236,6 +260,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     factsSection: string,
     loreSection: string,
     summarySection: string,
+    memoriesSection: string,
     history: PromptMessage[],
     phi: string,
   ) {
@@ -244,11 +269,20 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       factsTokens: estimateTokens(factsSection),
       loreTokens: estimateTokens(loreSection),
       summaryTokens: estimateTokens(summarySection),
+      memoriesTokens: estimateTokens(memoriesSection),
       historyTokens: history.reduce((sum, m) => sum + estimateTokens(m.content), 0) + estimateTokens(phi),
     };
   }
 
   let current = render();
+
+  // (a0) trim retrieved memories, least relevant (last) first — they're a
+  // semantic bonus, so they go before anything the user curated.
+  while (current.totalTokens > budget && memories.length > 0) {
+    memories.pop();
+    trimmedNotes.push("Vzpomínky: vynechána nejméně relevantní scéna (rozpočet kontextu).");
+    current = render();
+  }
 
   // (a) trim lore, lowest priority first.
   while (current.totalTokens > budget && lore.length > 0) {
@@ -277,9 +311,26 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   }
 
   // (d) trim facts event -> quest -> npc (world/player never touched).
+  // With a relevance map, the least relevant fact in the category goes
+  // first; without one, this degrades to the original first-found order.
+  const factCutIndex = (cat: LedgerCategory): number => {
+    let best = -1;
+    let bestScore = Number.POSITIVE_INFINITY;
+    facts.forEach((f, i) => {
+      if (f.category !== cat) return;
+      const score = input.factRelevance
+        ? (input.factRelevance[f.id] ?? Number.NEGATIVE_INFINITY)
+        : 0;
+      if (best === -1 || score < bestScore) {
+        best = i;
+        bestScore = score;
+      }
+    });
+    return best;
+  };
   for (const cat of TRIMMABLE_FACT_CATEGORIES) {
     while (current.totalTokens > budget && facts.some((f) => f.category === cat)) {
-      const idx = facts.findIndex((f) => f.category === cat);
+      const idx = factCutIndex(cat);
       const [removed] = facts.splice(idx, 1);
       trimmedNotes.push(`Fakta: vynechán fakt „(${removed.category}/${removed.subject})" (rozpočet kontextu).`);
       current = render();
@@ -311,6 +362,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       summaryTokens: current.sectionsTokens.summaryTokens,
       summaryIncluded: summaryText.length > 0,
       summaryTruncated,
+      memoriesTokens: current.sectionsTokens.memoriesTokens,
+      memoriesIncluded: memories.length,
+      memoriesTotal,
       historyTokens: current.sectionsTokens.historyTokens,
       historyMessagesIncluded: historyIncluded.length,
       historyMessagesTotal: historyTotal,

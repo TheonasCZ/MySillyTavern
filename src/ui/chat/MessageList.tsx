@@ -10,10 +10,15 @@ interface Props {
   streamingMessageId: string | null;
   streamingText: string;
   interruptedMessageIds: Set<string>;
+  characterAvatarUrl?: string;
+  characterName?: string;
+  personaAvatarUrl?: string;
+  personaName?: string;
   onEdit: (messageId: string, content: string) => void;
   onRegenerate: (messageId: string) => void;
   onContinue: (messageId: string) => void;
   onSwipe: (messageId: string, offset: number) => void;
+  onBranch?: (messageId: string) => void;
   onLoadOlder?: () => void;
   hasOlder?: boolean;
   loadingOlder?: boolean;
@@ -25,10 +30,15 @@ export function MessageList({
   streamingMessageId,
   streamingText,
   interruptedMessageIds,
+  characterAvatarUrl,
+  characterName,
+  personaAvatarUrl,
+  personaName,
   onEdit,
   onRegenerate,
   onContinue,
   onSwipe,
+  onBranch,
   onLoadOlder,
   hasOlder = false,
   loadingOlder = false,
@@ -36,16 +46,34 @@ export function MessageList({
   const { t } = useTranslation("chat");
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const streamAnchorRef = useRef<HTMLDivElement>(null);
   const prevScrollHeightRef = useRef<number | null>(null);
+  const didInitialScrollRef = useRef(false);
+  const prevStreamingRef = useRef(false);
 
   useEffect(() => {
-    // Only auto-stick to the bottom for new messages / streaming tokens —
-    // not when older history was just prepended (handled separately below,
-    // which restores the scroll offset instead so the view doesn't jump).
+    // Scroll to the bottom once when the chat opens, and again whenever the
+    // user sends a message. Streaming tokens deliberately do NOT stick the
+    // view to the bottom — the reply is anchored at its start instead (below)
+    // so a long generation can be read from the top without chasing it.
     if (prevScrollHeightRef.current !== null) return;
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    const last = messages[messages.length - 1];
+    const userJustSent = !streaming && last?.role === "user";
+    if (!didInitialScrollRef.current || userJustSent) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
+    if (messages.length > 0) didInitialScrollRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, streamingText]);
+  }, [messages.length, streaming]);
+
+  useEffect(() => {
+    // When a generation starts, pin the start of the reply to the top of the
+    // viewport exactly once; tokens then grow downward off-screen.
+    if (streaming && !prevStreamingRef.current) {
+      streamAnchorRef.current?.scrollIntoView({ block: "start" });
+    }
+    prevStreamingRef.current = streaming;
+  }, [streaming]);
 
   // Preserve scroll position when older messages are prepended: remember
   // the scrollHeight right before the fetch, then after the DOM updates
@@ -96,7 +124,7 @@ export function MessageList({
       {messages.map((message) => {
         const isRegeneratingThis = streaming && streamingMessageId === message.id;
         const content = isRegeneratingThis ? streamingText : message.content;
-        return (
+        const bubble = (
           <MessageBubble
             key={message.id}
             message={message}
@@ -106,15 +134,26 @@ export function MessageList({
             canEdit={!streaming}
             canRegenerate={!streaming && message.role === "assistant" && message.id === lastAssistantId}
             isInterrupted={interruptedMessageIds.has(message.id)}
+            avatarUrl={message.role === "user" ? personaAvatarUrl : characterAvatarUrl}
+            authorName={message.role === "user" ? personaName : characterName}
+            onBranch={!streaming && onBranch ? () => onBranch(message.id) : undefined}
             onEdit={(text) => onEdit(message.id, text)}
             onRegenerate={() => onRegenerate(message.id)}
             onContinue={() => onContinue(message.id)}
             onSwipe={(offset) => onSwipe(message.id, offset)}
           />
         );
+        return isRegeneratingThis ? (
+          <div key={message.id} ref={streamAnchorRef}>
+            {bubble}
+          </div>
+        ) : (
+          bubble
+        );
       })}
 
       {streaming && streamingMessageId === null && (
+        <div ref={streamAnchorRef}>
         <MessageBubble
           message={{
             id: "__streaming__",
@@ -128,12 +167,15 @@ export function MessageList({
           content={streamingText}
           isStreaming
           isUser={false}
+          avatarUrl={characterAvatarUrl}
+          authorName={characterName}
           canEdit={false}
           canRegenerate={false}
           onEdit={() => {}}
           onRegenerate={() => {}}
           onSwipe={() => {}}
         />
+        </div>
       )}
 
       <div ref={bottomRef} />

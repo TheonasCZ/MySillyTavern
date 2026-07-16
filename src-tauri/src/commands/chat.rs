@@ -41,6 +41,49 @@ pub async fn chat_complete(
         .map_err(|e| e.to_string())
 }
 
+/// Lists the models offered by a connection's provider, authenticated with
+/// the API key stored in the keyring for that connection.
+#[tauri::command]
+pub async fn list_models(
+    connection_id: String,
+    provider: String,
+    base_url: Option<String>,
+) -> Result<Vec<String>, String> {
+    let api_key = get_api_key(&connection_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Pro toto připojení není uložen žádný API klíč.".to_string())?;
+
+    providers::list_models(&provider, base_url.as_deref(), &api_key)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Embeds a batch of texts with the provider's embedding endpoint,
+/// authenticated with the connection's keyring key. Returns the embedding
+/// model id used plus one vector per text, in order.
+#[tauri::command]
+pub async fn embed_texts(
+    connection_id: String,
+    provider: String,
+    base_url: Option<String>,
+    model: Option<String>,
+    texts: Vec<String>,
+) -> Result<(String, Vec<Vec<f32>>), String> {
+    let api_key = get_api_key(&connection_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Pro toto připojení není uložen žádný API klíč.".to_string())?;
+
+    providers::embeddings::embed_texts(
+        &provider,
+        base_url.as_deref(),
+        &api_key,
+        model.as_deref(),
+        &texts,
+    )
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Streams a chat completion token-by-token over `on_event`. Emits exactly
 /// one `Start`, then zero or more `Token`s, then exactly one `Done` or
 /// `Error` (unless aborted via `chat_abort`, in which case the stream just

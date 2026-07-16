@@ -136,3 +136,111 @@ export async function setLastSummarizedMessageId(id: string, messageId: string):
 export async function deleteChat(id: string): Promise<void> {
   await execute("DELETE FROM chats WHERE id = $1", [id]);
 }
+
+/** Forks a chat at a message: creates a new chat with the same
+ * character/persona/connections and copies the messages up to and
+ * including `upToMessageId` (new ids, original timestamps so ordering is
+ * preserved). Ledger facts are copied as-is; the summary only when it
+ * doesn't cover messages past the branch point (it would describe events
+ * the branch never saw). Embeddings are not copied — the memory engine
+ * re-syncs facts and the backfill button can rebuild scenes. Returns the
+ * new chat, or null when the source chat/message doesn't exist. */
+export async function branchChat(
+  sourceChatId: string,
+  upToMessageId: string,
+  titleSuffix: string,
+): Promise<Chat | null> {
+  const source = await getChat(sourceChatId);
+  if (!source) return null;
+
+  interface SourceMessageRow {
+    id: string;
+    role: string;
+    content: string;
+    swipes: string;
+    active_swipe: number;
+    created_at: string;
+  }
+  const messages = await query<SourceMessageRow>(
+    "SELECT id, role, content, swipes, active_swipe, created_at FROM messages WHERE chat_id = $1 ORDER BY created_at ASC",
+    [sourceChatId],
+  );
+  const cutIdx = messages.findIndex((m) => m.id === upToMessageId);
+  if (cutIdx === -1) return null;
+  const copied = messages.slice(0, cutIdx + 1);
+
+  const id = newId();
+  const now = nowIso();
+  const title = `${source.title} ${titleSuffix}`.trim();
+  await execute(
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+    [id, title, source.characterId, source.personaId, source.connectionId, source.extractionConnectionId, now],
+  );
+
+  const idMap = new Map<string, string>();
+  for (const m of copied) {
+    const newMessageId = newId();
+    idMap.set(m.id, newMessageId);
+    await execute(
+      `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [newMessageId, id, m.role, m.content, m.swipes, m.active_swipe, m.created_at],
+    );
+  }
+
+  interface FactRow {
+    category: string;
+    subject: string;
+    fact: string;
+    status: string;
+    locked: number;
+    created_at: string;
+    updated_at: string;
+  }
+  const facts = await query<FactRow>(
+    "SELECT category, subject, fact, status, locked, created_at, updated_at FROM ledger_facts WHERE chat_id = $1",
+    [sourceChatId],
+  );
+  for (const f of facts) {
+    await execute(
+      `INSERT INTO ledger_facts (id, chat_id, category, subject, fact, status, locked, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [newId(), id, f.category, f.subject, f.fact, f.status, f.locked, f.created_at, f.updated_at],
+    );
+  }
+
+  // Memory markers carry over only when the marker message made it into the
+  // branch — otherwise the engine simply re-extracts/re-summarizes.
+  const mappedExtracted = source.lastExtractedMessageId
+    ? (idMap.get(source.lastExtractedMessageId) ?? null)
+    : null;
+  const mappedSummarized = source.lastSummarizedMessageId
+    ? (idMap.get(source.lastSummarizedMessageId) ?? null)
+    : null;
+  if (mappedExtracted || mappedSummarized) {
+    await execute(
+      "UPDATE chats SET last_extracted_message_id = $2, last_summarized_message_id = $3 WHERE id = $1",
+      [id, mappedExtracted, mappedSummarized],
+    );
+  }
+
+  if (mappedSummarized) {
+    const summaries = await query<{ text: string; up_to_message_id: string }>(
+      "SELECT text, up_to_message_id FROM summaries WHERE chat_id = $1",
+      [sourceChatId],
+    );
+    const summary = summaries[0];
+    const mappedUpTo = summary ? idMap.get(summary.up_to_message_id) : undefined;
+    if (summary && mappedUpTo) {
+      await execute(
+        `INSERT INTO summaries (id, chat_id, up_to_message_id, text, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $5)`,
+        [newId(), id, mappedUpTo, summary.text, now],
+      );
+    }
+  }
+
+  const created = await getChat(id);
+  return created;
+}

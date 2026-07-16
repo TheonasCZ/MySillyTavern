@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { chatComplete } from "../../providers/chatComplete";
 import { deleteApiKey, hasApiKey, saveApiKey } from "../../providers/keyring";
+import { listModels } from "../../providers/models";
 import type { ConnectionConfig, ConnectionDraft, Provider } from "../../providers/types";
+import { FieldHelp } from "../common/FieldHelp";
 
 const PROVIDERS: Provider[] = ["gemini", "openai", "claude"];
 
@@ -53,11 +55,20 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [testState, setTestState] = useState<TestState>({ status: "idle" });
   const [saving, setSaving] = useState(false);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [manualModel, setManualModel] = useState(false);
 
   const refreshKeyStatus = async (connectionId: string) => {
     const has = await hasApiKey(connectionId);
     setKeySaved(has);
   };
+
+  useEffect(() => {
+    if (savedId) void refreshKeyStatus(savedId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -84,6 +95,21 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
     if (!savedId) return;
     await deleteApiKey(savedId);
     await refreshKeyStatus(savedId);
+  };
+
+  const handleLoadModels = async () => {
+    if (!savedId) return;
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const list = await listModels(savedId, draft.provider, draft.baseUrl);
+      setModels(list);
+      setManualModel(false);
+    } catch (err) {
+      setModelsError(String(err));
+    } finally {
+      setModelsLoading(false);
+    }
   };
 
   const handleTest = async () => {
@@ -113,7 +139,10 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.name")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.name")}
+            <FieldHelp text={t("connections.help.name")} />
+          </span>
           <input
             className="rounded-[var(--radius-sm)] border px-2 py-1.5"
             style={inputStyle}
@@ -124,12 +153,19 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.provider")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.provider")}
+            <FieldHelp text={t("connections.help.provider")} />
+          </span>
           <select
             className="rounded-[var(--radius-sm)] border px-2 py-1.5"
             style={inputStyle}
             value={draft.provider}
-            onChange={(e) => setDraft({ ...draft, provider: e.target.value as Provider })}
+            onChange={(e) => {
+              setDraft({ ...draft, provider: e.target.value as Provider });
+              setModels(null);
+              setModelsError(null);
+            }}
           >
             {PROVIDERS.map((p) => (
               <option key={p} value={p}>
@@ -140,19 +176,73 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.model")}
-          <input
-            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={draft.model}
-            placeholder={t("connections.fields.modelPlaceholder") ?? ""}
-            onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-          />
+          <span className="flex items-center gap-1">
+            {t("connections.fields.model")}
+            <FieldHelp text={t("connections.help.model")} />
+          </span>
+          {models && models.length > 0 && !manualModel ? (
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.model}
+              onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+            >
+              {!models.includes(draft.model) && (
+                <option value={draft.model}>
+                  {draft.model || t("connections.models.choose")}
+                </option>
+              )}
+              {models.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.model}
+              placeholder={t("connections.fields.modelPlaceholder") ?? ""}
+              onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+            />
+          )}
+          <span className="flex flex-wrap items-center gap-2 text-xs">
+            {savedId && keySaved && (
+              <button
+                type="button"
+                onClick={() => void handleLoadModels()}
+                disabled={modelsLoading}
+                className="underline disabled:opacity-50"
+                style={{ color: "var(--color-accent)" }}
+              >
+                {modelsLoading ? t("connections.models.loading") : t("connections.models.load")}
+              </button>
+            )}
+            {models && models.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setManualModel(!manualModel)}
+                className="underline"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {manualModel ? t("connections.models.pick") : t("connections.models.manual")}
+              </button>
+            )}
+            {modelsError && (
+              <span style={{ color: "var(--color-danger)" }}>
+                {t("connections.models.error", { message: modelsError })}
+              </span>
+            )}
+          </span>
         </label>
 
         {draft.provider === "openai" && (
           <label className="flex flex-col gap-1 text-sm">
-            {t("connections.fields.baseUrl")}
+            <span className="flex items-center gap-1">
+              {t("connections.fields.baseUrl")}
+              <FieldHelp text={t("connections.help.baseUrl")} />
+            </span>
             <input
               className="rounded-[var(--radius-sm)] border px-2 py-1.5"
               style={inputStyle}
@@ -167,7 +257,10 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         )}
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.temperature")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.temperature")}
+            <FieldHelp text={t("connections.help.temperature")} />
+          </span>
           <input
             type="number"
             step="0.05"
@@ -181,7 +274,10 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.topP")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.topP")}
+            <FieldHelp text={t("connections.help.topP")} />
+          </span>
           <input
             type="number"
             step="0.05"
@@ -195,7 +291,10 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.maxTokens")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.maxTokens")}
+            <FieldHelp text={t("connections.help.maxTokens")} />
+          </span>
           <input
             type="number"
             min="1"
@@ -207,7 +306,10 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          {t("connections.fields.contextBudget")}
+          <span className="flex items-center gap-1">
+            {t("connections.fields.contextBudget")}
+            <FieldHelp text={t("connections.help.contextBudget")} />
+          </span>
           <input
             type="number"
             min="1"
@@ -253,8 +355,12 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
 
       {savedId && (
         <div className="flex flex-col gap-2 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
+          <span
+            className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide"
+            style={{ color: "var(--color-text-faint)" }}
+          >
             {t("connections.fields.apiKey")}
+            <FieldHelp text={t("connections.help.apiKey")} />
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <input

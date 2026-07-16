@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import type { Persona, PersonaDraft, PersonaUpdate } from "../../db/repositories/personasRepo";
 import { avatarSrc } from "../characters/avatarSrc";
+import { FieldHelp } from "../common/FieldHelp";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -72,7 +73,10 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
 
         <div className="flex flex-1 flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            {t("form.fields.name")}
+            <span className="flex items-center gap-1">
+              {t("form.fields.name")}
+              <FieldHelp text={t("form.help.name")} />
+            </span>
             <input
               className="rounded-[var(--radius-sm)] border px-2 py-1.5"
               style={inputStyle}
@@ -96,7 +100,10 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
       </div>
 
       <label className="flex flex-col gap-1 text-sm">
-        {t("form.fields.description")}
+        <span className="flex items-center gap-1">
+          {t("form.fields.description")}
+          <FieldHelp text={t("form.help.description")} />
+        </span>
         <textarea
           className="min-h-[6rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
           style={inputStyle}

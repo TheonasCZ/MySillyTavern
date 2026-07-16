@@ -4,12 +4,26 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 /// tauri-plugin-sql. IDs are TEXT (UUID from crypto.randomUUID() on the JS
 /// side), timestamps are TEXT ISO-8601.
 pub fn all_migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "initial schema",
-        sql: MIGRATION_001,
-        kind: MigrationKind::Up,
-    }]
+    vec![
+        Migration {
+            version: 1,
+            description: "initial schema",
+            sql: MIGRATION_001,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "embeddings for semantic memory retrieval",
+            sql: MIGRATION_002,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "embeddings: allow lore kind and global (chat-less) rows",
+            sql: MIGRATION_003,
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 const MIGRATION_001: &str = r#"
@@ -103,4 +117,46 @@ CREATE TABLE summaries (
 );
 
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+"#;
+
+/// Vectors are stored as base64-encoded little-endian f32 arrays (TEXT) —
+/// compact enough for this scale and readable from the JS side without a
+/// SQLite extension. `kind` is future-proofed for message/summary chunks
+/// (next milestone); only 'fact' rows exist today.
+const MIGRATION_002: &str = r#"
+CREATE TABLE embeddings (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('fact','summary','message')),
+  ref_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dims INTEGER NOT NULL,
+  vector TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (kind, ref_id)
+);
+CREATE INDEX idx_embeddings_chat ON embeddings(chat_id, kind);
+"#;
+
+/// Lorebook entries aren't chat-scoped, so their embeddings need a NULL
+/// chat_id — SQLite can't relax NOT NULL/CHECK in place, hence the
+/// rebuild-and-rename dance.
+const MIGRATION_003: &str = r#"
+CREATE TABLE embeddings_new (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT REFERENCES chats(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('fact','summary','message','lore')),
+  ref_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dims INTEGER NOT NULL,
+  vector TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (kind, ref_id)
+);
+INSERT INTO embeddings_new SELECT * FROM embeddings;
+DROP TABLE embeddings;
+ALTER TABLE embeddings_new RENAME TO embeddings;
+CREATE INDEX idx_embeddings_chat ON embeddings(chat_id, kind);
 "#;

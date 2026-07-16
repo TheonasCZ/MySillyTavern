@@ -47,7 +47,10 @@
     "list": {
       "updatedAt": "Last updated {{date}}",
       "noConnection": "No connection",
-      "deleteConfirm": "Delete this chat and all its history?"
+      "deleteConfirm": "Delete this chat and all its history?",
+      "searchPlaceholder": "Search across all chats…",
+      "searchResults": "Search results ({{count}})",
+      "searchEmpty": "No message matches your search."
     },
     "room": {
       "backToList": "Back to chats",
@@ -74,7 +77,17 @@
         "offline": "You're offline. Check your internet connection and try again.",
         "retry": "Try again",
         "generic": "Error: {{message}}"
-      }
+      },
+      "suggest": {
+        "button": "💡 Suggest replies",
+        "loading": "Thinking…",
+        "tooltip": "Let the model suggest 3 ways to react (costs one extra request).",
+        "dismiss": "dismiss"
+      },
+      "branch": "⑂ branch",
+      "branchHint": "Creates a copy of the chat ending at this message — the story can go a different way from here, the original chat stays untouched.",
+      "branchConfirm": "Create a story branch from this message? The original chat stays unchanged.",
+      "branchSuffix": "(branch)"
     }
   },
   "characters": {
@@ -114,6 +127,19 @@
         "postHistoryInstructions": "Post-history instructions",
         "creatorNotes": "Creator notes",
         "tags": "Tags (comma-separated)"
+      },
+      "help": {
+        "name": "The character's name as the AI uses it when writing their lines and as shown in the chat.",
+        "description": "The character's core description — appearance, background, key traits. Sent to the AI in every prompt, so keep it concise and to the point.",
+        "personality": "A short summary of personality traits (e.g. \"quiet, watchful, dry sense of humor\"). Helps the AI play the character consistently across the whole chat.",
+        "scenario": "A description of the starting situation or setting the chat begins in. Sets context before the first message is sent.",
+        "firstMes": "The message the character sends first when you start a new chat. It's the first thing you see, so it should showcase the character's tone and style.",
+        "alternateGreetings": "Extra opening-message variants you can pick from instead of the default one when starting a chat.",
+        "mesExample": "Example dialogue that teaches the model this character's writing style and reply length. Never sent as a visible chat message.",
+        "systemPrompt": "A custom system instruction just for this character — overrides the app's default general RP instruction. Leave empty if the default behavior works for you.",
+        "postHistoryInstructions": "Text inserted into the prompt after the entire chat history, right before the model's reply. Use it for rules the model should follow right now (e.g. formatting, a style reminder).",
+        "creatorNotes": "The card creator's internal notes. Never sent to the model — for your (or whoever you share the card with) reference only.",
+        "tags": "Labels used for filtering and searching in the character gallery. Have no effect on the AI's behavior."
       }
     }
   },
@@ -129,6 +155,10 @@
         "namePlaceholder": "e.g. Kai",
         "description": "Description",
         "descriptionPlaceholder": "Who the player is, what they look like, their relation to the character…"
+      },
+      "help": {
+        "name": "The name the AI addresses you by, replacing the \"user\" placeholder in character cards and lorebook entries.",
+        "description": "A description of your role in the story — appearance, background, relation to the character. Sent to the AI as part of the system message in every prompt."
       },
       "descriptionHint": "Shown to the AI as the player persona's description in the system message.",
       "pickAvatar": "Choose avatar",
@@ -157,6 +187,18 @@
       "fields": {
         "name": "Name",
         "description": "Description"
+      },
+      "help": {
+        "name": "The lorebook's name, for your own orientation in the list. Has no effect on the AI's behavior.",
+        "description": "An optional note on what the lorebook is for (e.g. \"world history and geography\"). For your reference only.",
+        "entryKeys": "Keywords that trigger this entry when they appear in the recent chat — the entry's content then gets inserted into the prompt (World Info). E.g. \"castle, king, throne\".",
+        "entrySecondaryKeys": "Extra keywords — if set, the entry only triggers when a primary key AND a secondary key both appear in the chat (more precise, stricter triggering).",
+        "entryContent": "The text inserted into the prompt when this entry triggers — a fact, a place or character description, a world rule, etc.",
+        "entryComment": "An optional note about the entry for your own reference. Never sent to the model.",
+        "entryPriority": "Controls the order triggered entries are ranked in when they don't all fit the context budget. Higher priority = more likely to make it into the prompt.",
+        "entryAlwaysOn": "When enabled, the entry is always inserted into the prompt, regardless of whether its keywords appeared in the chat.",
+        "entryCaseSensitive": "When enabled, keywords must match the chat text's letter case exactly (e.g. \"King\" won't match \"king\").",
+        "entryEnabled": "A disabled entry never triggers, even if its keywords appear in the chat. Useful for turning an entry off temporarily without deleting it."
       },
       "linksTitle": "Links",
       "linksHint": "A lorebook can be linked to a specific character, a specific chat, or globally (applies to every chat).",
@@ -189,7 +231,8 @@
     "tabs": {
       "facts": "Facts",
       "summary": "Summary",
-      "prompt": "Prompt"
+      "prompt": "Prompt",
+      "search": "Search"
     },
     "extractionConnection": {
       "label": "Extraction connection",
@@ -238,7 +281,27 @@
       "included": "included",
       "none": "none",
       "trimmedTitle": "What got trimmed",
-      "noneTrimmed": "Nothing was trimmed — everything fit the budget."
+      "noneTrimmed": "Nothing was trimmed — everything fit the budget.",
+      "memories": "Memories"
+    },
+    "search": {
+      "placeholder": "Search memories and facts…",
+      "button": "Search",
+      "searching": "Searching…",
+      "noResults": "Nothing found — maybe nothing is indexed yet.",
+      "unavailable": "Semantic search unavailable: the (extraction or main) connection must be Gemini or OpenAI-compatible; Claude offers no embeddings.",
+      "kinds": {
+        "fact": "fact",
+        "message": "memory"
+      },
+      "reindex": "Reindex",
+      "reindexing": "Indexing…",
+      "reindexed": "Reindexed {{count}} rows.",
+      "reindexHint": "After changing the embedding model, recomputes all vectors for this chat.",
+      "backfill": "Backfill old scenes",
+      "backfilling": "Processing…",
+      "backfilled": "Created {{count}} new scenes.",
+      "backfillHint": "One-off indexing of an old chat's history so it becomes semantically searchable."
     }
   },
   "settings": {
@@ -271,7 +334,22 @@
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
       "extractionInterval": "Extraction interval (messages)",
       "verbatimWindow": "Verbatim window (messages)",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "embedding": {
+        "title": "Semantic memory (embeddings)",
+        "subtitle": "Vector retrieval of relevant facts and older scenes. Requires a Gemini or OpenAI-compatible connection.",
+        "model": "Embedding model",
+        "modelPlaceholder": "auto (per provider)",
+        "topK": "Memories to retrieve (top K)",
+        "minScore": "Minimum similarity (0–1)"
+      },
+      "help": {
+        "extractionInterval": "How often (after how many messages) the engine scans the recent chat and pulls durable facts (names, relationships, promises…) into the memory ledger. A lower number means memory updates more often, but costs more API calls.",
+        "verbatimWindow": "How many of the most recent messages stay in the prompt verbatim, unchanged. Older messages get summarized instead, to save context space. A larger window means the AI sees the recent dialogue more precisely, but consumes more tokens.",
+        "embeddingModel": "The model that turns text into vectors for semantic memory search. Leave blank to auto-select based on the connection's provider.",
+        "topK": "How many of the most relevant memories are inserted into the prompt at most, per message. More means richer context, but more tokens spent.",
+        "minScore": "The similarity threshold (0–1) below which a memory is considered irrelevant and not used. A higher value is a stricter filter — only very similar memories get used."
+      }
     },
     "appearance": {
       "language": "Language",
@@ -301,6 +379,17 @@
         "contextBudget": "Context budget",
         "apiKey": "API key"
       },
+      "help": {
+        "name": "A custom label for this connection, just for your own orientation in the list (e.g. \"Gemini Free\"). Has no effect on the AI's behavior.",
+        "provider": "Who provides the API — Gemini, Claude, or an OpenAI-compatible service (ChatGPT, DeepSeek, OpenRouter, and others that use the same interface).",
+        "model": "The specific model of that provider to call (e.g. gemini-2.0-flash). Click \"Load models\" to pick from the list of supported models.",
+        "baseUrl": "The API endpoint address for OpenAI-compatible services. Leave empty for official OpenAI; fill in only if you're using a different compatible service (DeepSeek, OpenRouter, a local server…).",
+        "temperature": "Higher means more creative, less predictable answers. Keep it low (0.3–0.7) for factual answers; 0.8–1.0 works well for RP.",
+        "topP": "Limits word choice to the most likely portion. Usually leave at default; tune either temperature or top P, not both.",
+        "maxTokens": "The maximum length of the model's response, in tokens. A higher value allows longer answers, but increases wait time and cost.",
+        "contextBudget": "The maximum amount of context tokens (chat history, character card, memory…) sent to the model per request. Must fit within the chosen model's limit.",
+        "apiKey": "The provider's API access key. Stored encrypted in the system keyring, never in the app database, and not shown again after saving."
+      },
       "providers": {
         "gemini": "Gemini",
         "openai": "OpenAI-compatible (ChatGPT, DeepSeek, OpenRouter)",
@@ -321,7 +410,15 @@
         "failure": "Connection failed: {{message}}"
       },
       "deleteConfirm": "Delete this connection? Its saved key will be deleted too.",
-      "saved": "Connection saved."
+      "saved": "Connection saved.",
+      "models": {
+        "load": "Load models",
+        "loading": "Loading models…",
+        "choose": "— pick a model —",
+        "manual": "enter manually",
+        "pick": "pick from list",
+        "error": "Failed to load models: {{message}}"
+      }
     }
   }
 }
