@@ -35,6 +35,9 @@
       "titlePlaceholder": "Např. Cesta do Ashfordu",
       "connectionLabel": "Připojení",
       "noConnectionsHint": "Nejdřív si v Nastavení → Připojení vytvoř alespoň jedno připojení.",
+      "characterLabel": "Postava",
+      "noCharactersHint": "Nejdřív si na stránce Postavy vytvoř nebo naimportuj alespoň jednu postavu.",
+      "greetingLabel": "Úvodní zpráva",
       "create": "Vytvořit chat"
     },
     "list": {
@@ -64,7 +67,43 @@
   },
   "characters": {
     "title": "Postavy",
-    "empty": "Zatím žádné postavy."
+    "empty": "Zatím žádné postavy.",
+    "gallery": {
+      "importPng": "Import PNG karty",
+      "importJson": "Import JSON karty",
+      "importing": "Importuji…",
+      "importError": "Import selhal: {{message}}",
+      "newCharacter": "Nová postava",
+      "newCharacterName": "Nová postava",
+      "searchPlaceholder": "Hledat podle jména nebo tagu…",
+      "allTags": "Všechny tagy",
+      "noMatches": "Žádná postava neodpovídá hledání."
+    },
+    "editor": {
+      "backToGallery": "Zpět na postavy",
+      "exportPng": "Export do PNG",
+      "exporting": "Exportuji…",
+      "exportError": "Export selhal: {{message}}",
+      "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
+      "saved": "Uloženo.",
+      "specVersion": "Formát karty: {{version}}",
+      "addGreeting": "Přidat variantu",
+      "tagsPlaceholder": "tag1, tag2, tag3",
+      "systemPromptHint": "Pokud necháš prázdné, použije se výchozí RP instrukce.",
+      "fields": {
+        "name": "Jméno",
+        "description": "Popis",
+        "personality": "Osobnost",
+        "scenario": "Scénář",
+        "firstMes": "Úvodní zpráva",
+        "alternateGreetings": "Alternativní úvodní zprávy",
+        "mesExample": "Ukázkové zprávy",
+        "systemPrompt": "Systémový prompt",
+        "postHistoryInstructions": "Instrukce za historií",
+        "creatorNotes": "Poznámky autora",
+        "tags": "Tagy (oddělené čárkou)"
+      }
+    }
   },
   "personas": {
     "title": "Persony",

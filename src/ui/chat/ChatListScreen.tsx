@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { ensureDefaultCharacter } from "../../db/repositories/charactersRepo";
+import { greetingOptions, resolveGreeting } from "../../chat/systemPrompt";
+import { getCharacter } from "../../db/repositories/charactersRepo";
+import { createMessage } from "../../db/repositories/messagesRepo";
+import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 
@@ -25,10 +28,17 @@ export function ChatListScreen() {
   const navigate = useNavigate();
   const { chats, loaded, load, create, rename, setConnection, remove } = useChatListStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
+  const {
+    characters,
+    loaded: charactersLoaded,
+    load: loadCharacters,
+  } = useCharactersStore();
 
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newConnectionId, setNewConnectionId] = useState<string>("");
+  const [newCharacterId, setNewCharacterId] = useState<string>("");
+  const [newGreeting, setNewGreeting] = useState<string>("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -41,19 +51,52 @@ export function ChatListScreen() {
   }, [connectionsLoaded, loadConnections]);
 
   useEffect(() => {
+    if (!charactersLoaded) void loadCharacters();
+  }, [charactersLoaded, loadCharacters]);
+
+  useEffect(() => {
     if (connections.length > 0 && !newConnectionId) {
       setNewConnectionId(connections[0].id);
     }
   }, [connections, newConnectionId]);
 
+  useEffect(() => {
+    if (characters.length > 0 && !newCharacterId) {
+      setNewCharacterId(characters[0].id);
+    }
+  }, [characters, newCharacterId]);
+
+  const selectedCharacter = useMemo(
+    () => characters.find((c) => c.id === newCharacterId) ?? null,
+    [characters, newCharacterId],
+  );
+
+  const greetingChoices = useMemo(() => {
+    if (!selectedCharacter) return [];
+    return greetingOptions(selectedCharacter);
+  }, [selectedCharacter]);
+
+  useEffect(() => {
+    setNewGreeting(greetingChoices[0] ?? "");
+  }, [greetingChoices]);
+
   const handleCreate = async () => {
+    if (!newCharacterId) return;
     const title = newTitle.trim() || t("newChat.defaultTitle");
-    const character = await ensureDefaultCharacter();
     const created = await create({
       title,
-      characterId: character.id,
+      characterId: newCharacterId,
       connectionId: newConnectionId || null,
     });
+
+    const character = await getCharacter(newCharacterId);
+    if (character) {
+      const greetingText = resolveGreeting(character, newGreeting || null);
+      if (greetingText) {
+        await createMessage(created.id, "assistant", greetingText);
+      }
+    }
+
     setCreating(false);
     setNewTitle("");
     navigate(`/chat/${created.id}`);
@@ -122,11 +165,52 @@ export function ChatListScreen() {
             </p>
           )}
 
+          <label className="flex flex-col gap-1 text-sm">
+            {t("newChat.characterLabel")}
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newCharacterId}
+              onChange={(e) => setNewCharacterId(e.target.value)}
+            >
+              {characters.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {characters.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+              {t("newChat.noCharactersHint")}
+            </p>
+          )}
+
+          {greetingChoices.length > 1 && (
+            <label className="flex flex-col gap-1 text-sm">
+              {t("newChat.greetingLabel")}
+              <select
+                className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+                style={inputStyle}
+                value={newGreeting}
+                onChange={(e) => setNewGreeting(e.target.value)}
+              >
+                {greetingChoices.map((g, i) => (
+                  <option key={i} value={g}>
+                    {g.slice(0, 60)}
+                    {g.length > 60 ? "…" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => void handleCreate()}
-              disabled={connections.length === 0}
+              disabled={connections.length === 0 || characters.length === 0}
               className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
               style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
             >

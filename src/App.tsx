@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { useSettingsStore } from "./stores/settingsStore";
+import { CardEditor } from "./ui/characters/CardEditor";
+import { GalleryScreen } from "./ui/characters/GalleryScreen";
 import { ChatListScreen } from "./ui/chat/ChatListScreen";
 import { ChatScreen } from "./ui/chat/ChatScreen";
 import { AppShell } from "./ui/layout/AppShell";
@@ -25,8 +27,8 @@ function App() {
         <Routes>
           <Route path="/" element={<ChatListScreen />} />
           <Route path="/chat/:id" element={<ChatScreen />} />
-          <Route path="/characters" element={<PlaceholderScreen ns="characters" titleKey="title" />} />
-          <Route path="/characters/:id" element={<PlaceholderScreen ns="characters" titleKey="title" />} />
+          <Route path="/characters" element={<GalleryScreen />} />
+          <Route path="/characters/:id" element={<CardEditor />} />
           <Route path="/personas" element={<PlaceholderScreen ns="personas" titleKey="title" />} />
           <Route path="/lorebooks" element={<PlaceholderScreen ns="lorebooks" titleKey="title" />} />
           <Route path="/lorebooks/:id" element={<PlaceholderScreen ns="lorebooks" titleKey="title" />} />

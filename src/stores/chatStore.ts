@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { buildCharacterSystemPrompt } from "../chat/systemPrompt";
+import { getCharacter } from "../db/repositories/charactersRepo";
 import { getChat, touchChat } from "../db/repositories/chatsRepo";
 import {
   appendSwipe,
@@ -15,6 +17,23 @@ import { useConnectionsStore } from "./connectionsStore";
 
 function toApiMessages(messages: Message[]): ChatMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+/** Prepends a system message built from the chat's character card (M3:
+ * simple field concatenation with {{char}} substitution — the full
+ * PromptBuilder with persona/ledger/lorebook/budget lands in M5). Silently
+ * omits the system message if the character can't be loaded, so a chat
+ * whose character was later deleted still limps along instead of failing
+ * to send. */
+async function withCharacterSystemMessage(
+  characterId: string,
+  history: ChatMessage[],
+): Promise<ChatMessage[]> {
+  const character = await getCharacter(characterId);
+  if (!character) return history;
+  const systemText = buildCharacterSystemPrompt(character);
+  if (!systemText) return history;
+  return [{ role: "system", content: systemText }, ...history];
 }
 
 type Setter = (
@@ -131,7 +150,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMessage] }));
     void touchChat(chatId);
 
-    const apiMessages = toApiMessages([...messages, userMessage]);
+    const apiMessages = await withCharacterSystemMessage(
+      chat.characterId,
+      toApiMessages([...messages, userMessage]),
+    );
 
     const finalize = async (text: string) => {
       const finalText = text.trim();
@@ -160,7 +182,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const idx = messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
     const target = messages[idx];
-    const apiMessages = toApiMessages(messages.slice(0, idx));
+    const apiMessages = await withCharacterSystemMessage(
+      chat.characterId,
+      toApiMessages(messages.slice(0, idx)),
+    );
 
     set({ streamingMessageId: messageId });
 

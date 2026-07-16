@@ -35,6 +35,9 @@
       "titlePlaceholder": "e.g. Journey to Ashford",
       "connectionLabel": "Connection",
       "noConnectionsHint": "First create at least one connection in Settings → Connections.",
+      "characterLabel": "Character",
+      "noCharactersHint": "First create or import at least one character on the Characters page.",
+      "greetingLabel": "Opening message",
       "create": "Create chat"
     },
     "list": {
@@ -64,7 +67,43 @@
   },
   "characters": {
     "title": "Characters",
-    "empty": "No characters yet."
+    "empty": "No characters yet.",
+    "gallery": {
+      "importPng": "Import PNG card",
+      "importJson": "Import JSON card",
+      "importing": "Importing…",
+      "importError": "Import failed: {{message}}",
+      "newCharacter": "New character",
+      "newCharacterName": "New character",
+      "searchPlaceholder": "Search by name or tag…",
+      "allTags": "All tags",
+      "noMatches": "No character matches your search."
+    },
+    "editor": {
+      "backToGallery": "Back to characters",
+      "exportPng": "Export to PNG",
+      "exporting": "Exporting…",
+      "exportError": "Export failed: {{message}}",
+      "deleteConfirm": "Delete this character? Chats pointing to it will keep working but lose the reference.",
+      "saved": "Saved.",
+      "specVersion": "Card format: {{version}}",
+      "addGreeting": "Add variant",
+      "tagsPlaceholder": "tag1, tag2, tag3",
+      "systemPromptHint": "Leave empty to use the default RP instruction.",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "personality": "Personality",
+        "scenario": "Scenario",
+        "firstMes": "First message",
+        "alternateGreetings": "Alternate greetings",
+        "mesExample": "Example messages",
+        "systemPrompt": "System prompt",
+        "postHistoryInstructions": "Post-history instructions",
+        "creatorNotes": "Creator notes",
+        "tags": "Tags (comma-separated)"
+      }
+    }
   },
   "personas": {
     "title": "Personas",
