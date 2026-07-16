@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { AppearancePanel } from "./AppearancePanel";
+import { BackupPanel } from "./BackupPanel";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { MemorySettingsPanel } from "./MemorySettingsPanel";
 
@@ -13,6 +14,7 @@ export function SettingsScreen() {
       <ConnectionsPanel />
       <MemorySettingsPanel />
       <AppearancePanel />
+      <BackupPanel />
     </div>
   );
 }

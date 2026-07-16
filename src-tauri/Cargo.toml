@@ -33,4 +33,6 @@ base64 = "0.22"
 crc32fast = "1"
 thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+tauri-plugin-process = "2.3.1"
 

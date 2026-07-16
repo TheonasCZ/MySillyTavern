@@ -246,7 +246,26 @@
     "sections": {
       "connections": "Connections",
       "memory": "Memory",
-      "appearance": "Appearance"
+      "appearance": "Appearance",
+      "backup": "Data & backup"
+    },
+    "backup": {
+      "subtitle": "A backup saves the database and character avatars into one ZIP file. Importing a backup restores it — overwriting your current data.",
+      "exportTitle": "Export",
+      "exportHint": "Creates a ZIP with everything: chats, characters, personas, lorebooks, memory, and avatars.",
+      "exportButton": "Create backup…",
+      "exporting": "Backing up…",
+      "exportDone": "Backup saved to {{path}}",
+      "exportError": "Backup failed: {{message}}",
+      "importTitle": "Import",
+      "importHint": "Pick a ZIP backup and stage it for import. Changes only take effect after restarting the app.",
+      "importButton": "Choose backup to import…",
+      "importing": "Preparing…",
+      "importError": "Import failed: {{message}}",
+      "importWarning": "Importing will overwrite all current data (chats, characters, personas, lorebooks, memory, and avatars) with the backup's contents. This cannot be undone. Continue and restart the app?",
+      "pendingRestart": "An import is staged — it will take effect after the app restarts.",
+      "restartNow": "Restart and finish import",
+      "cancelImport": "Cancel import"
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
