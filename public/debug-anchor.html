@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <title>anchor debug harness</title>
+    <script>
+      // ---- Tauri IPC mock (must run before the app bundle) ----
+      (() => {
+        const callbacks = new Map();
+        let cbId = 0;
+
+        const now = new Date().toISOString();
+        const LONG =
+          "Dlouhý odstavec vyprávění, aby zprávy měly realistickou výšku. ".repeat(8);
+
+        const chatRow = {
+          id: "c1", title: "Debug chat", character_id: "ch1", persona_id: null,
+          connection_id: "conn1", extraction_connection_id: null,
+          last_extracted_message_id: null, last_summarized_message_id: null,
+          auto_reply: 0, created_at: now, updated_at: now,
+        };
+        const charRow = {
+          id: "ch1", name: "Vypravec", description: "Testovací vypravěč.",
+          personality: "", scenario: "", first_mes: "", mes_example: "",
+          alternate_greetings: "[]", system_prompt: "", post_history_instructions: "",
+          creator_notes: "", tags: "[]", avatar_path: null, card_json: null,
+          spec_version: "v2", created_at: now, updated_at: now,
+        };
+        const connRow = {
+          id: "conn1", name: "Mock Gemini", provider: "gemini", base_url: null,
+          model: "gemini-x", temperature: 0.8, top_p: 0.95, max_tokens: 1024,
+          context_budget: 12000, created_at: now, updated_at: now,
+        };
+        const memberRow = { id: "mem1", chat_id: "c1", character_id: "ch1", position: 0, created_at: now };
+        // Realistic scale: 120 messages → pagination (LIMIT 100) leaves
+        // hasOlder=true like the user's real campaign; the last assistant
+        // message ends with an options block so the suggestion chips render.
+        const messages = [];
+        for (let i = 0; i < 119; i++) {
+          const isAssistant = i % 2 === 0;
+          let content = `Zpráva ${i}: ${LONG}`;
+          if (i === 118) {
+            content += "\n\nCo uděláš?\n1. Prozkoumám krystal.\n2. Ustoupím do stínu.\n3. Zavolám na Arkose.";
+          }
+          messages.push({
+            id: "m" + i, chat_id: "c1", role: isAssistant ? "assistant" : "user",
+            content, swipes: JSON.stringify([content]),
+            active_swipe: 0, character_id: isAssistant ? "ch1" : null,
+            created_at: new Date(Date.now() - (500 - i) * 60000).toISOString(),
+          });
+        }
+        window.__MOCK_MESSAGES__ = messages;
+
+        function routeSelect(query, values) {
+          const q = query.replace(/\s+/g, " ");
+          if (q.includes("FROM chats WHERE id")) return [chatRow];
+          if (q.includes("FROM chats ORDER BY")) return [chatRow];
+          if (q.includes("COUNT(*) as count FROM messages")) return [{ count: messages.length }];
+          if (q.includes("created_at < $2 ORDER BY created_at DESC")) {
+            const older = messages.filter((m) => m.created_at < values[1]);
+            return older.reverse().slice(0, values[2] ?? 100);
+          }
+          if (q.includes("FROM messages WHERE chat_id = $1 ORDER BY created_at DESC"))
+            return [...messages].reverse().slice(0, values?.[1] ?? 100);
+          if (q.includes("FROM messages WHERE chat_id = $1 ORDER BY created_at ASC")) return [...messages];
+          if (q.includes("FROM chat_members")) return [memberRow];
+          if (q.includes("FROM characters WHERE id")) return [charRow];
+          if (q.includes("FROM characters")) return [charRow];
+          if (q.includes("FROM connections")) return [connRow];
+          return []; // personas, settings, facts, summaries, embeddings, lore…
+        }
+
+        let streamTimer = null;
+        function runStream(channel) {
+          let index = 0;
+          const emit = (message) => {
+            const cb = callbacks.get(channel.id);
+            if (cb) cb({ index: index++, message });
+          };
+          emit({ event: "Start" });
+          let tokens = 0;
+          streamTimer = setInterval(() => {
+            tokens++;
+            emit({ event: "Token", data: { text: `token${tokens} nové odpovědi, která postupně roste. ` } });
+            if (tokens >= 40) {
+              clearInterval(streamTimer);
+              emit({ event: "Done", data: { finish_reason: "stop" } });
+            }
+          }, 40);
+        }
+
+        window.__TAURI_INTERNALS__ = {
+          transformCallback(cb) {
+            const id = ++cbId;
+            callbacks.set(id, cb);
+            return id;
+          },
+          unregisterCallback(id) {
+            callbacks.delete(id);
+          },
+          convertFileSrc: (p) => p,
+          invoke(cmd, args) {
+            switch (cmd) {
+              case "plugin:sql|load":
+                return Promise.resolve("sqlite:mock.db");
+              case "plugin:sql|select":
+                return Promise.resolve(routeSelect(args.query, args.values));
+              case "plugin:sql|execute": {
+                // Keep inserted messages so later SELECTs stay consistent.
+                if (args.query.includes("INSERT INTO messages")) {
+                  const [id, chatId, role, content, swipes, characterId, createdAt] = args.values;
+                  messages.push({
+                    id, chat_id: chatId, role, content, swipes,
+                    active_swipe: 0, character_id: characterId, created_at: createdAt,
+                  });
+                }
+                return Promise.resolve([1, 1]);
+              }
+              case "has_api_key":
+                return Promise.resolve(true);
+              case "chat_stream":
+                runStream(args.onEvent);
+                return Promise.resolve(null);
+              case "chat_abort":
+                if (streamTimer) clearInterval(streamTimer);
+                return Promise.resolve(null);
+              default:
+                return Promise.resolve(null);
+            }
+          },
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import RefreshRuntime from "/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // ---- self-driving autotest (?autotest) — for engines we can't drive
+      // remotely (WebKitGTK MiniBrowser). Posts measurements to :9911. ----
+      if (location.search.includes("autotest")) {
+        const log = (data) =>
+          fetch("http://127.0.0.1:9911/log", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(data),
+          }).catch(() => {});
+
+        const measure = (label) => {
+          const scrollers = [...document.querySelectorAll(".overflow-y-auto")].filter(
+            (e) => e.scrollHeight > e.clientHeight + 4,
+          );
+          const container = scrollers[0];
+          if (!container) return log({ label, error: "no container" });
+          const wrapper = container.querySelector("[data-msg-id]");
+          const cr = container.getBoundingClientRect();
+          log({
+            label,
+            scrollTop: Math.round(container.scrollTop),
+            maxScroll: container.scrollHeight - container.clientHeight,
+            pinnedId: wrapper?.dataset.msgId?.slice(0, 6) ?? null,
+            pinnedTop: wrapper ? Math.round(wrapper.getBoundingClientRect().top - cr.top) : null,
+            streamingCursor: !!container.querySelector(".animate-pulse"),
+          });
+        };
+
+        const send = (text) => {
+          const ta = document.querySelector("textarea");
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+          setter.call(ta, text);
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
+          ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        };
+
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        (async () => {
+          await sleep(2500);
+          measure("AFTER OPEN");
+          for (let n = 1; n <= 2; n++) {
+            send(`Testovací zpráva hráče číslo ${n}, odeslaná autotestem.`);
+            for (const ms of [200, 900, 1900, 3000]) {
+              await sleep(n === 1 && ms === 200 ? 200 : 900);
+              measure(`SEND#${n} ~${ms}ms`);
+            }
+            await sleep(800);
+          }
+          log({ label: "DONE" });
+        })();
+      }
+    </script>
+  </body>
+</html>

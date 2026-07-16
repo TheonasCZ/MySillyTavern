@@ -33,6 +33,11 @@ interface Props {
   /** Shows `authorName` as a small caption above the bubble content — group
    * chats only, so it's clear which member is speaking (plan §7). */
   showAuthorCaption?: boolean;
+  /** Disables the action row instead of unmounting it. Critical for scroll
+   * stability: unmounting actions on stream start/end changes EVERY bubble's
+   * height at once (~15px × 100 messages), and WebKit has no scroll
+   * anchoring — the view visibly jumps by whole messages. */
+  actionsDisabled?: boolean;
   /** Shown when set and not streaming — forks the story at this message. */
   onBranch?: () => void;
   onEdit: (content: string) => void;
@@ -78,6 +83,7 @@ export function MessageBubble({
   avatarUrl,
   authorName,
   showAuthorCaption = false,
+  actionsDisabled = false,
   onBranch,
   onEdit,
   onRegenerate,
@@ -176,17 +182,32 @@ export function MessageBubble({
         {!editing && !isStreaming && (
           <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-faint)" }}>
             {canEdit && (
-              <button type="button" onClick={startEdit} className="hover:opacity-80">
+              <button
+                type="button"
+                onClick={startEdit}
+                disabled={actionsDisabled}
+                className="hover:opacity-80 disabled:opacity-30"
+              >
                 {t("room.edit")}
               </button>
             )}
             {canRegenerate && isInterrupted && onContinue && (
-              <button type="button" onClick={onContinue} className="hover:opacity-80">
+              <button
+                type="button"
+                onClick={onContinue}
+                disabled={actionsDisabled}
+                className="hover:opacity-80 disabled:opacity-30"
+              >
                 {t("room.continue")}
               </button>
             )}
             {canRegenerate && (
-              <button type="button" onClick={onRegenerate} className="hover:opacity-80">
+              <button
+                type="button"
+                onClick={onRegenerate}
+                disabled={actionsDisabled}
+                className="hover:opacity-80 disabled:opacity-30"
+              >
                 {t("room.regenerate")}
               </button>
             )}
@@ -194,8 +215,9 @@ export function MessageBubble({
               <button
                 type="button"
                 onClick={onBranch}
+                disabled={actionsDisabled}
                 title={t("room.branchHint") ?? ""}
-                className="hover:opacity-80"
+                className="hover:opacity-80 disabled:opacity-30"
               >
                 {t("room.branch")}
               </button>

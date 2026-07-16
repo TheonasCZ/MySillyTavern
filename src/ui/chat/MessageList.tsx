@@ -222,13 +222,14 @@ export function MessageList({
             content={content}
             isStreaming={isRegeneratingThis}
             isUser={message.role === "user"}
-            canEdit={!streaming}
-            canRegenerate={!streaming && message.role === "assistant" && message.id === lastAssistantId}
+            canEdit
+            canRegenerate={message.role === "assistant" && message.id === lastAssistantId}
+            actionsDisabled={streaming}
             isInterrupted={interruptedMessageIds.has(message.id)}
             avatarUrl={message.role === "user" ? personaAvatarUrl : resolvedAuthor.avatarUrl}
             authorName={message.role === "user" ? personaName : resolvedAuthor.name}
             showAuthorCaption={isGroup && message.role === "assistant"}
-            onBranch={!streaming && onBranch ? () => onBranch(message.id) : undefined}
+            onBranch={onBranch ? () => onBranch(message.id) : undefined}
             onEdit={(text) => onEdit(message.id, text)}
             onRegenerate={() => onRegenerate(message.id)}
             onContinue={() => onContinue(message.id)}
