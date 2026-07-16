@@ -385,7 +385,8 @@
       "languageEn": "Angličtina",
       "theme": "Motiv",
       "themeDark": "Tmavý",
-      "themeLight": "Světlý"
+      "themeLight": "Světlý",
+      "fontSize": "Velikost písma"
     },
     "connections": {
       "title": "Připojení",

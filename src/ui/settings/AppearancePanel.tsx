@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
 
-import { useSettingsStore, type Theme } from "../../stores/settingsStore";
+import { FONT_SCALES, useSettingsStore, type Theme } from "../../stores/settingsStore";
 import type { SupportedLanguage } from "../../i18n";
 
 export function AppearancePanel() {
   const { t } = useTranslation("settings");
-  const { theme, language, setTheme, setLanguage } = useSettingsStore();
+  const { theme, language, fontScale, setTheme, setLanguage, setFontScale } = useSettingsStore();
 
   return (
     <section
@@ -56,6 +56,33 @@ export function AppearancePanel() {
                 }}
               >
                 {th === "dark" ? t("appearance.themeDark") : t("appearance.themeLight")}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
+            {t("appearance.fontSize")}
+          </span>
+          <div className="inline-flex overflow-hidden rounded-[var(--radius-sm)] border" style={{ borderColor: "var(--color-border-strong)" }}>
+            {FONT_SCALES.map((scale) => (
+              <button
+                key={scale}
+                type="button"
+                onClick={() => void setFontScale(scale)}
+                aria-pressed={fontScale === scale}
+                title={`${scale} %`}
+                className="px-3 py-1.5 transition-colors"
+                style={{
+                  // Preview each step at its own size; sized in px on purpose
+                  // so the labels don't rescale when the root font changes.
+                  fontSize: `${(14 * scale) / 100}px`,
+                  backgroundColor: fontScale === scale ? "var(--color-accent)" : "transparent",
+                  color: fontScale === scale ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+                }}
+              >
+                A
               </button>
             ))}
           </div>

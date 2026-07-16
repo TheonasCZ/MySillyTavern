@@ -385,7 +385,8 @@
       "languageEn": "English",
       "theme": "Theme",
       "themeDark": "Dark",
-      "themeLight": "Light"
+      "themeLight": "Light",
+      "fontSize": "Font size"
     },
     "connections": {
       "title": "Connections",

@@ -5,13 +5,21 @@ import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 
 export type Theme = "dark" | "light";
 
+/** Root font-size scale in % — everything is sized in rem, so this scales
+ * the whole UI. Keep the steps modest so layouts don't break. */
+export const FONT_SCALES = [87.5, 100, 112.5, 125, 137.5] as const;
+export type FontScale = (typeof FONT_SCALES)[number];
+const DEFAULT_FONT_SCALE: FontScale = 100;
+
 interface SettingsState {
   theme: Theme;
   language: SupportedLanguage;
+  fontScale: FontScale;
   hydrated: boolean;
   hydrate: () => Promise<void>;
   setTheme: (theme: Theme) => Promise<void>;
   setLanguage: (language: SupportedLanguage) => Promise<void>;
+  setFontScale: (scale: FontScale) => Promise<void>;
 }
 
 function applyTheme(theme: Theme) {
@@ -20,23 +28,38 @@ function applyTheme(theme: Theme) {
   root.classList.add(theme);
 }
 
+function applyFontScale(scale: FontScale) {
+  document.documentElement.style.fontSize = scale === 100 ? "" : `${scale}%`;
+}
+
+function parseFontScale(raw: string | null): FontScale {
+  const value = Number(raw);
+  return (FONT_SCALES as readonly number[]).includes(value)
+    ? (value as FontScale)
+    : DEFAULT_FONT_SCALE;
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   theme: "dark",
   language: "cs",
+  fontScale: DEFAULT_FONT_SCALE,
   hydrated: false,
 
   hydrate: async () => {
-    const [storedTheme, storedLanguage] = await Promise.all([
+    const [storedTheme, storedLanguage, storedFontScale] = await Promise.all([
       getSetting("theme"),
       getSetting("language"),
+      getSetting("font_scale"),
     ]);
     const theme: Theme = storedTheme === "light" ? "light" : "dark";
     const language: SupportedLanguage = storedLanguage === "en" ? "en" : "cs";
+    const fontScale = parseFontScale(storedFontScale);
 
     applyTheme(theme);
+    applyFontScale(fontScale);
     await i18n.changeLanguage(language);
 
-    set({ theme, language, hydrated: true });
+    set({ theme, language, fontScale, hydrated: true });
   },
 
   setTheme: async (theme) => {
@@ -49,6 +72,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     await i18n.changeLanguage(language);
     set({ language });
     await setSetting("language", language);
+  },
+
+  setFontScale: async (fontScale) => {
+    applyFontScale(fontScale);
+    set({ fontScale });
+    await setSetting("font_scale", String(fontScale));
   },
 }));
 
