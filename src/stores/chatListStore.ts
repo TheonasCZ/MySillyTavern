@@ -6,6 +6,7 @@ import {
   listChats,
   renameChat,
   setChatConnection,
+  setChatPersona,
   type Chat,
   type ChatDraft,
 } from "../db/repositories/chatsRepo";
@@ -17,6 +18,7 @@ interface ChatListState {
   create: (draft: ChatDraft) => Promise<Chat>;
   rename: (id: string, title: string) => Promise<void>;
   setConnection: (id: string, connectionId: string | null) => Promise<void>;
+  setPersona: (id: string, personaId: string | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -43,6 +45,11 @@ export const useChatListStore = create<ChatListState>((set, get) => ({
   setConnection: async (id, connectionId) => {
     await setChatConnection(id, connectionId);
     set({ chats: get().chats.map((c) => (c.id === id ? { ...c, connectionId } : c)) });
+  },
+
+  setPersona: async (id, personaId) => {
+    await setChatPersona(id, personaId);
+    set({ chats: get().chats.map((c) => (c.id === id ? { ...c, personaId } : c)) });
   },
 
   remove: async (id) => {

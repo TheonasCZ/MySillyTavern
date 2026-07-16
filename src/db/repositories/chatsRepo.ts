@@ -17,6 +17,7 @@ export interface ChatDraft {
   title: string;
   characterId: string;
   connectionId: string | null;
+  personaId: string | null;
 }
 
 interface ChatRow {
@@ -62,14 +63,14 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   const now = nowIso();
   await execute(
     `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, created_at, updated_at)
-     VALUES ($1, $2, $3, NULL, $4, NULL, $5, $5)`,
-    [id, draft.title, draft.characterId, draft.connectionId, now],
+     VALUES ($1, $2, $3, $4, $5, NULL, $6, $6)`,
+    [id, draft.title, draft.characterId, draft.personaId, draft.connectionId, now],
   );
   return {
     id,
     title: draft.title,
     characterId: draft.characterId,
-    personaId: null,
+    personaId: draft.personaId,
     connectionId: draft.connectionId,
     extractionConnectionId: null,
     lastExtractedMessageId: null,
@@ -91,6 +92,14 @@ export async function setChatConnection(id: string, connectionId: string | null)
   await execute("UPDATE chats SET connection_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     connectionId,
+    nowIso(),
+  ]);
+}
+
+export async function setChatPersona(id: string, personaId: string | null): Promise<void> {
+  await execute("UPDATE chats SET persona_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    personaId,
     nowIso(),
   ]);
 }

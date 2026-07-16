@@ -1,8 +1,9 @@
 import { create } from "zustand";
 
-import { buildCharacterSystemPrompt } from "../chat/systemPrompt";
+import { buildFullSystemMessage } from "../chat/systemPrompt";
 import { getCharacter } from "../db/repositories/charactersRepo";
-import { getChat, touchChat } from "../db/repositories/chatsRepo";
+import { getChat, touchChat, type Chat } from "../db/repositories/chatsRepo";
+import { listActivatableEntries } from "../db/repositories/lorebooksRepo";
 import {
   appendSwipe,
   createMessage,
@@ -11,6 +12,9 @@ import {
   updateMessageContent,
   type Message,
 } from "../db/repositories/messagesRepo";
+import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/personasRepo";
+import { getSetting } from "../db/repositories/settingsRepo";
+import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { useConnectionsStore } from "./connectionsStore";
@@ -19,19 +23,49 @@ function toApiMessages(messages: Message[]): ChatMessage[] {
   return messages.map((m) => ({ role: m.role, content: m.content }));
 }
 
-/** Prepends a system message built from the chat's character card (M3:
- * simple field concatenation with {{char}} substitution — the full
- * PromptBuilder with persona/ledger/lorebook/budget lands in M5). Silently
- * omits the system message if the character can't be loaded, so a chat
- * whose character was later deleted still limps along instead of failing
- * to send. */
-async function withCharacterSystemMessage(
-  characterId: string,
-  history: ChatMessage[],
-): Promise<ChatMessage[]> {
-  const character = await getCharacter(characterId);
+/** The chat's own persona if it has one selected, otherwise the app-wide
+ * default persona (if any) — same fallback as the plan describes for
+ * "persona per chat" (§7 M4). */
+async function resolveChatPersona(chat: Chat): Promise<Persona | null> {
+  if (chat.personaId) {
+    const persona = await getPersona(chat.personaId);
+    if (persona) return persona;
+  }
+  return getDefaultPersona();
+}
+
+/** Prepends a system message built from the chat's character card, its
+ * resolved persona, and activated lorebook entries (M4: full
+ * PromptBuilder with ledger facts/summaries/budget trimming lands in M5).
+ * Silently omits parts that fail to load (deleted character, lorebook
+ * lookup error) so a degraded chat still limps along instead of failing to
+ * send. */
+async function withCharacterSystemMessage(chat: Chat, history: ChatMessage[]): Promise<ChatMessage[]> {
+  const character = await getCharacter(chat.characterId);
   if (!character) return history;
-  const systemText = buildCharacterSystemPrompt(character);
+
+  const persona = await resolveChatPersona(chat);
+
+  let loreEntries: LoreEntryLike[] = [];
+  try {
+    const [activatable, scanDepthSetting, tokenBudgetSetting] = await Promise.all([
+      listActivatableEntries(chat.characterId, chat.id),
+      getSetting("lore_scan_depth"),
+      getSetting("lore_token_budget"),
+    ]);
+    loreEntries = selectActiveEntries(
+      activatable,
+      history.map((m) => m.content),
+      {
+        scanDepth: scanDepthSetting ? Number(scanDepthSetting) : undefined,
+        tokenBudget: tokenBudgetSetting ? Number(tokenBudgetSetting) : undefined,
+      },
+    );
+  } catch (err) {
+    console.warn("lorebook activation failed", err);
+  }
+
+  const systemText = buildFullSystemMessage(character, persona, loreEntries);
   if (!systemText) return history;
   return [{ role: "system", content: systemText }, ...history];
 }
@@ -151,7 +185,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     void touchChat(chatId);
 
     const apiMessages = await withCharacterSystemMessage(
-      chat.characterId,
+      chat,
       toApiMessages([...messages, userMessage]),
     );
 
@@ -183,7 +217,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (idx === -1) return;
     const target = messages[idx];
     const apiMessages = await withCharacterSystemMessage(
-      chat.characterId,
+      chat,
       toApiMessages(messages.slice(0, idx)),
     );
 
