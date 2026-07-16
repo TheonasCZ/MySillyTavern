@@ -7,7 +7,7 @@ export type Theme = "dark" | "light";
 
 /** Root font-size scale in % — everything is sized in rem, so this scales
  * the whole UI. Keep the steps modest so layouts don't break. */
-export const FONT_SCALES = [87.5, 100, 112.5, 125, 137.5] as const;
+export const FONT_SCALES = [87.5, 100, 112.5, 125, 150, 175, 200] as const;
 export type FontScale = (typeof FONT_SCALES)[number];
 const DEFAULT_FONT_SCALE: FontScale = 100;
 
