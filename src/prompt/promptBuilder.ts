@@ -10,7 +10,8 @@
  *   3. activated lorebook entries (already priority-ordered by the caller)
  *   4. `[DOSAVADNÍ PŘÍBĚH]`: running summary
  *   5. the last `verbatimWindow` messages of history, verbatim, followed by
- *      `post_history_instructions` as a trailing system message
+ *      `post_history_instructions` + a `[Připomínka kánonu]` reminder of the
+ *      world/player facts, as a trailing system message
  *
  * When the estimated token total exceeds `contextBudget`, trims in this
  * order until it fits (or the step is exhausted): (a0) retrieved memories
@@ -19,7 +20,11 @@
  * recent), (c) summary text from its start, (d) ledger facts
  * event → quest → npc (world/player are never trimmed), (e) mes_example.
  * The system core (system_prompt/description/personality/scenario/persona)
- * and the most recent messages are never trimmed. */
+ * and the most recent messages are never trimmed. Nor is the trailing
+ * `[Připomínka kánonu]` block — it repeats the never-trimmed world/player
+ * facts right before generation (where models weigh instructions most
+ * heavily) as a defense against genre/canon drift over long chats; it is
+ * only size-capped at build time, never cut under budget pressure. */
 
 import type { LoreEntryLike } from "../lorebooks/activation";
 import { estimateTokens } from "./tokenEstimate";
@@ -82,6 +87,12 @@ export interface PromptBuilderInput {
    * as `[RELEVANTNÍ VZPOMÍNKY]` after the summary. Trimmed before anything
    * else under budget pressure, least relevant (last) first. */
   retrievedMemories?: string[];
+  /** Group-chat only (plan §4): the *other* members in the scene — never
+   * includes `character` itself, which is always the speaker. Rendered as
+   * `[Další postavy ve scéně]` in the system core and adds a
+   * "speak only as {{char}}" instruction near post_history_instructions.
+   * Omitting this field (the solo-chat case) leaves the output unchanged. */
+  groupMembers?: Array<{ name: string; description: string }>;
 }
 
 export interface PromptReport {
@@ -106,6 +117,14 @@ export interface PromptReport {
     historyMessagesIncluded: number;
     historyMessagesTotal: number;
     mesExampleIncluded: boolean;
+    /** Tokens spent on the end-of-context `[Připomínka kánonu]` block (0 when
+     * there are no world/player facts). Always rendered when non-empty —
+     * never trimmed under budget pressure, only size-capped at build time
+     * (see `buildCanonReminderSection`). */
+    canonReminderTokens: number;
+    /** Number of other group members rendered in `[Další postavy ve scéně]`.
+     * Only present for group-chat builds (`input.groupMembers` given). */
+    groupMembersIncluded?: number;
   };
   /** Human/UI-readable list of what got cut, in the order it was cut —
    * shown verbatim in the memory panel's "Prompt" tab. */
@@ -123,7 +142,9 @@ export const MIN_VERBATIM_MESSAGES = 4;
 const DEFAULT_RP_INSTRUCTIONS =
   "Jsi vypravěč hry na hrdiny (RP). Hraj roli postavy {{char}} podle popisu níže, " +
   "drž se jejího charakteru a scénáře. Akce a gesta piš kurzívou, přímou řeč normálně. " +
-  "Nikdy nemluv ani nejednej za hráče ({{user}}).";
+  "Nikdy nemluv ani nejednej za hráče ({{user}}). Drž konzistenci žánru a pravidel světa " +
+  "tak, jak byla zavedena — nepovoluj hráči schopnosti, moc ani vybavení nad rámec " +
+  "zavedených pravidel a nenech herní žánr nebo tón postupně driftovat k něčemu jinému.";
 
 export const DEFAULT_USER_NAME = "User";
 
@@ -142,9 +163,40 @@ const FACT_CATEGORY_ORDER: LedgerCategory[] = ["world", "player", "npc", "quest"
  * `world`/`player` never appear here — they're never trimmed. */
 const TRIMMABLE_FACT_CATEGORIES: LedgerCategory[] = ["event", "quest", "npc"];
 
+/** Categories reinforced in the end-of-context canon reminder — the
+ * world/player facts that most directly guard against genre/power drift
+ * (see `buildCanonReminderSection`). Same set as the never-trimmed
+ * categories above, by design: what's too important to cut is also
+ * important enough to repeat where the model weighs it most. */
+const CANON_REMINDER_CATEGORIES: LedgerCategory[] = ["world", "player"];
+/** Soft cap on the reminder block's size (~600 tokens at 4 chars/token).
+ * Long-running chats can accumulate many world/player facts; this keeps the
+ * reinforcement compact rather than repeating the entire ledger. Locked
+ * facts (explicitly pinned by the user as canon) are kept first so they
+ * survive the cap before unlocked ones. */
+const CANON_REMINDER_MAX_CHARS = 2400;
+
 // ---- Section builders ---------------------------------------------------
 
-function buildSystemCore(character: CharacterLike, persona: PersonaLike | null, userName: string): string {
+const GROUP_MEMBER_DESCRIPTION_MAX_LEN = 500;
+
+function buildGroupMembersSection(groupMembers: Array<{ name: string; description: string }>): string {
+  if (groupMembers.length === 0) return "";
+  const lines = groupMembers.map((m) => {
+    const desc = m.description.length > GROUP_MEMBER_DESCRIPTION_MAX_LEN
+      ? `${m.description.slice(0, GROUP_MEMBER_DESCRIPTION_MAX_LEN)}…`
+      : m.description;
+    return `- ${m.name}: ${desc}`;
+  });
+  return `[Další postavy ve scéně]\n${lines.join("\n")}`;
+}
+
+function buildSystemCore(
+  character: CharacterLike,
+  persona: PersonaLike | null,
+  userName: string,
+  groupMembers: Array<{ name: string; description: string }>,
+): string {
   const base = character.systemPrompt.trim() || DEFAULT_RP_INSTRUCTIONS;
   const parts = [base, character.description, character.personality, character.scenario].map((p) =>
     p.trim(),
@@ -153,7 +205,20 @@ function buildSystemCore(character: CharacterLike, persona: PersonaLike | null, 
   if (personaDescription) {
     parts.push(`[Hráčova persona — ${userName}]\n${personaDescription}`);
   }
+  const groupSection = buildGroupMembersSection(groupMembers);
+  if (groupSection) parts.push(groupSection);
   return substitutePlaceholders(parts.filter(Boolean).join("\n\n"), character.name, userName);
+}
+
+/** "Speak only as {{char}}" instruction added in group chats (plan §4) —
+ * appended to post_history_instructions, or sent as its own trailing
+ * system message when the card has none. */
+function buildGroupSpeakerInstruction(otherNames: string[]): string {
+  const names = otherNames.join(", ");
+  return (
+    "Mluv a jednej pouze za {{char}}. Nikdy nemluv za hráče ({{user}}) ani za ostatní postavy " +
+    `(${names}). Nezačínej odpověď svým jménem s dvojtečkou.`
+  );
 }
 
 function buildMesExampleSection(character: CharacterLike, charName: string, userName: string): string {
@@ -171,6 +236,38 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
   const ordered = FACT_CATEGORY_ORDER.flatMap((cat) => facts.filter((f) => f.category === cat));
   const lines = ordered.map((f) => factLine(f, charName, userName));
   return `[FAKTA SVĚTA — závazná]\n${lines.join("\n")}`;
+}
+
+/** Builds the end-of-context canon reminder (plan: memory-anchoring fix) —
+ * a compact restatement of the `world`/`player` ledger facts, meant to be
+ * appended to the trailing post-history system message. Long system
+ * messages bury the `[FAKTA SVĚTA]` block far from the end of the context
+ * window, where models (especially smaller/faster ones) weigh instructions
+ * the least; repeating the load-bearing facts right before generation
+ * counteracts that recency bias. Locked facts sort first (the user has
+ * explicitly pinned them as immutable canon); the block is capped at
+ * `CANON_REMINDER_MAX_CHARS` rather than trimmed under budget pressure —
+ * callers that need to save tokens should lock/curate fewer facts, not
+ * silently lose the reminder. Returns "" when there are no world/player
+ * facts to remind the model of. */
+function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, userName: string): string {
+  const relevant = facts
+    .filter((f) => CANON_REMINDER_CATEGORIES.includes(f.category))
+    .sort((a, b) => Number(b.locked) - Number(a.locked));
+  if (relevant.length === 0) return "";
+
+  const header = "[Připomínka kánonu — tato pravidla platí závazně a nesmí se driftem hry změnit]";
+  const lines: string[] = [];
+  let usedChars = header.length;
+  for (const f of relevant) {
+    const line = factLine(f, charName, userName);
+    // +1 for the joining newline.
+    if (usedChars + line.length + 1 > CANON_REMINDER_MAX_CHARS && lines.length > 0) break;
+    lines.push(line);
+    usedChars += line.length + 1;
+  }
+  if (lines.length === 0) return "";
+  return `${header}\n${lines.join("\n")}`;
 }
 
 function buildLoreSection(entries: LoreEntryLike[], charName: string, userName: string): string {
@@ -220,9 +317,15 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   const historyTotal = input.history.length;
   let historyIncluded = input.history.slice(-verbatimWindow);
 
-  const systemCore = buildSystemCore(character, persona, userName);
+  const groupMembers = input.groupMembers ?? [];
+  const systemCore = buildSystemCore(character, persona, userName, groupMembers);
 
-  function render(): { messages: PromptMessage[]; totalTokens: number; sectionsTokens: ReturnType<typeof sectionTokens> } {
+  function render(): {
+    messages: PromptMessage[];
+    totalTokens: number;
+    sectionsTokens: ReturnType<typeof sectionTokens>;
+    canonReminderTokens: number;
+  } {
     const mesExampleSection = mesExampleIncluded ? buildMesExampleSection(character, charName, userName) : "";
     const factsSection = buildFactsSection(facts, charName, userName);
     const loreSectionEntries = [...lore].sort((a, b) => b.priority - a.priority);
@@ -242,7 +345,18 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const messages: PromptMessage[] = [];
     if (systemText) messages.push({ role: "system", content: systemText });
     for (const m of historyIncluded) messages.push(m);
-    const phi = character.postHistoryInstructions.trim();
+    let phi = character.postHistoryInstructions.trim();
+    if (groupMembers.length > 0) {
+      const groupInstruction = buildGroupSpeakerInstruction(groupMembers.map((m) => m.name));
+      phi = phi ? `${phi}\n\n${groupInstruction}` : groupInstruction;
+    }
+    // Canon reminder is appended last, closest to generation — see
+    // `buildCanonReminderSection`. It is intentionally NOT part of the
+    // budget-trim passes below (never cut), only size-capped at build time.
+    const canonSection = buildCanonReminderSection(facts, charName, userName);
+    if (canonSection) {
+      phi = phi ? `${phi}\n\n${canonSection}` : canonSection;
+    }
     if (phi) {
       messages.push({ role: "system", content: substitutePlaceholders(phi, charName, userName) });
     }
@@ -251,7 +365,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const totalTokens = sectionsTok.systemTokens + sectionsTok.factsTokens + sectionsTok.loreTokens +
       sectionsTok.summaryTokens + sectionsTok.memoriesTokens + sectionsTok.historyTokens;
 
-    return { messages, totalTokens, sectionsTokens: sectionsTok };
+    return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection) };
   }
 
   function sectionTokens(
@@ -369,6 +483,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       historyMessagesIncluded: historyIncluded.length,
       historyMessagesTotal: historyTotal,
       mesExampleIncluded,
+      canonReminderTokens: current.canonReminderTokens,
+      ...(input.groupMembers ? { groupMembersIncluded: groupMembers.length } : {}),
     },
     trimmedNotes,
   };

@@ -11,18 +11,20 @@ import {
   setLastExtractedMessageId,
   setLastSummarizedMessageId,
 } from "../db/repositories/chatsRepo";
+import { listChatMembers } from "../db/repositories/chatMembersRepo";
+import { getCharacter } from "../db/repositories/charactersRepo";
 import { listMessages, type Message } from "../db/repositories/messagesRepo";
 import { getSetting } from "../db/repositories/settingsRepo";
-import type { ChatMessage, ConnectionConfig } from "../providers/types";
+import type { ConnectionConfig } from "../providers/types";
 import { DEFAULT_VERBATIM_WINDOW } from "../prompt/promptBuilder";
-import { listActivatableEntries } from "../db/repositories/lorebooksRepo";
+import { listActivatableEntriesForMembers } from "../db/repositories/lorebooksRepo";
 import {
   syncFactEmbeddings,
   syncLoreEmbeddings,
   syncMessageChunkEmbeddings,
 } from "./embeddingsEngine";
-import { runExtraction } from "./extractor";
-import { runSummarization } from "./summarizer";
+import { runExtraction, type TranscriptChatMessage } from "./extractor";
+import { runSummarization, type TranscriptMessage } from "./summarizer";
 
 export const DEFAULT_EXTRACTION_INTERVAL = 10;
 /** How many messages must have scrolled past the verbatim window,
@@ -37,10 +39,27 @@ interface QueueEntry {
 
 const queues = new Map<string, QueueEntry>();
 
-function toApiMessages(messages: Message[]): ChatMessage[] {
+/** Maps messages to transcript entries for the extractor, stamping
+ * `speakerName` from `Message.characterId` via a chatId->name lookup built
+ * once per pass (plan §M10) — solo chats get an empty map and every message
+ * falls back to the "AI"/"Hráč" label as before. */
+function toApiMessages(messages: Message[], memberNames: Map<string, string>): TranscriptChatMessage[] {
   return messages
     .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      speakerName: m.characterId ? (memberNames.get(m.characterId) ?? null) : null,
+    }));
+}
+
+/** Same speaker-name stamping for the summarizer's `Message[]`-shaped
+ * input. */
+function withSpeakerNames(messages: Message[], memberNames: Map<string, string>): TranscriptMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    speakerName: m.characterId ? (memberNames.get(m.characterId) ?? null) : null,
+  }));
 }
 
 async function readNumberSetting(key: string, fallback: number): Promise<number> {
@@ -68,10 +87,21 @@ async function runDueWork(chatId: string): Promise<void> {
   const messages = await listMessages(chatId);
   if (messages.length === 0) return;
 
-  const [extractionInterval, verbatimWindow] = await Promise.all([
+  const [extractionInterval, verbatimWindow, members] = await Promise.all([
     readNumberSetting("extraction_interval", DEFAULT_EXTRACTION_INTERVAL),
     readNumberSetting("verbatim_window", DEFAULT_VERBATIM_WINDOW),
+    listChatMembers(chatId),
   ]);
+  const memberCharacterIds = members.map((m) => m.characterId);
+  // Built once per pass (not per message) — used to stamp speaker names on
+  // the extraction/summarization transcripts (plan §M10).
+  const memberNames = new Map<string, string>();
+  await Promise.all(
+    members.map(async (m) => {
+      const character = await getCharacter(m.characterId);
+      if (character) memberNames.set(m.characterId, character.name);
+    }),
+  );
 
   // --- Extraction: messages since last_extracted_message_id ---
   const lastExtractedIdx = chat.lastExtractedMessageId
@@ -84,7 +114,7 @@ async function runDueWork(chatId: string): Promise<void> {
       chat.connectionId,
     );
     if (connection) {
-      await runExtraction(chatId, connection, toApiMessages(newSinceExtraction));
+      await runExtraction(chatId, connection, toApiMessages(newSinceExtraction, memberNames));
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
     }
   }
@@ -100,7 +130,7 @@ async function runDueWork(chatId: string): Promise<void> {
   if (toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD) {
     const connection = chat.connectionId ? await getConnection(chat.connectionId) : null;
     if (connection) {
-      await runSummarization(chatId, connection, toFold);
+      await runSummarization(chatId, connection, withSpeakerNames(toFold, memberNames));
       await setLastSummarizedMessageId(chatId, toFold[toFold.length - 1].id);
       folded = toFold;
     }
@@ -120,7 +150,10 @@ async function runDueWork(chatId: string): Promise<void> {
     if (folded.length > 0) {
       await syncMessageChunkEmbeddings(chatId, connection, folded);
     }
-    const loreEntries = await listActivatableEntries(chat.characterId, chatId);
+    const loreEntries = await listActivatableEntriesForMembers(
+      memberCharacterIds.length > 0 ? memberCharacterIds : [chat.characterId],
+      chatId,
+    );
     await syncLoreEmbeddings(connection, loreEntries);
   } catch (err) {
     console.warn("embedding sync failed", err);

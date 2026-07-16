@@ -1,9 +1,21 @@
 import { create } from "zustand";
 
-import { getCharacter } from "../db/repositories/charactersRepo";
-import { getChat, touchChat, type Chat } from "../db/repositories/chatsRepo";
+import { getCharacter, type Character } from "../db/repositories/charactersRepo";
+import {
+  addChatMember,
+  listChatMembers,
+  removeChatMember,
+  type ChatMember,
+} from "../db/repositories/chatMembersRepo";
+import {
+  getChat,
+  setAutoReply,
+  setPrimaryCharacter,
+  touchChat,
+  type Chat,
+} from "../db/repositories/chatsRepo";
 import { listActiveFacts } from "../db/repositories/ledgerRepo";
-import { listActivatableEntries } from "../db/repositories/lorebooksRepo";
+import { listActivatableEntriesForMembers } from "../db/repositories/lorebooksRepo";
 import {
   appendSwipe,
   countMessages,
@@ -18,6 +30,12 @@ import {
 import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/personasRepo";
 import { getSetting } from "../db/repositories/settingsRepo";
 import { getSummary } from "../db/repositories/summariesRepo";
+import {
+  mergeConsecutiveRoles,
+  pickNextSpeaker,
+  stripSpeakerPrefix,
+  type SpeakerCandidate,
+} from "../chat/groupSpeaker";
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
@@ -26,10 +44,6 @@ import { chatComplete } from "../providers/chatComplete";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { useConnectionsStore } from "./connectionsStore";
-
-function toApiMessages(messages: Message[]): ChatMessage[] {
-  return messages.map((m) => ({ role: m.role, content: m.content }));
-}
 
 /** The chat's own persona if it has one selected, otherwise the app-wide
  * default persona (if any) — same fallback as the plan describes for
@@ -42,27 +56,94 @@ async function resolveChatPersona(chat: Chat): Promise<Persona | null> {
   return getDefaultPersona();
 }
 
-/** Builds the full API message array via PromptBuilder: character +
- * persona + ledger facts + summary + activated lore + a trimmed verbatim
- * window of `history`, cut to the connection's `context_budget` (plan
- * §6.2). Returns the report alongside so the memory panel's "Prompt" tab
- * can show exactly what the last request contained. Silently falls back to
- * plain history (no system message, no report) when the character can't be
- * loaded, so a degraded chat still limps along instead of failing to send. */
+/** Loads a chat's roster (`chat_members`) and the corresponding character
+ * cards, in roster order — characters that failed to load (deleted card)
+ * are skipped rather than breaking the whole load (plan §5). */
+async function loadMembers(chatId: string): Promise<{ members: ChatMember[]; memberCharacters: Character[] }> {
+  const members = await listChatMembers(chatId);
+  const loaded = await Promise.all(members.map((m) => getCharacter(m.characterId)));
+  const memberCharacters = loaded.filter((c): c is Character => !!c);
+  return { members, memberCharacters };
+}
+
+/** Resolves a speaker id (may be null/stale/not-yet-a-member) to a full
+ * `Character`, falling back to the chat's primary member, and — as a last
+ * resort, e.g. a cold `memberCharacters` cache — to a direct DB lookup
+ * (mirrors the pre-M10 "character couldn't load" degrade path). */
+async function resolveSpeaker(
+  chat: Chat,
+  memberCharacters: Character[],
+  speakerId: string | null,
+): Promise<Character | null> {
+  const wantedId = speakerId ?? chat.characterId;
+  const found = memberCharacters.find((c) => c.id === wantedId)
+    ?? memberCharacters.find((c) => c.id === chat.characterId);
+  if (found) return found;
+  return getCharacter(wantedId);
+}
+
+/** Builds `{id, name, position}` candidates for `pickNextSpeaker` from the
+ * roster + loaded character cards (a member whose card failed to load gets
+ * an empty name — it simply can't be mention-matched by name). */
+function speakerCandidates(members: ChatMember[], memberCharacters: Character[]): SpeakerCandidate[] {
+  const nameById = new Map(memberCharacters.map((c) => [c.id, c.name]));
+  return members.map((m) => ({ id: m.characterId, name: nameById.get(m.characterId) ?? "", position: m.position }));
+}
+
+/** Chronological (oldest -> newest) authorship of assistant messages, with
+ * legacy/solo rows (`characterId === null`) attributed to the chat's
+ * primary member — the "recently spoken" signal for auto mode. */
+function recentSpeakerIds(chat: Chat, history: Message[]): string[] {
+  return history.filter((m) => m.role === "assistant").map((m) => m.characterId ?? chat.characterId);
+}
+
+/** Picks who replies next: explicit selection in manual mode, or
+ * `pickNextSpeaker` (name mention / least-recently-spoken) in auto mode
+ * (plan §5). Always falls back to the chat's primary member. */
+function pickSpeakerId(
+  chat: Chat,
+  members: ChatMember[],
+  memberCharacters: Character[],
+  autoReply: boolean,
+  selectedSpeakerId: string | null,
+  lastUserText: string,
+  history: Message[],
+): string {
+  if (!autoReply) return selectedSpeakerId ?? chat.characterId;
+  const picked = pickNextSpeaker(
+    speakerCandidates(members, memberCharacters),
+    lastUserText,
+    recentSpeakerIds(chat, history),
+  );
+  return picked ?? selectedSpeakerId ?? chat.characterId;
+}
+
+/** Builds the full API message array via PromptBuilder: `speaker` +
+ * persona + ledger facts + summary + activated lore (unioned across every
+ * roster member, plan §5) + a trimmed verbatim window of `history`, cut to
+ * the connection's `context_budget` (plan §6.2). In group chats (more than
+ * one loaded member), every assistant message in the verbatim window gets
+ * prefixed with its author's name, the *other* members are passed to
+ * PromptBuilder as `groupMembers`, and the rendered output is passed
+ * through `mergeConsecutiveRoles` so back-to-back assistant turns don't
+ * break providers with strict role alternation. Solo chats (one member)
+ * behave exactly as before. Returns the report alongside so the memory
+ * panel's "Prompt" tab can show exactly what the last request contained. */
 async function buildApiMessages(
   chat: Chat,
   history: Message[],
+  speaker: Character,
+  memberCharacters: Character[],
 ): Promise<{ messages: ChatMessage[]; report: PromptReport | null }> {
-  const character = await getCharacter(chat.characterId);
-  if (!character) return { messages: toApiMessages(history), report: null };
-
+  const isGroup = memberCharacters.length > 1;
   const persona = await resolveChatPersona(chat);
 
   let loreEntries: LoreEntryLike[] = [];
   let activatableLore: LoreEntryLike[] = [];
   try {
+    const memberIds = memberCharacters.length > 0 ? memberCharacters.map((c) => c.id) : [chat.characterId];
     const [activatable, scanDepthSetting, tokenBudgetSetting] = await Promise.all([
-      listActivatableEntries(chat.characterId, chat.id),
+      listActivatableEntriesForMembers(memberIds, chat.id),
       getSetting("lore_scan_depth"),
       getSetting("lore_token_budget"),
     ]);
@@ -127,20 +208,43 @@ async function buildApiMessages(
     }
   }
 
+  // Group chats: prefix every assistant turn with its author's name so the
+  // model (and, if it echoes back, `stripSpeakerPrefix`) can tell speakers
+  // apart in the verbatim window (plan §M10 — mapping to `role: user` would
+  // break alternation and the "don't speak for the player" instruction).
+  const nameById = new Map(memberCharacters.map((c) => [c.id, c.name]));
+  const primaryName = nameById.get(chat.characterId) ?? speaker.name;
+  const mappedHistory: ChatMessage[] = history.map((m) => {
+    if (isGroup && m.role === "assistant") {
+      const authorName = (m.characterId && nameById.get(m.characterId)) || primaryName;
+      return { role: m.role, content: `${authorName}: ${m.content}` };
+    }
+    return { role: m.role, content: m.content };
+  });
+
+  const groupMembers = isGroup
+    ? memberCharacters
+        .filter((c) => c.id !== speaker.id)
+        .map((c) => ({ name: c.name, description: c.description }))
+    : undefined;
+
   const { messages, report } = buildPrompt({
-    character,
+    character: speaker,
     persona,
     ledgerFacts,
     summary: summaryText,
     loreEntries,
-    history: toApiMessages(history),
-    contextBudget: connection?.contextBudget ?? 8000,
+    history: mappedHistory,
+    // Kept in sync with ConnectionForm's DEFAULT_DRAFT.contextBudget — this
+    // only applies when a chat has no connection configured at all.
+    contextBudget: connection?.contextBudget ?? 12000,
     verbatimWindow,
     factRelevance,
     retrievedMemories,
+    groupMembers,
   });
 
-  return { messages, report };
+  return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report };
 }
 
 type Setter = (
@@ -204,6 +308,26 @@ function startStream(
 
 interface ChatState {
   chatId: string | null;
+  /** The chat row itself, loaded by `openChat` — components used to load
+   * this on their own; the store now owns it so speaker resolution has
+   * fresh-enough data without a round trip per action (plan §5). */
+  chat: Chat | null;
+  /** Roster (`chat_members`), ordered by position — the source of truth
+   * for who's in the chat. */
+  members: ChatMember[];
+  /** Character cards for `members`, in the same order; entries whose card
+   * failed to load are skipped. */
+  memberCharacters: Character[];
+  /** Manually-picked speaker for the next `sendMessage`/used by
+   * `suggestReplies` — ignored while `autoReply` is on. */
+  selectedSpeakerId: string | null;
+  /** Automatic speaker selection (mirrors `chat.autoReply`, kept in sync by
+   * `setAutoReplyMode`). */
+  autoReply: boolean;
+  /** Which member is currently streaming a reply — drives the streaming
+   * bubble's avatar/name in group chats. Set at the start of every stream,
+   * cleared once `finalize` has persisted the message. */
+  streamingSpeakerId: string | null;
   messages: Message[];
   loading: boolean;
   streaming: boolean;
@@ -247,6 +371,9 @@ interface ChatState {
   closeChat: () => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
+  /** Group chats: makes `speakerId` reply without a new player message —
+   * "reply now" (plan §5/§7). */
+  triggerSpeaker: (speakerId: string) => Promise<void>;
   regenerate: (messageId: string) => Promise<void>;
   continueMessage: (messageId: string) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
@@ -255,6 +382,15 @@ interface ChatState {
   dismissError: () => void;
   suggestReplies: () => Promise<void>;
   clearSuggestions: () => void;
+  /** Adds a character to the roster (converts a solo chat into a group the
+   * first time it's called) and reloads `members`/`memberCharacters`. */
+  addMember: (characterId: string) => Promise<void>;
+  /** Removes a member; refuses (returns `false`) to empty the roster. When
+   * removing the current primary member, promotes the next member first so
+   * the chat always has a valid `chats.character_id`. */
+  removeMember: (characterId: string) => Promise<boolean>;
+  setAutoReplyMode: (on: boolean) => Promise<void>;
+  setSelectedSpeaker: (id: string) => void;
 }
 
 function resolveConnection(connectionId: string | null): ConnectionConfig | null {
@@ -281,6 +417,12 @@ function markInterrupted(set: Setter, messageId: string) {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   chatId: null,
+  chat: null,
+  members: [],
+  memberCharacters: [],
+  selectedSpeakerId: null,
+  autoReply: false,
+  streamingSpeakerId: null,
   messages: [],
   loading: false,
   streaming: false,
@@ -304,6 +446,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     set({
       chatId,
+      chat: null,
+      members: [],
+      memberCharacters: [],
+      selectedSpeakerId: null,
+      autoReply: false,
+      streamingSpeakerId: null,
       loading: true,
       messages: [],
       error: null,
@@ -316,14 +464,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
       suggestions: null,
       suggesting: false,
     });
-    const [messages, total] = await Promise.all([
+    const [messages, total, chat, { members, memberCharacters }] = await Promise.all([
       listRecentMessages(chatId, MESSAGE_PAGE_SIZE),
       countMessages(chatId),
+      getChat(chatId),
+      loadMembers(chatId),
     ]);
     // Ignore the result if the user has already navigated to a different
     // chat while this query was in flight.
     if (get().chatId !== chatId) return;
-    set({ messages, loading: false, hasOlderMessages: total > messages.length });
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    const lastAssistantIsMember =
+      !!lastAssistant?.characterId && members.some((m) => m.characterId === lastAssistant.characterId);
+    const selectedSpeakerId =
+      lastAssistant && lastAssistantIsMember ? lastAssistant.characterId : (chat?.characterId ?? null);
+    set({
+      messages,
+      loading: false,
+      hasOlderMessages: total > messages.length,
+      chat,
+      members,
+      memberCharacters,
+      autoReply: chat?.autoReply ?? false,
+      selectedSpeakerId,
+    });
   },
 
   closeChat: async () => {
@@ -332,6 +496,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
     set({
       chatId: null,
+      chat: null,
+      members: [],
+      memberCharacters: [],
+      selectedSpeakerId: null,
+      autoReply: false,
+      streamingSpeakerId: null,
       messages: [],
       loading: false,
       error: null,
@@ -362,7 +532,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (content) => {
     const trimmed = content.trim();
-    const { chatId, messages, streaming } = get();
+    const { chatId, messages, streaming, members, memberCharacters, autoReply, selectedSpeakerId } = get();
     if (!chatId || !trimmed || streaming) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ error: "offline", errorRetryable: true, retry: () => void get().sendMessage(content) });
@@ -377,31 +547,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    const speakerId = pickSpeakerId(chat, members, memberCharacters, autoReply, selectedSpeakerId, trimmed, messages);
+    const speaker = await resolveSpeaker(chat, memberCharacters, speakerId);
+    if (!speaker) return;
+
     const userMessage = await createMessage(chatId, "user", trimmed);
     set((s) => ({ messages: [...s.messages, userMessage], suggestions: null }));
     void touchChat(chatId);
 
-    const { messages: apiMessages, report } = await buildApiMessages(chat, [...messages, userMessage]);
-    set({ lastPromptReport: report });
+    const { messages: apiMessages, report } = await buildApiMessages(
+      chat,
+      [...messages, userMessage],
+      speaker,
+      memberCharacters,
+    );
+    set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const finalText = text.trim();
+      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       if (finalText) {
-        const assistantMessage = await createMessage(chatId, "assistant", finalText);
-        set((s) => ({ messages: [...s.messages, assistantMessage] }));
+        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
+        set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
         if (interrupted) markInterrupted(set, assistantMessage.id);
         void touchChat(chatId);
         // Fire-and-forget: decides on its own whether extraction/summary is
         // actually due, never throws, never blocks the chat (plan §6.3).
         if (!interrupted) scheduleMemoryWork(chatId);
       }
-      set({ streaming: false, streamingText: "", streamingMessageId: null });
+      set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
 
     // Retrying re-sends the exact same already-persisted user message
     // rather than calling `sendMessage` again (which would duplicate it) —
     // it re-resolves the connection/prompt in case anything changed and
-    // restarts the stream from scratch.
+    // restarts the stream from scratch. The chosen speaker stays the same.
     const retry = () => {
       void (async () => {
         const freshChat = await getChat(chatId);
@@ -410,10 +589,81 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ error: "no-connection", errorRetryable: false, retry: null });
           return;
         }
-        const { messages: retryApiMessages, report: retryReport } = await buildApiMessages(freshChat, [
-          ...get().messages,
-        ]);
-        set({ lastPromptReport: retryReport });
+        const { messages: retryApiMessages, report: retryReport } = await buildApiMessages(
+          freshChat,
+          get().messages,
+          speaker,
+          get().memberCharacters,
+        );
+        set({ lastPromptReport: retryReport, streamingSpeakerId: speaker.id });
+        startStream(freshConnection, retryApiMessages, set, get, finalize, retry);
+      })();
+    };
+
+    startStream(connection, apiMessages, set, get, finalize, retry);
+  },
+
+  /** "Reply now" for a group chat — the picked member reacts without a new
+   * player message. Reuses `buildApiMessages` for the current history, then
+   * appends a nudge asking that member specifically to continue the scene
+   * (plan §5). */
+  triggerSpeaker: async (speakerId) => {
+    const { chatId, messages, streaming, memberCharacters } = get();
+    if (!chatId || streaming) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      set({ error: "offline", errorRetryable: true, retry: () => void get().triggerSpeaker(speakerId) });
+      return;
+    }
+
+    const chat = await getChat(chatId);
+    if (!chat) return;
+    const connection = resolveConnection(chat.connectionId);
+    if (!connection) {
+      set({ error: "no-connection", errorRetryable: false, retry: null });
+      return;
+    }
+
+    const speaker = await resolveSpeaker(chat, memberCharacters, speakerId);
+    if (!speaker) return;
+
+    const buildTriggerMessages = async (freshChat: Chat, history: Message[], members: Character[]) => {
+      const { messages: baseApiMessages, report } = await buildApiMessages(freshChat, history, speaker, members);
+      const apiMessages: ChatMessage[] = [
+        ...baseApiMessages,
+        { role: "user", content: `[Pokračuj scénou jako ${speaker.name}.]` },
+      ];
+      return { apiMessages, report };
+    };
+
+    const { apiMessages, report } = await buildTriggerMessages(chat, messages, memberCharacters);
+    set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
+
+    const finalize = async (text: string, interrupted: boolean) => {
+      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      if (finalText) {
+        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
+        set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
+        if (interrupted) markInterrupted(set, assistantMessage.id);
+        void touchChat(chatId);
+        if (!interrupted) scheduleMemoryWork(chatId);
+      }
+      set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
+    };
+
+    const retry = () => {
+      void (async () => {
+        const freshChat = await getChat(chatId);
+        const freshConnection = freshChat ? resolveConnection(freshChat.connectionId) : null;
+        if (!freshChat || !freshConnection) {
+          set({ error: "no-connection", errorRetryable: false, retry: null });
+          return;
+        }
+        const { apiMessages: retryApiMessages, report: retryReport } = await buildTriggerMessages(
+          freshChat,
+          get().messages,
+          get().memberCharacters,
+        );
+        set({ lastPromptReport: retryReport, streamingSpeakerId: speaker.id });
         startStream(freshConnection, retryApiMessages, set, get, finalize, retry);
       })();
     };
@@ -422,7 +672,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   regenerate: async (messageId) => {
-    const { chatId, messages, streaming } = get();
+    const { chatId, messages, streaming, memberCharacters } = get();
     if (!chatId || streaming) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ error: "offline", errorRetryable: true, retry: () => void get().regenerate(messageId) });
@@ -440,14 +690,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const idx = messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
     const target = messages[idx];
-    const { messages: apiMessages, report } = await buildApiMessages(chat, messages.slice(0, idx));
-    set({ lastPromptReport: report });
+    // The message's own author (falling back to the primary member) speaks
+    // again — regenerating never reassigns authorship (plan §5).
+    const speaker = await resolveSpeaker(chat, memberCharacters, target.characterId);
+    if (!speaker) return;
 
-    set({ streamingMessageId: messageId });
+    const { messages: apiMessages, report } = await buildApiMessages(
+      chat,
+      messages.slice(0, idx),
+      speaker,
+      memberCharacters,
+    );
+    set({ lastPromptReport: report, streamingMessageId: messageId, streamingSpeakerId: speaker.id });
     clearInterrupted(set, messageId);
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const finalText = text.trim();
+      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       if (finalText) {
         const updated = await appendSwipe(target, finalText);
         set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
@@ -455,11 +713,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         void touchChat(chatId);
         if (!interrupted) scheduleMemoryWork(chatId);
       }
-      set({ streaming: false, streamingText: "", streamingMessageId: null });
+      set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
 
     const retry = () => {
-      set({ streamingMessageId: messageId });
+      set({ streamingMessageId: messageId, streamingSpeakerId: speaker.id });
       startStream(connection, apiMessages, set, get, finalize, retry);
     };
 
@@ -470,9 +728,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * including its current (partial) content, asks the model to continue
    * exactly where it left off, and appends the result to the existing
    * swipe content (rather than creating a new variant) — the "continue"
-   * half of the "continue/regenerate" pair required by plan §9. */
+   * half of the "continue/regenerate" pair required by plan §9. Authorship
+   * never changes (plan §5). */
   continueMessage: async (messageId) => {
-    const { chatId, messages, streaming } = get();
+    const { chatId, messages, streaming, memberCharacters } = get();
     if (!chatId || streaming) return;
     const chat = await getChat(chatId);
     if (!chat) return;
@@ -485,22 +744,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const idx = messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
     const target = messages[idx];
+    const speaker = await resolveSpeaker(chat, memberCharacters, target.characterId);
+    if (!speaker) return;
+    const isGroup = memberCharacters.length > 1;
+
     const priorHistory = messages.slice(0, idx);
-    const { messages: baseApiMessages } = await buildApiMessages(chat, priorHistory);
+    const { messages: baseApiMessages } = await buildApiMessages(chat, priorHistory, speaker, memberCharacters);
+    const continueInstruction = isGroup
+      ? `[Pokračuj přesně tam, kde jsi přestal/a jako ${speaker.name}. Neopakuj už napsaný text, jen naváž další slova.]`
+      : "[Pokračuj přesně tam, kde jsi přestal/a. Neopakuj už napsaný text, jen naváž další slova.]";
     const apiMessages: ChatMessage[] = [
       ...baseApiMessages,
       { role: "assistant", content: target.content },
-      {
-        role: "user",
-        content:
-          "[Pokračuj přesně tam, kde jsi přestal/a. Neopakuj už napsaný text, jen naváž další slova.]",
-      },
+      { role: "user", content: continueInstruction },
     ];
 
-    set({ streamingMessageId: messageId, streamingText: "" });
+    set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const addition = text.trim();
+      const addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       const combined = addition ? `${target.content}${/\s$/.test(target.content) ? "" : " "}${addition}` : target.content;
       if (addition) {
         const updated = await updateMessageContent(target, combined);
@@ -513,11 +775,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         scheduleMemoryWork(chatId);
       }
       void touchChat(chatId);
-      set({ streaming: false, streamingText: "", streamingMessageId: null });
+      set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
 
     const retry = () => {
-      set({ streamingMessageId: messageId, streamingText: "" });
+      set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
       startStream(connection, apiMessages, set, get, finalize, retry);
     };
 
@@ -554,7 +816,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (pendingFinalize) {
       await pendingFinalize(streamingText);
     } else {
-      set({ streaming: false, streamingText: "", streamingMessageId: null });
+      set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     }
   },
 
@@ -563,9 +825,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /** Asks the model for 3 short ways the user could react next. Built on
    * the exact same PromptBuilder context as a normal send (ledger facts,
    * summary, lore), so suggestions know everything the character does —
-   * but only runs on explicit request, so it costs tokens only when used. */
+   * but only runs on explicit request, so it costs tokens only when used.
+   * Uses the currently selected speaker (or the primary member) purely to
+   * pick whose "voice"/context frames the suggestions — the suggestions
+   * themselves are always written for the player. */
   suggestReplies: async () => {
-    const { chatId, messages, streaming, suggesting } = get();
+    const { chatId, messages, streaming, suggesting, memberCharacters, selectedSpeakerId } = get();
     if (!chatId || streaming || suggesting || messages.length === 0) return;
 
     const chat = await getChat(chatId);
@@ -578,7 +843,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set({ suggesting: true, suggestions: null });
     try {
-      const { messages: baseApiMessages } = await buildApiMessages(chat, messages);
+      const speaker = await resolveSpeaker(chat, memberCharacters, selectedSpeakerId);
+      if (!speaker) return;
+      const { messages: baseApiMessages } = await buildApiMessages(chat, messages, speaker, memberCharacters);
       const apiMessages: ChatMessage[] = [
         ...baseApiMessages,
         {
@@ -598,6 +865,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearSuggestions: () => set({ suggestions: null }),
+
+  addMember: async (characterId) => {
+    const { chatId } = get();
+    if (!chatId) return;
+    await addChatMember(chatId, characterId);
+    const { members, memberCharacters } = await loadMembers(chatId);
+    set({ members, memberCharacters });
+  },
+
+  removeMember: async (characterId) => {
+    const { chatId, chat, members } = get();
+    if (!chatId || !chat || members.length <= 1) return false;
+
+    let primaryId = chat.characterId;
+    if (primaryId === characterId) {
+      const next = members.find((m) => m.characterId !== characterId);
+      if (!next) return false;
+      await setPrimaryCharacter(chatId, next.characterId);
+      primaryId = next.characterId;
+    }
+
+    await removeChatMember(chatId, characterId);
+    const { members: nextMembers, memberCharacters } = await loadMembers(chatId);
+    set((s) => ({
+      chat: { ...chat, characterId: primaryId },
+      members: nextMembers,
+      memberCharacters,
+      selectedSpeakerId: s.selectedSpeakerId === characterId ? primaryId : s.selectedSpeakerId,
+    }));
+    return true;
+  },
+
+  setAutoReplyMode: async (on) => {
+    const { chatId, chat } = get();
+    if (!chatId) return;
+    await setAutoReply(chatId, on);
+    set({ autoReply: on, chat: chat ? { ...chat, autoReply: on } : chat });
+  },
+
+  setSelectedSpeaker: (id) => set({ selectedSpeakerId: id }),
 }));
 
 /** Extracts up to 3 suggestion strings from the model's reply. Prefers the

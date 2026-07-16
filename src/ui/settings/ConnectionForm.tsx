@@ -17,7 +17,17 @@ const DEFAULT_DRAFT: ConnectionDraft = {
   temperature: 0.8,
   topP: 0.95,
   maxTokens: 1024,
-  contextBudget: 8000,
+  // 8000 proved too small in practice: a single long-running RP chat (a few
+  // hours of play) routinely builds a system message + facts + summary +
+  // verbatim window past 8000 estimated tokens, forcing PromptBuilder to
+  // trim history/facts more aggressively than intended. 12000 gives long
+  // sessions real headroom without being wasteful: the whole prompt is
+  // re-sent with every message, so on free-tier keys (rate-limited mainly
+  // by tokens/minute) a bigger budget just means slower replies and earlier
+  // TPM throttling — canon is protected by the trim order + the trailing
+  // canon reminder, not by raw prompt size. Users on paid keys can raise
+  // this per connection.
+  contextBudget: 12000,
 };
 
 interface Props {

@@ -30,6 +30,9 @@ interface Props {
   avatarUrl?: string;
   /** Author display name — used for the avatar fallback/alt text. */
   authorName?: string;
+  /** Shows `authorName` as a small caption above the bubble content — group
+   * chats only, so it's clear which member is speaking (plan §7). */
+  showAuthorCaption?: boolean;
   /** Shown when set and not streaming — forks the story at this message. */
   onBranch?: () => void;
   onEdit: (content: string) => void;
@@ -74,6 +77,7 @@ export function MessageBubble({
   isInterrupted = false,
   avatarUrl,
   authorName,
+  showAuthorCaption = false,
   onBranch,
   onEdit,
   onRegenerate,
@@ -109,6 +113,11 @@ export function MessageBubble({
           boxShadow: "var(--shadow-panel)",
         }}
       >
+        {showAuthorCaption && authorName && !editing && (
+          <span className="text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>
+            {authorName}
+          </span>
+        )}
         {isInterrupted && !editing && !isStreaming && (
           <span
             className="self-start rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide"

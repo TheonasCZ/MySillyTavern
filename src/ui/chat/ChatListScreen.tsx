@@ -5,7 +5,9 @@ import { useNavigate } from "react-router-dom";
 import { greetingOptions, resolveGreeting } from "../../chat/systemPrompt";
 import { searchSnippet } from "../../chat/searchSnippet";
 import { getCharacter } from "../../db/repositories/charactersRepo";
+import { listAllChatMembers, type ChatMember } from "../../db/repositories/chatMembersRepo";
 import { createMessage, searchMessages, type MessageSearchHit } from "../../db/repositories/messagesRepo";
+import { avatarSrc } from "../characters/avatarSrc";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
@@ -40,13 +42,17 @@ export function ChatListScreen() {
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newConnectionId, setNewConnectionId] = useState<string>("");
-  const [newCharacterId, setNewCharacterId] = useState<string>("");
+  /** Order of selection = roster position, first checked = primary member
+   * (plan §7 M10 group create form). */
+  const [newCharacterIds, setNewCharacterIds] = useState<string[]>([]);
+  const [starterCharacterId, setStarterCharacterId] = useState<string>("");
   const [newPersonaId, setNewPersonaId] = useState<string>("");
   const [newGreeting, setNewGreeting] = useState<string>("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [searchHits, setSearchHits] = useState<MessageSearchHit[] | null>(null);
+  const [allMembers, setAllMembers] = useState<ChatMember[]>([]);
 
   // Debounced fulltext search across all chats' messages; cleared below
   // two characters so casual typing doesn't fire queries.
@@ -67,6 +73,10 @@ export function ChatListScreen() {
   }, [loaded, load]);
 
   useEffect(() => {
+    if (loaded) void listAllChatMembers().then(setAllMembers);
+  }, [loaded]);
+
+  useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
   }, [connectionsLoaded, loadConnections]);
 
@@ -85,10 +95,26 @@ export function ChatListScreen() {
   }, [connections, newConnectionId]);
 
   useEffect(() => {
-    if (characters.length > 0 && !newCharacterId) {
-      setNewCharacterId(characters[0].id);
+    if (characters.length > 0 && newCharacterIds.length === 0) {
+      setNewCharacterIds([characters[0].id]);
     }
-  }, [characters, newCharacterId]);
+  }, [characters, newCharacterIds.length]);
+
+  const toggleCharacter = (id: string) => {
+    setNewCharacterIds((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id],
+    );
+  };
+
+  // The "who starts" pick must stay one of the checked characters — reset to
+  // the primary (first checked) whenever it falls out of the selection.
+  useEffect(() => {
+    if (newCharacterIds.length === 0) {
+      setStarterCharacterId("");
+    } else if (!newCharacterIds.includes(starterCharacterId)) {
+      setStarterCharacterId(newCharacterIds[0]);
+    }
+  }, [newCharacterIds, starterCharacterId]);
 
   useEffect(() => {
     if (personas.length > 0 && !newPersonaId) {
@@ -98,8 +124,8 @@ export function ChatListScreen() {
   }, [personas, newPersonaId]);
 
   const selectedCharacter = useMemo(
-    () => characters.find((c) => c.id === newCharacterId) ?? null,
-    [characters, newCharacterId],
+    () => characters.find((c) => c.id === starterCharacterId) ?? null,
+    [characters, starterCharacterId],
   );
 
   const greetingChoices = useMemo(() => {
@@ -112,21 +138,27 @@ export function ChatListScreen() {
   }, [greetingChoices]);
 
   const handleCreate = async () => {
-    if (!newCharacterId) return;
+    if (newCharacterIds.length === 0) return;
     const title = newTitle.trim() || t("newChat.defaultTitle");
+    // The starter picks first in the roster so it becomes the primary
+    // member (`chat.characterId`) — `characterIds[0]` is the invariant.
+    const orderedIds = [
+      starterCharacterId,
+      ...newCharacterIds.filter((id) => id !== starterCharacterId),
+    ];
     const created = await create({
       title,
-      characterId: newCharacterId,
+      characterIds: orderedIds,
       connectionId: newConnectionId || null,
       personaId: newPersonaId || null,
     });
 
-    const character = await getCharacter(newCharacterId);
+    const character = await getCharacter(starterCharacterId);
     if (character) {
       const persona = personas.find((p) => p.id === newPersonaId) ?? null;
       const greetingText = resolveGreeting(character, newGreeting || null, persona);
       if (greetingText) {
-        await createMessage(created.id, "assistant", greetingText);
+        await createMessage(created.id, "assistant", greetingText, character.id);
       }
     }
 
@@ -198,26 +230,54 @@ export function ChatListScreen() {
             </p>
           )}
 
-          <label className="flex flex-col gap-1 text-sm">
-            {t("newChat.characterLabel")}
-            <select
-              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+          <div className="flex flex-col gap-1 text-sm">
+            {t("newChat.charactersLabel")}
+            <div
+              className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-[var(--radius-sm)] border p-2"
               style={inputStyle}
-              value={newCharacterId}
-              onChange={(e) => setNewCharacterId(e.target.value)}
             >
               {characters.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
+                <label key={c.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newCharacterIds.includes(c.id)}
+                    onChange={() => toggleCharacter(c.id)}
+                  />
+                  {avatarSrc(c.avatarPath) && (
+                    <img
+                      src={avatarSrc(c.avatarPath)}
+                      alt=""
+                      className="h-5 w-5 rounded-full object-cover"
+                    />
+                  )}
+                  <span className="truncate">{c.name}</span>
+                </label>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
 
           {characters.length === 0 && (
             <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
               {t("newChat.noCharactersHint")}
             </p>
+          )}
+
+          {newCharacterIds.length > 1 && (
+            <label className="flex flex-col gap-1 text-sm">
+              {t("newChat.greetingCharacterLabel")}
+              <select
+                className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+                style={inputStyle}
+                value={starterCharacterId}
+                onChange={(e) => setStarterCharacterId(e.target.value)}
+              >
+                {newCharacterIds.map((id) => (
+                  <option key={id} value={id}>
+                    {characters.find((c) => c.id === id)?.name ?? id}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
 
           <label className="flex flex-col gap-1 text-sm">
@@ -261,7 +321,7 @@ export function ChatListScreen() {
             <button
               type="button"
               onClick={() => void handleCreate()}
-              disabled={connections.length === 0 || characters.length === 0}
+              disabled={connections.length === 0 || characters.length === 0 || newCharacterIds.length === 0}
               className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
               style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
             >
@@ -379,7 +439,17 @@ export function ChatListScreen() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: "var(--color-text-faint)" }}>
               <span>
-                {characters.find((c) => c.id === chat.characterId)?.name ?? "?"}
+                {(() => {
+                  const memberIds = allMembers
+                    .filter((m) => m.chatId === chat.id)
+                    .map((m) => m.characterId);
+                  const names = memberIds
+                    .map((cid) => characters.find((c) => c.id === cid)?.name)
+                    .filter((n): n is string => !!n);
+                  return names.length > 0
+                    ? names.join(", ")
+                    : characters.find((c) => c.id === chat.characterId)?.name ?? "?";
+                })()}
                 {" · "}
                 {t("list.updatedAt", { date: formatDate(chat.updatedAt) })}
               </span>

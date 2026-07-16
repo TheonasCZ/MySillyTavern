@@ -37,10 +37,12 @@
       "connectionLabel": "Connection",
       "noConnectionsHint": "First create at least one connection in Settings → Connections.",
       "characterLabel": "Character",
+      "charactersLabel": "Characters",
       "noCharactersHint": "First create or import at least one character on the Characters page.",
       "personaLabel": "Persona",
       "noPersona": "No persona",
       "defaultPersonaTag": "default",
+      "greetingCharacterLabel": "Who starts",
       "greetingLabel": "Opening message",
       "create": "Create chat"
     },
@@ -87,7 +89,31 @@
       "branch": "⑂ branch",
       "branchHint": "Creates a copy of the chat ending at this message — the story can go a different way from here, the original chat stays untouched.",
       "branchConfirm": "Create a story branch from this message? The original chat stays unchanged.",
-      "branchSuffix": "(branch)"
+      "branchSuffix": "(branch)",
+      "groupMembers": "Group members"
+    },
+    "group": {
+      "title": "Group members",
+      "addMember": "Add member",
+      "removeMember": "Remove",
+      "removeLastError": "Can't remove the last member — a group needs at least one.",
+      "autoLabel": "Auto",
+      "autoHint": "In auto mode, whichever member is mentioned by name in the last message replies; otherwise whoever has been silent the longest.",
+      "speakAs": "Speak as",
+      "replyNow": "Reply now",
+      "primary": "primary",
+      "promote": {
+        "button": "Promote NPC to character",
+        "hint": "Turns an NPC from the ledger and chat history into a full character and adds it to the group.",
+        "selectNpc": "NPC from the ledger",
+        "customName": "Or enter a name manually",
+        "generate": "Generate card",
+        "generating": "Generating…",
+        "preview": "Card preview",
+        "create": "Create and add to group",
+        "cancel": "Cancel",
+        "error": "Card generation failed. Try again or adjust the input."
+      }
     }
   },
   "characters": {
@@ -270,6 +296,7 @@
       "empty": "No request sent yet — after the first message, this shows exactly what the AI received.",
       "tokensLabel": "Estimated tokens",
       "overBudget": "Over the context budget",
+      "overBudgetHint": "The prompt exceeds the context budget, so history, summary and facts get trimmed more than they should. You can raise this connection's \"Context budget\" in Settings — but in moderation: the whole prompt is sent with every message, so a higher budget means slower replies and, on the free tier, hitting the tokens-per-minute limit sooner. 8,000-16,000 works well for the free tier; go higher only with a paid key.",
       "underBudget": "Within budget",
       "system": "System (card + persona)",
       "facts": "Facts",
@@ -282,7 +309,8 @@
       "none": "none",
       "trimmedTitle": "What got trimmed",
       "noneTrimmed": "Nothing was trimmed — everything fit the budget.",
-      "memories": "Memories"
+      "memories": "Memories",
+      "canonReminder": "Canon reminder"
     },
     "search": {
       "placeholder": "Search memories and facts…",
@@ -387,7 +415,7 @@
         "temperature": "Higher means more creative, less predictable answers. Keep it low (0.3–0.7) for factual answers; 0.8–1.0 works well for RP.",
         "topP": "Limits word choice to the most likely portion. Usually leave at default; tune either temperature or top P, not both.",
         "maxTokens": "The maximum length of the model's response, in tokens. A higher value allows longer answers, but increases wait time and cost.",
-        "contextBudget": "The maximum amount of context tokens (chat history, character card, memory…) sent to the model per request. Must fit within the chosen model's limit.",
+        "contextBudget": "The maximum amount of context tokens (chat history, character card, memory…) sent to the model per request. The whole prompt is re-sent with every message — a higher budget therefore means slower replies and, on the free tier, hitting the tokens-per-minute limit sooner (it does not affect the daily request quota). It also doesn't improve the game's memory: key facts are protected by the trim order and the canon reminder at the end of the prompt. The recommended range is 8,000-16,000 for the free tier; going higher only makes sense with a paid key.",
         "apiKey": "The provider's API access key. Stored encrypted in the system keyring, never in the app database, and not shown again after saving."
       },
       "providers": {

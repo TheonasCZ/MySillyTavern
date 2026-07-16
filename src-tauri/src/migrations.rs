@@ -23,6 +23,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_003,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "group chats: chat_members, message authorship, auto-reply flag",
+            sql: MIGRATION_004,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -159,4 +165,30 @@ INSERT INTO embeddings_new SELECT * FROM embeddings;
 DROP TABLE embeddings;
 ALTER TABLE embeddings_new RENAME TO embeddings;
 CREATE INDEX idx_embeddings_chat ON embeddings(chat_id, kind);
+"#;
+
+/// Group chats (M10): `chat_members` tracks the roster (`chats.character_id`
+/// stays the primary member, invariant enforced in the repo layer, not SQL);
+/// `messages.character_id` is a soft ref (no FK — messages can outlive a
+/// removed member) recording who authored an assistant line; `auto_reply`
+/// toggles automatic speaker selection. Backfill gives every existing chat a
+/// single member and attributes its assistant messages to that character, so
+/// solo chats keep working unchanged.
+const MIGRATION_004: &str = r#"
+CREATE TABLE chat_members (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  character_id TEXT NOT NULL REFERENCES characters(id),
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE (chat_id, character_id)
+);
+CREATE INDEX idx_chat_members_chat ON chat_members(chat_id, position);
+ALTER TABLE messages ADD COLUMN character_id TEXT;
+ALTER TABLE chats ADD COLUMN auto_reply INTEGER NOT NULL DEFAULT 0;
+INSERT INTO chat_members (id, chat_id, character_id, position, created_at)
+SELECT lower(hex(randomblob(16))), id, character_id, 0, created_at FROM chats;
+UPDATE messages SET character_id =
+  (SELECT character_id FROM chats WHERE chats.id = messages.chat_id)
+WHERE role = 'assistant';
 "#;

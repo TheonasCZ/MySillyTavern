@@ -37,10 +37,12 @@
       "connectionLabel": "Připojení",
       "noConnectionsHint": "Nejdřív si v Nastavení → Připojení vytvoř alespoň jedno připojení.",
       "characterLabel": "Postava",
+      "charactersLabel": "Postavy",
       "noCharactersHint": "Nejdřív si na stránce Postavy vytvoř nebo naimportuj alespoň jednu postavu.",
       "personaLabel": "Persona",
       "noPersona": "Bez persony",
       "defaultPersonaTag": "výchozí",
+      "greetingCharacterLabel": "Kdo zahájí",
       "greetingLabel": "Úvodní zpráva",
       "create": "Vytvořit chat"
     },
@@ -87,7 +89,31 @@
       "branch": "⑂ větvit",
       "branchHint": "Vytvoří kopii chatu končící touto zprávou — příběh se odsud může vydat jinou cestou, původní chat zůstane nedotčený.",
       "branchConfirm": "Vytvořit větev příběhu od této zprávy? Původní chat zůstane beze změny.",
-      "branchSuffix": "(větev)"
+      "branchSuffix": "(větev)",
+      "groupMembers": "Členové skupiny"
+    },
+    "group": {
+      "title": "Členové skupiny",
+      "addMember": "Přidat člena",
+      "removeMember": "Odebrat",
+      "removeLastError": "Poslední člen nejde odebrat — skupina musí mít alespoň jednoho.",
+      "autoLabel": "Auto",
+      "autoHint": "V automatickém režimu odpovídá postava zmíněná jménem v poslední zprávě, jinak ta, co nejdéle mlčela.",
+      "speakAs": "Mluvit jako",
+      "replyNow": "Odpovědět teď",
+      "primary": "primární",
+      "promote": {
+        "button": "Povýšit NPC na postavu",
+        "hint": "Vytvoří z NPC z ledgeru a průběhu chatu plnohodnotnou postavu a přidá ji do skupiny.",
+        "selectNpc": "NPC z ledgeru",
+        "customName": "Nebo zadej jméno ručně",
+        "generate": "Vygenerovat kartu",
+        "generating": "Generuji…",
+        "preview": "Náhled karty",
+        "create": "Vytvořit a přidat do skupiny",
+        "cancel": "Zrušit",
+        "error": "Generování karty se nezdařilo. Zkus to znovu nebo uprav zadání."
+      }
     }
   },
   "characters": {
@@ -270,6 +296,7 @@
       "empty": "Zatím nebyl odeslán žádný požadavek — po první zprávě se tu zobrazí, co přesně dostala AI.",
       "tokensLabel": "Odhad tokenů",
       "overBudget": "Přes rozpočet kontextu",
+      "overBudgetHint": "Prompt přesahuje rozpočet kontextu, takže se historie, shrnutí i fakta ořezávají víc, než by měly. Můžeš zvýšit „Rozpočet kontextu“ u tohoto připojení v Nastavení — ale s mírou: celý prompt se posílá s každou zprávou, takže vyšší rozpočet znamená pomalejší odpovědi a u free tieru dřívější náraz na limit tokenů za minutu. Pro free tier se osvědčuje 8 000–16 000; víc jen s placeným klíčem.",
       "underBudget": "V rozpočtu",
       "system": "Systém (karta + persona)",
       "facts": "Fakta",
@@ -282,7 +309,8 @@
       "none": "žádné",
       "trimmedTitle": "Co bylo ořezáno",
       "noneTrimmed": "Nic nebylo ořezáno — všechno se vešlo do rozpočtu.",
-      "memories": "Vzpomínky"
+      "memories": "Vzpomínky",
+      "canonReminder": "Připomínka kánonu"
     },
     "search": {
       "placeholder": "Hledej ve vzpomínkách a faktech…",
@@ -387,7 +415,7 @@
         "temperature": "Vyšší hodnota = kreativnější a méně předvídatelné odpovědi. Pro věcné odpovědi nech nízkou (0.3–0.7), pro RP se hodí 0.8–1.0.",
         "topP": "Omezuje výběr slov na nejpravděpodobnější část. Většinou nech výchozí; ladí se buď temperature, nebo top P, ne obojí.",
         "maxTokens": "Maximální délka odpovědi modelu v tokenech. Vyšší hodnota umožní delší odpovědi, ale prodlouží čekání a zvýší cenu.",
-        "contextBudget": "Kolik tokenů kontextu (historie chatu, karta postavy, paměť…) se maximálně pošle modelu v jednom dotazu. Musí se vejít do limitu zvoleného modelu.",
+        "contextBudget": "Kolik tokenů kontextu (historie chatu, karta postavy, paměť…) se maximálně pošle modelu v jednom dotazu. Celý tento prompt se posílá znovu s každou zprávou — vyšší rozpočet tedy znamená pomalejší odpovědi a u free tieru dřívější narážení na limit tokenů za minutu (denní kvótu požadavků neovlivní). Paměť hry přitom nezlepší: klíčová fakta chrání pořadí ořezávání a připomínka kánonu na konci promptu. Doporučený rozsah je 8 000–16 000 pro free tier; víc dává smysl jen s placeným klíčem.",
         "apiKey": "Přístupový klíč k API poskytovatele. Ukládá se šifrovaně v systémovém keyringu, nikdy v databázi aplikace, a po uložení se už nezobrazí."
       },
       "providers": {

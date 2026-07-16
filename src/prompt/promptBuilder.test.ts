@@ -102,10 +102,13 @@ describe("buildPrompt — composition order & placeholders", () => {
     expect(messages[1]).toEqual({ role: "user", content: "Message number 0." });
     expect(messages[2]).toEqual({ role: "assistant", content: "Message number 1." });
 
-    // post_history_instructions is the final message.
+    // post_history_instructions is the final message, followed by the canon
+    // reminder (present here since a world fact was given).
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toBe("Stay in character, Elara.");
+    expect(last.content.startsWith("Stay in character, Elara.")).toBe(true);
+    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("- (world/Ashford) The capital.");
   });
 
   it("groups active facts by category in order world, player, npc, quest, event", () => {
@@ -350,6 +353,186 @@ describe("buildPrompt — trimming under budget pressure", () => {
     expect(messages[0].content).toContain("A wandering mage"); // system core survives
     expect(report.sections.historyMessagesIncluded).toBe(MIN_VERBATIM_MESSAGES);
     expect(report.overBudget).toBe(true);
+  });
+});
+
+describe("buildPrompt — canon reminder (memory anchoring)", () => {
+  it("appends a canon reminder with only world/player facts to the trailing system message", () => {
+    const facts = [
+      makeFact({ category: "world", subject: "Ashford", fact: "Classic high fantasy, no advanced tech." }),
+      makeFact({ category: "player", subject: "Kai", fact: "Cannot cast magic directly, only craft artifacts." }),
+      makeFact({ category: "npc", subject: "Innkeeper", fact: "Runs the tavern." }),
+      makeFact({ category: "quest", subject: "MainQuest", fact: "Find the relic." }),
+      makeFact({ category: "event", subject: "Storm", fact: "A storm hit the coast." }),
+    ];
+    const input = baseInput({ ledgerFacts: facts, history: makeHistory(2) });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("(world/Ashford)");
+    expect(last.content).toContain("(player/Kai)");
+    expect(last.content).not.toContain("(npc/Innkeeper)");
+    expect(last.content).not.toContain("(quest/MainQuest)");
+    expect(last.content).not.toContain("(event/Storm)");
+  });
+
+  it("omits the canon reminder entirely when there are no world/player facts", () => {
+    const input = baseInput({
+      ledgerFacts: [makeFact({ category: "npc", subject: "Innkeeper", fact: "Runs the tavern." })],
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.content).not.toContain("[Připomínka kánonu");
+  });
+
+  it("sends the canon reminder as its own trailing system message when the card has no post_history_instructions", () => {
+    const input = baseInput({
+      character: makeCharacter({ postHistoryInstructions: "" }),
+      ledgerFacts: [makeFact({ category: "world", subject: "Ashford", fact: "The capital." })],
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("[Připomínka kánonu");
+  });
+
+  it("substitutes {{char}}/{{user}} placeholders in the canon reminder", () => {
+    const input = baseInput({
+      ledgerFacts: [makeFact({ category: "player", subject: "{{user}}", fact: "{{char}} must never speak for {{user}}." })],
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.content).toContain("(player/Kai) Elara must never speak for Kai.");
+  });
+
+  it("sorts locked facts first, ahead of unlocked ones", () => {
+    const facts = [
+      makeFact({ category: "world", subject: "Unlocked", fact: "Not pinned.", locked: false }),
+      makeFact({ category: "world", subject: "Locked", fact: "Pinned canon.", locked: true }),
+    ];
+    const input = baseInput({ ledgerFacts: facts });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    const canonBlock = last.content.slice(last.content.indexOf("[Připomínka kánonu"));
+    expect(canonBlock.indexOf("(world/Locked)")).toBeLessThan(canonBlock.indexOf("(world/Unlocked)"));
+  });
+
+  it("caps the canon reminder size instead of growing unbounded with many world/player facts", () => {
+    const facts = Array.from({ length: 100 }, (_, i) =>
+      makeFact({ category: "world", subject: `Fact${i}`, fact: "X".repeat(100) }),
+    );
+    const input = baseInput({ ledgerFacts: facts });
+    const { messages, report } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    const canonBlock = last.content.slice(last.content.indexOf("[Připomínka kánonu"));
+    expect(canonBlock.length).toBeLessThan(2600);
+    expect(report.sections.canonReminderTokens).toBeGreaterThan(0);
+  });
+
+  it("is never trimmed away by budget pressure, unlike the main facts section", () => {
+    const input = baseInput({
+      ledgerFacts: [makeFact({ category: "world", subject: "Ashford", fact: "The capital." })],
+      history: makeHistory(2),
+      contextBudget: 1,
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.content).toContain("[Připomínka kánonu");
+  });
+
+  it("reports canonReminderTokens as 0 when there are no world/player facts", () => {
+    const { report } = buildPrompt(baseInput());
+    expect(report.sections.canonReminderTokens).toBe(0);
+  });
+});
+
+describe("buildPrompt — groupMembers (group chats)", () => {
+  it("renders a '[Další postavy ve scéně]' section with name + description per member", () => {
+    const input = baseInput({
+      groupMembers: [
+        { name: "Kai", description: "A blunt novice mage." },
+        { name: "Rowan", description: "A quiet archer." },
+      ],
+    });
+    const { messages } = buildPrompt(input);
+    const system = messages[0].content;
+    expect(system).toContain("[Další postavy ve scéně]");
+    expect(system).toContain("- Kai: A blunt novice mage.");
+    expect(system).toContain("- Rowan: A quiet archer.");
+  });
+
+  it("adds the speak-only-as-{{char}} instruction, substituted, appended to post_history_instructions", () => {
+    const input = baseInput({
+      character: makeCharacter({ postHistoryInstructions: "Stay vivid, {{char}}." }),
+      groupMembers: [{ name: "Rowan", description: "A mage." }],
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("Stay vivid, Elara.");
+    expect(last.content).toContain("Mluv a jednej pouze za Elara.");
+    expect(last.content).toContain("Nikdy nemluv za hráče (Kai) ani za ostatní postavy (Rowan).");
+    expect(last.content).toContain("Nezačínej odpověď svým jménem s dvojtečkou.");
+  });
+
+  it("sends the group instruction as its own trailing system message when the card has no post_history_instructions", () => {
+    const input = baseInput({
+      character: makeCharacter({ postHistoryInstructions: "" }),
+      groupMembers: [{ name: "Kai", description: "A mage." }],
+    });
+    const { messages } = buildPrompt(input);
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("Mluv a jednej pouze za Elara.");
+  });
+
+  it("truncates a group member's description to ~500 chars", () => {
+    const longDescription = "x".repeat(600);
+    const input = baseInput({
+      groupMembers: [{ name: "Kai", description: longDescription }],
+    });
+    const { messages } = buildPrompt(input);
+    const system = messages[0].content;
+    expect(system).toContain(`- Kai: ${"x".repeat(500)}…`);
+    expect(system).not.toContain("x".repeat(501));
+  });
+
+  it("sets report.sections.groupMembersIncluded when groupMembers is provided", () => {
+    const input = baseInput({
+      groupMembers: [{ name: "Kai", description: "A mage." }, { name: "Rowan", description: "An archer." }],
+    });
+    const { report } = buildPrompt(input);
+    expect(report.sections.groupMembersIncluded).toBe(2);
+  });
+
+  it("does not include groupMembersIncluded in the report when groupMembers is absent", () => {
+    const { report } = buildPrompt(baseInput());
+    expect(report.sections.groupMembersIncluded).toBeUndefined();
+  });
+
+  it("produces byte-identical output to a solo-chat build (no groupMembers) — regression guard", () => {
+    const richInput = baseInput({
+      character: makeCharacter({ postHistoryInstructions: "Stay in character, {{char}}.", mesExample: "Example line." }),
+      ledgerFacts: [makeFact({ category: "world", subject: "Ashford", fact: "The capital." })],
+      loreEntries: [
+        { id: "l1", keys: ["keep"], secondaryKeys: [], content: "The old keep stands north.", priority: 10, alwaysOn: false, caseSensitive: false, enabled: true },
+      ],
+      summary: "Elara arrived in Ashford.",
+      history: makeHistory(4),
+    });
+    const withoutGroupMembers = buildPrompt(richInput);
+    const withExplicitUndefined = buildPrompt({ ...richInput, groupMembers: undefined });
+    expect(withExplicitUndefined).toEqual(withoutGroupMembers);
+
+    // Fixed expectations pinning the solo-chat shape (no group section, no
+    // group instruction, no groupMembersIncluded field).
+    const system = withoutGroupMembers.messages[0].content;
+    expect(system).not.toContain("[Další postavy ve scéně]");
+    const last = withoutGroupMembers.messages[withoutGroupMembers.messages.length - 1];
+    expect(last.content.startsWith("Stay in character, Elara.")).toBe(true);
+    expect(last.content).not.toContain("Mluv a jednej pouze za");
+    expect(withoutGroupMembers.report.sections.groupMembersIncluded).toBeUndefined();
   });
 });
 

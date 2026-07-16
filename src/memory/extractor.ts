@@ -137,7 +137,24 @@ const EXTRACTION_SYSTEM_PROMPT =
   "Vrať POUZE JSON pole objektů ve tvaru " +
   '{"category": "player"|"world"|"npc"|"event"|"quest", "subject": string, "fact": string, "action": "upsert"|"remove"}. ' +
   "Zaznamenávej jen fakta trvalé povahy (kdo je kdo, co se stalo, kde jsme, cíle úkolů) — " +
-  "ne přechodné popisy nálady nebo dialogu. Použij 'remove' pro fakta, která už neplatí. " +
+  "ne přechodné popisy nálady nebo dialogu. Použij 'remove' pro fakta, která už neplatí.\n\n" +
+  "Zvláštní pozornost věnuj faktům, které brání driftu žánru a tónu hry — tato hra se hraje " +
+  "klidně stovky zpráv a bez explicitně zaznamenaných hranic se svět i schopnosti hráče " +
+  "postupně a nepozorovaně rozjedou jiným směrem, než jak hra začala:\n" +
+  "- kategorie 'world': pokud konverzace zavádí nebo potvrzuje žánr/tón světa (např. \"klasická " +
+  "fantasy, žádná vyspělá technologie\", \"magie je vzácná a nebezpečná\") nebo původ/pozadí " +
+  "důležité postavy či společníka hráče (odkud pochází, jak byl nalezen/potkán), zaznamenej to " +
+  "jako samostatný fakt subjektu 'Žánr a tón světa' resp. jménem té postavy — a pokud takový " +
+  "fakt v ledgeru už existuje, aktualizuj ho (upsert), místo aby zůstal nezaznamenaný.\n" +
+  "- kategorie 'player': kromě toho, čeho hráč dosáhl nebo co získal, zaznamenávej i JAKÉ MÁ " +
+  "LIMITY a čeho NENÍ schopen — např. \"hráč neumí přímo sesílat magii, jen řemeslně vyrábět " +
+  "artefakty\", \"vylepšení vyžadují dny práce a materiál, nejdou improvizovat okamžitě\". Fakt " +
+  "o limitu zapiš i tehdy, když ho konverzace jen nepřímo potvrzuje tím, že se hráč musí snažit " +
+  "nebo mu něco nejde napoprvé — je to obrana proti tomu, aby hráč postupně a nenápadně získal " +
+  "neomezenou moc.\n" +
+  "V případě rozporu mezi tím, co se v poslední zprávě odehrálo, a dřívějším zamčeným " +
+  "([ZAMČENO]) faktem, dřívější zamčený fakt nikdy nepřepisuj (nepoužívej na něj upsert ani " +
+  "remove) — konverzace se s ním musí srovnat, ne naopak.\n\n" +
   "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.";
 
 function formatSnapshot(facts: LedgerSnapshotFact[]): string {
@@ -148,8 +165,14 @@ function formatSnapshot(facts: LedgerSnapshotFact[]): string {
     .join("\n");
 }
 
-function formatNewMessages(messages: ChatMessage[]): string {
-  return messages.map((m) => `${m.role === "assistant" ? "AI" : "Hráč"}: ${m.content}`).join("\n");
+/** Transcript message with an optional group-chat speaker name (plan §M10)
+ * — additive over `ChatMessage` so existing callers still typecheck. */
+export type TranscriptChatMessage = ChatMessage & { speakerName?: string | null };
+
+function formatNewMessages(messages: TranscriptChatMessage[]): string {
+  return messages
+    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč")}: ${m.content}`)
+    .join("\n");
 }
 
 /** Runs one extraction pass for a chat: builds the prompt from the current
@@ -161,7 +184,7 @@ function formatNewMessages(messages: ChatMessage[]): string {
 export async function runExtraction(
   chatId: string,
   connection: ConnectionConfig,
-  newMessages: ChatMessage[],
+  newMessages: TranscriptChatMessage[],
 ): Promise<void> {
   try {
     const existingRows = await listAllFacts(chatId);

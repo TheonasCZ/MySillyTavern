@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { branchChat, getChat, type Chat } from "../../db/repositories/chatsRepo";
-import { getCharacter, type Character } from "../../db/repositories/charactersRepo";
+import { branchChat } from "../../db/repositories/chatsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
+import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
+import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { ChatInput } from "./ChatInput";
-import { MessageList } from "./MessageList";
+import { GroupMembersPopover } from "./GroupMembersPopover";
+import { MessageList, type MemberInfo } from "./MessageList";
+import { SpeakerPicker } from "./SpeakerPicker";
 
 const selectStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -19,12 +22,20 @@ const selectStyle = {
   color: "var(--color-text)",
 } as const;
 
+const MAX_VISIBLE_AVATARS = 5;
+
 export function ChatScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation(["chat", "common", "memory"]);
   const {
     chatId,
+    chat,
+    members,
+    memberCharacters,
+    selectedSpeakerId,
+    autoReply,
+    streamingSpeakerId,
     messages,
     loading,
     streaming,
@@ -40,6 +51,7 @@ export function ChatScreen() {
     closeChat,
     loadOlderMessages,
     sendMessage,
+    triggerSpeaker,
     regenerate,
     continueMessage,
     editMessage,
@@ -50,13 +62,17 @@ export function ChatScreen() {
     suggesting,
     suggestReplies,
     clearSuggestions,
+    addMember,
+    removeMember,
+    setAutoReplyMode,
+    setSelectedSpeaker,
   } = useChatStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
+  const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { setPersona } = useChatListStore();
-  const [chat, setChat] = useState<Chat | null>(null);
-  const [character, setCharacter] = useState<Character | null>(null);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
@@ -67,12 +83,12 @@ export function ChatScreen() {
   }, [personasLoaded, loadPersonas]);
 
   useEffect(() => {
+    if (!charactersLoaded) void loadCharacters();
+  }, [charactersLoaded, loadCharacters]);
+
+  useEffect(() => {
     if (!id) return;
     void openChat(id);
-    void getChat(id).then((loaded) => {
-      setChat(loaded);
-      if (loaded) void getCharacter(loaded.characterId).then(setCharacter);
-    });
     return () => {
       void closeChat();
     };
@@ -84,7 +100,32 @@ export function ChatScreen() {
   const connection = chat?.connectionId
     ? connections.find((c) => c.id === chat.connectionId)
     : undefined;
+  const promotionConnectionId = chat?.extractionConnectionId ?? chat?.connectionId ?? null;
+  const promotionConnection = promotionConnectionId
+    ? (connections.find((c) => c.id === promotionConnectionId) ?? null)
+    : null;
   const persona = chat?.personaId ? personas.find((p) => p.id === chat.personaId) : undefined;
+  const isGroup = members.length > 1;
+
+  const membersById = new Map<string, MemberInfo>(
+    memberCharacters.map((c) => [c.id, { name: c.name, avatarUrl: avatarSrc(c.avatarPath) }]),
+  );
+  const primaryCharacter = chat ? memberCharacters.find((c) => c.id === chat.characterId) : undefined;
+  const fallbackCharacter: MemberInfo = {
+    name: primaryCharacter?.name ?? "",
+    avatarUrl: avatarSrc(primaryCharacter?.avatarPath ?? null),
+  };
+
+  const lastUserText = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const recentSpeakerIds = messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => m.characterId ?? chat?.characterId ?? "");
+  const speakerCandidates = members.map((m) => ({
+    id: m.characterId,
+    name: memberCharacters.find((c) => c.id === m.characterId)?.name ?? "",
+    position: m.position,
+  }));
+  const predictedSpeakerId = isGroup ? pickNextSpeaker(speakerCandidates, lastUserText, recentSpeakerIds) : null;
 
   const handleBranch = async (messageId: string) => {
     if (!confirm(t("room.branchConfirm") ?? "")) return;
@@ -120,7 +161,6 @@ export function ChatScreen() {
             onChange={async (e) => {
               const personaId = e.target.value || null;
               await setPersona(id, personaId);
-              setChat((c) => (c ? { ...c, personaId } : c));
             }}
             title={t("room.personaLabel") ?? ""}
           >
@@ -131,6 +171,76 @@ export function ChatScreen() {
               </option>
             ))}
           </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setGroupOpen((v) => !v)}
+              aria-pressed={groupOpen}
+              title={t("room.groupMembers") ?? ""}
+              className="flex items-center rounded-[var(--radius-sm)] border px-1.5 py-1 transition-colors"
+              style={{
+                borderColor: "var(--color-border-strong)",
+                backgroundColor: groupOpen ? "var(--color-accent)" : "transparent",
+              }}
+            >
+              {memberCharacters.slice(0, MAX_VISIBLE_AVATARS).map((c, i) => {
+                const url = avatarSrc(c.avatarPath);
+                return url ? (
+                  <img
+                    key={c.id}
+                    src={url}
+                    alt={c.name}
+                    title={c.name}
+                    className="h-6 w-6 rounded-full border object-cover"
+                    style={{ borderColor: "var(--color-border-strong)", marginLeft: i === 0 ? 0 : "-0.4rem" }}
+                  />
+                ) : (
+                  <span
+                    key={c.id}
+                    title={c.name}
+                    aria-hidden
+                    className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
+                    style={{
+                      borderColor: "var(--color-border-strong)",
+                      backgroundColor: "var(--color-surface-2)",
+                      color: "var(--color-text-muted)",
+                      marginLeft: i === 0 ? 0 : "-0.4rem",
+                    }}
+                  >
+                    {(c.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                  </span>
+                );
+              })}
+              {memberCharacters.length > MAX_VISIBLE_AVATARS && (
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
+                  style={{
+                    borderColor: "var(--color-border-strong)",
+                    backgroundColor: "var(--color-surface-2)",
+                    color: "var(--color-text-muted)",
+                    marginLeft: "-0.4rem",
+                  }}
+                >
+                  +{memberCharacters.length - MAX_VISIBLE_AVATARS}
+                </span>
+              )}
+            </button>
+            {groupOpen && chat && (
+              <GroupMembersPopover
+                chatId={id}
+                chatCharacterId={chat.characterId}
+                members={members}
+                memberCharacters={memberCharacters}
+                allCharacters={characters}
+                autoReply={autoReply}
+                promotionConnection={promotionConnection}
+                onAddMember={addMember}
+                onRemoveMember={removeMember}
+                onSetAutoReply={setAutoReplyMode}
+                onClose={() => setGroupOpen(false)}
+              />
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setMemoryOpen((v) => !v)}
@@ -195,10 +305,12 @@ export function ChatScreen() {
               streamingMessageId={streamingMessageId}
               streamingText={streamingText}
               interruptedMessageIds={interruptedMessageIds}
-              characterAvatarUrl={avatarSrc(character?.avatarPath ?? null)}
-              characterName={character?.name}
+              membersById={membersById}
+              fallbackCharacter={fallbackCharacter}
               personaAvatarUrl={avatarSrc(persona?.avatarPath ?? null)}
               personaName={persona?.name}
+              streamingSpeakerId={streamingSpeakerId}
+              isGroup={isGroup}
               onBranch={(messageId) => void handleBranch(messageId)}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
@@ -207,6 +319,18 @@ export function ChatScreen() {
               onRegenerate={(messageId) => void regenerate(messageId)}
               onContinue={(messageId) => void continueMessage(messageId)}
               onSwipe={(messageId, offset) => void switchSwipe(messageId, offset)}
+            />
+          )}
+
+          {isGroup && (
+            <SpeakerPicker
+              members={memberCharacters}
+              selectedSpeakerId={selectedSpeakerId}
+              predictedSpeakerId={predictedSpeakerId}
+              autoReply={autoReply}
+              streaming={streaming}
+              onSelect={setSelectedSpeaker}
+              onReplyNow={(speakerId) => void triggerSpeaker(speakerId)}
             />
           )}
 

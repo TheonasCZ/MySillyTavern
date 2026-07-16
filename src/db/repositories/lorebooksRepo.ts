@@ -256,14 +256,28 @@ export async function listActivatableEntries(
   characterId: string,
   chatId: string,
 ): Promise<LoreEntryLike[]> {
+  return listActivatableEntriesForMembers([characterId], chatId);
+}
+
+/** Same as `listActivatableEntries` but unions lore reachable by any member
+ * of a group chat's roster (plan §M10) — a lorebook linked to a non-primary
+ * member still activates. Dedupes by entry id (an entry could be linked to
+ * more than one member, or to both a member and the chat/global). */
+export async function listActivatableEntriesForMembers(
+  characterIds: string[],
+  chatId: string,
+): Promise<LoreEntryLike[]> {
+  if (characterIds.length === 0) return [];
+  const characterPlaceholders = characterIds.map((_, i) => `$${i + 1}`).join(", ");
+  const chatParamIndex = characterIds.length + 1;
   const rows = await query<LoreEntryRow>(
     `SELECT e.* FROM lore_entries e
      JOIN lorebook_links l ON l.lorebook_id = e.lorebook_id
-     WHERE (l.target_type = 'character' AND l.target_id = $1)
-        OR (l.target_type = 'chat' AND l.target_id = $2)
+     WHERE (l.target_type = 'character' AND l.target_id IN (${characterPlaceholders}))
+        OR (l.target_type = 'chat' AND l.target_id = $${chatParamIndex})
         OR (l.target_type = 'global')
      GROUP BY e.id`,
-    [characterId, chatId],
+    [...characterIds, chatId],
   );
   return rows.map(toLoreEntryLike);
 }

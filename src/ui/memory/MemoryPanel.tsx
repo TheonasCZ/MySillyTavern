@@ -541,6 +541,12 @@ function PromptTab() {
       `${report.sections.historyMessagesIncluded}/${report.sections.historyMessagesTotal} (${report.sections.historyTokens} tok)`,
     ],
     [t("prompt.mesExample"), report.sections.mesExampleIncluded ? t("prompt.included") : t("prompt.none")],
+    [
+      t("prompt.canonReminder"),
+      report.sections.canonReminderTokens > 0
+        ? `${report.sections.canonReminderTokens} tok`
+        : t("prompt.none"),
+    ],
   ];
 
   return (
@@ -583,6 +589,11 @@ function PromptTab() {
         >
           {report.overBudget ? t("prompt.overBudget") : t("prompt.underBudget")}
         </span>
+        {report.overBudget && (
+          <p className="mt-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {t("prompt.overBudgetHint")}
+          </p>
+        )}
       </div>
 
       <table className="w-full text-xs">

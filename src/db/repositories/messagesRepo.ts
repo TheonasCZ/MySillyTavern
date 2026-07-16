@@ -10,6 +10,10 @@ export interface Message {
   content: string;
   swipes: string[];
   activeSwipe: number;
+  /** Group chats: which member authored this (assistant) message; null for
+   * user/system messages and legacy solo-chat rows. Soft ref — not cleared
+   * when a member is removed from the roster. */
+  characterId: string | null;
   createdAt: string;
 }
 
@@ -20,6 +24,7 @@ interface MessageRow {
   content: string;
   swipes: string;
   active_swipe: number;
+  character_id: string | null;
   created_at: string;
 }
 
@@ -37,6 +42,7 @@ function toMessage(row: MessageRow): Message {
     content: row.content,
     swipes,
     activeSwipe: row.active_swipe,
+    characterId: row.character_id,
     createdAt: row.created_at,
   };
 }
@@ -93,21 +99,33 @@ export async function listOlderMessages(
   return rows.map(toMessage).reverse();
 }
 
-/** Creates a message with a single swipe variant equal to its content. */
+/** Creates a message with a single swipe variant equal to its content.
+ * `characterId` records the authoring member for group chats (M10) — omit
+ * for user/system messages or legacy solo chats. */
 export async function createMessage(
   chatId: string,
   role: MessageRole,
   content: string,
+  characterId: string | null = null,
 ): Promise<Message> {
   const id = newId();
   const now = nowIso();
   const swipes = JSON.stringify([content]);
   await execute(
-    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, created_at)
-     VALUES ($1, $2, $3, $4, $5, 0, $6)`,
-    [id, chatId, role, content, swipes, now],
+    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at)
+     VALUES ($1, $2, $3, $4, $5, 0, $6, $7)`,
+    [id, chatId, role, content, swipes, characterId, now],
   );
-  return { id, chatId, role, content, swipes: [content], activeSwipe: 0, createdAt: now };
+  return {
+    id,
+    chatId,
+    role,
+    content,
+    swipes: [content],
+    activeSwipe: 0,
+    characterId,
+    createdAt: now,
+  };
 }
 
 /** Edits the content of the currently active swipe (used for manual message
