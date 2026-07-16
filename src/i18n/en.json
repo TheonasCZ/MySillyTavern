@@ -37,6 +37,9 @@
       "noConnectionsHint": "First create at least one connection in Settings → Connections.",
       "characterLabel": "Character",
       "noCharactersHint": "First create or import at least one character on the Characters page.",
+      "personaLabel": "Persona",
+      "noPersona": "No persona",
+      "defaultPersonaTag": "default",
       "greetingLabel": "Opening message",
       "create": "Create chat"
     },
@@ -48,6 +51,8 @@
     "room": {
       "backToList": "Back to chats",
       "connectionLabel": "Connection:",
+      "personaLabel": "Persona",
+      "noPersona": "No persona",
       "empty": "No messages yet. Write the first one.",
       "inputPlaceholder": "Write a message… (Enter to send, Shift+Enter for a new line)",
       "send": "Send",
@@ -107,11 +112,69 @@
   },
   "personas": {
     "title": "Personas",
-    "empty": "No personas yet."
+    "subtitle": "A persona is how the AI sees you — its name replaces the \"user\" placeholder in cards and lorebook entries, and its description is added to the system message.",
+    "empty": "No personas yet. Create your first one.",
+    "newButton": "New persona",
+    "defaultBadge": "default",
+    "form": {
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "e.g. Kai",
+        "description": "Description",
+        "descriptionPlaceholder": "Who the player is, what they look like, their relation to the character…"
+      },
+      "descriptionHint": "Shown to the AI as the player persona's description in the system message.",
+      "pickAvatar": "Choose avatar",
+      "isDefaultBadge": "This is the default persona for new chats.",
+      "makeDefault": "Set as default",
+      "deleteConfirm": "Delete this persona? Chats pointing to it will keep working but lose the reference."
+    }
   },
   "lorebooks": {
     "title": "Lorebooks",
-    "empty": "No lorebooks yet."
+    "empty": "No lorebooks yet. Create one or import a World Info file.",
+    "list": {
+      "newButton": "New lorebook",
+      "nameLabel": "Name",
+      "defaultName": "New lorebook"
+    },
+    "editor": {
+      "backToList": "Back to lorebooks",
+      "deleteConfirm": "Delete this lorebook, including all its entries and links?",
+      "saved": "Saved.",
+      "importWorldInfo": "Import World Info",
+      "importing": "Importing…",
+      "importError": "Import failed: {{message}}",
+      "exportWorldInfo": "Export World Info",
+      "exporting": "Exporting…",
+      "fields": {
+        "name": "Name",
+        "description": "Description"
+      },
+      "linksTitle": "Links",
+      "linksHint": "A lorebook can be linked to a specific character, a specific chat, or globally (applies to every chat).",
+      "links": {
+        "global": "Global",
+        "character": "Character",
+        "chat": "Chat",
+        "pickTarget": "Choose…",
+        "add": "Add link"
+      },
+      "entriesTitle": "Entries",
+      "addEntry": "Add entry",
+      "noEntries": "No entries yet.",
+      "entryFields": {
+        "keys": "Keys (comma-separated)",
+        "keysPlaceholder": "e.g. castle, king, throne",
+        "secondaryKeys": "Secondary keys",
+        "content": "Content",
+        "comment": "Comment",
+        "priority": "Priority",
+        "alwaysOn": "Always on",
+        "caseSensitive": "Case-sensitive",
+        "enabled": "Enabled"
+      }
+    }
   },
   "memory": {
     "title": "Memory",

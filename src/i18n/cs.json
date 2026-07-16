@@ -37,6 +37,9 @@
       "noConnectionsHint": "Nejdřív si v Nastavení → Připojení vytvoř alespoň jedno připojení.",
       "characterLabel": "Postava",
       "noCharactersHint": "Nejdřív si na stránce Postavy vytvoř nebo naimportuj alespoň jednu postavu.",
+      "personaLabel": "Persona",
+      "noPersona": "Bez persony",
+      "defaultPersonaTag": "výchozí",
       "greetingLabel": "Úvodní zpráva",
       "create": "Vytvořit chat"
     },
@@ -48,6 +51,8 @@
     "room": {
       "backToList": "Zpět na chaty",
       "connectionLabel": "Připojení:",
+      "personaLabel": "Persona",
+      "noPersona": "Bez persony",
       "empty": "Zatím žádné zprávy. Napiš první.",
       "inputPlaceholder": "Napiš zprávu… (Enter odešle, Shift+Enter nový řádek)",
       "send": "Odeslat",
@@ -107,11 +112,69 @@
   },
   "personas": {
     "title": "Persony",
-    "empty": "Zatím žádné persony."
+    "subtitle": "Persona je to, jak tě AI vidí — jméno nahrazuje zástupný symbol „user\" v kartách i lorebooku, popis se přidá do systémové zprávy.",
+    "empty": "Zatím žádné persony. Vytvoř první.",
+    "newButton": "Nová persona",
+    "defaultBadge": "výchozí",
+    "form": {
+      "fields": {
+        "name": "Jméno",
+        "namePlaceholder": "Např. Kai",
+        "description": "Popis",
+        "descriptionPlaceholder": "Kdo je hráč, jak vypadá, jaký má vztah k postavě…"
+      },
+      "descriptionHint": "Zobrazí se AI jako popis hráčovy persony v systémové zprávě.",
+      "pickAvatar": "Vybrat avatar",
+      "isDefaultBadge": "Toto je výchozí persona pro nové chaty.",
+      "makeDefault": "Nastavit jako výchozí",
+      "deleteConfirm": "Opravdu smazat tuto personu? Chaty na ni navázané zůstanou, ale ztratí referenci."
+    }
   },
   "lorebooks": {
     "title": "Lorebooky",
-    "empty": "Zatím žádné lorebooky."
+    "empty": "Zatím žádné lorebooky. Vytvoř první nebo naimportuj World Info.",
+    "list": {
+      "newButton": "Nový lorebook",
+      "nameLabel": "Název",
+      "defaultName": "Nový lorebook"
+    },
+    "editor": {
+      "backToList": "Zpět na lorebooky",
+      "deleteConfirm": "Opravdu smazat tento lorebook včetně všech záznamů a přiřazení?",
+      "saved": "Uloženo.",
+      "importWorldInfo": "Import World Info",
+      "importing": "Importuji…",
+      "importError": "Import selhal: {{message}}",
+      "exportWorldInfo": "Export World Info",
+      "exporting": "Exportuji…",
+      "fields": {
+        "name": "Název",
+        "description": "Popis"
+      },
+      "linksTitle": "Přiřazení",
+      "linksHint": "Lorebook lze přiřadit ke konkrétní postavě, konkrétnímu chatu, nebo globálně (pak platí ve všech chatech).",
+      "links": {
+        "global": "Globálně",
+        "character": "Postava",
+        "chat": "Chat",
+        "pickTarget": "Vyber…",
+        "add": "Přidat přiřazení"
+      },
+      "entriesTitle": "Záznamy",
+      "addEntry": "Přidat záznam",
+      "noEntries": "Zatím žádné záznamy.",
+      "entryFields": {
+        "keys": "Klíče (oddělené čárkou)",
+        "keysPlaceholder": "např. hrad, král, trůn",
+        "secondaryKeys": "Sekundární klíče",
+        "content": "Obsah",
+        "comment": "Poznámka",
+        "priority": "Priorita",
+        "alwaysOn": "Vždy aktivní",
+        "caseSensitive": "Rozlišovat velikost písmen",
+        "enabled": "Zapnuto"
+      }
+    }
   },
   "memory": {
     "title": "Paměť",
