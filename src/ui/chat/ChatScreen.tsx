@@ -3,10 +3,18 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { getChat, type Chat } from "../../db/repositories/chatsRepo";
+import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
+import { usePersonasStore } from "../../stores/personasStore";
 import { ChatInput } from "./ChatInput";
 import { MessageList } from "./MessageList";
+
+const selectStyle = {
+  backgroundColor: "var(--color-surface-2)",
+  borderColor: "var(--color-border-strong)",
+  color: "var(--color-text)",
+} as const;
 
 export function ChatScreen() {
   const { id } = useParams<{ id: string }>();
@@ -30,11 +38,17 @@ export function ChatScreen() {
     dismissError,
   } = useChatStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
+  const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
+  const { setPersona } = useChatListStore();
   const [chat, setChat] = useState<Chat | null>(null);
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
   }, [connectionsLoaded, loadConnections]);
+
+  useEffect(() => {
+    if (!personasLoaded) void loadPersonas();
+  }, [personasLoaded, loadPersonas]);
 
   useEffect(() => {
     if (!id) return;
@@ -69,9 +83,29 @@ export function ChatScreen() {
           </button>
           <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
         </div>
-        <span className="shrink-0 text-xs" style={{ color: "var(--color-text-faint)" }}>
-          {connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
-        </span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+            {connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
+          </span>
+          <select
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
+            style={selectStyle}
+            value={chat?.personaId ?? ""}
+            onChange={async (e) => {
+              const personaId = e.target.value || null;
+              await setPersona(id, personaId);
+              setChat((c) => (c ? { ...c, personaId } : c));
+            }}
+            title={t("room.personaLabel") ?? ""}
+          >
+            <option value="">{t("room.noPersona")}</option>
+            {personas.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </header>
 
       {error && (

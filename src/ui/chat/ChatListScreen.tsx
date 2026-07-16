@@ -8,6 +8,7 @@ import { createMessage } from "../../db/repositories/messagesRepo";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
+import { usePersonasStore } from "../../stores/personasStore";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -26,18 +27,20 @@ function formatDate(iso: string): string {
 export function ChatListScreen() {
   const { t } = useTranslation(["chat", "common"]);
   const navigate = useNavigate();
-  const { chats, loaded, load, create, rename, setConnection, remove } = useChatListStore();
+  const { chats, loaded, load, create, rename, setConnection, setPersona, remove } = useChatListStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const {
     characters,
     loaded: charactersLoaded,
     load: loadCharacters,
   } = useCharactersStore();
+  const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
 
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newConnectionId, setNewConnectionId] = useState<string>("");
   const [newCharacterId, setNewCharacterId] = useState<string>("");
+  const [newPersonaId, setNewPersonaId] = useState<string>("");
   const [newGreeting, setNewGreeting] = useState<string>("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -55,6 +58,10 @@ export function ChatListScreen() {
   }, [charactersLoaded, loadCharacters]);
 
   useEffect(() => {
+    if (!personasLoaded) void loadPersonas();
+  }, [personasLoaded, loadPersonas]);
+
+  useEffect(() => {
     if (connections.length > 0 && !newConnectionId) {
       setNewConnectionId(connections[0].id);
     }
@@ -65,6 +72,13 @@ export function ChatListScreen() {
       setNewCharacterId(characters[0].id);
     }
   }, [characters, newCharacterId]);
+
+  useEffect(() => {
+    if (personas.length > 0 && !newPersonaId) {
+      const def = personas.find((p) => p.isDefault) ?? personas[0];
+      setNewPersonaId(def.id);
+    }
+  }, [personas, newPersonaId]);
 
   const selectedCharacter = useMemo(
     () => characters.find((c) => c.id === newCharacterId) ?? null,
@@ -87,11 +101,13 @@ export function ChatListScreen() {
       title,
       characterId: newCharacterId,
       connectionId: newConnectionId || null,
+      personaId: newPersonaId || null,
     });
 
     const character = await getCharacter(newCharacterId);
     if (character) {
-      const greetingText = resolveGreeting(character, newGreeting || null);
+      const persona = personas.find((p) => p.id === newPersonaId) ?? null;
+      const greetingText = resolveGreeting(character, newGreeting || null, persona);
       if (greetingText) {
         await createMessage(created.id, "assistant", greetingText);
       }
@@ -186,6 +202,24 @@ export function ChatListScreen() {
               {t("newChat.noCharactersHint")}
             </p>
           )}
+
+          <label className="flex flex-col gap-1 text-sm">
+            {t("newChat.personaLabel")}
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newPersonaId}
+              onChange={(e) => setNewPersonaId(e.target.value)}
+            >
+              <option value="">{t("newChat.noPersona")}</option>
+              {personas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.isDefault ? ` (${t("newChat.defaultPersonaTag")})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
 
           {greetingChoices.length > 1 && (
             <label className="flex flex-col gap-1 text-sm">
@@ -299,6 +333,19 @@ export function ChatListScreen() {
                 {connections.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
+                style={inputStyle}
+                value={chat.personaId ?? ""}
+                onChange={(e) => void setPersona(chat.id, e.target.value || null)}
+              >
+                <option value="">{t("newChat.noPersona")}</option>
+                {personas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
                   </option>
                 ))}
               </select>

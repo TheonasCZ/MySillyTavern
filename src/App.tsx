@@ -7,7 +7,9 @@ import { GalleryScreen } from "./ui/characters/GalleryScreen";
 import { ChatListScreen } from "./ui/chat/ChatListScreen";
 import { ChatScreen } from "./ui/chat/ChatScreen";
 import { AppShell } from "./ui/layout/AppShell";
-import { PlaceholderScreen } from "./ui/layout/PlaceholderScreen";
+import { LorebookEditor } from "./ui/lorebooks/LorebookEditor";
+import { LorebooksListScreen } from "./ui/lorebooks/LorebooksListScreen";
+import { PersonasScreen } from "./ui/personas/PersonasScreen";
 import { SettingsScreen } from "./ui/settings/SettingsScreen";
 
 function App() {
@@ -29,9 +31,9 @@ function App() {
           <Route path="/chat/:id" element={<ChatScreen />} />
           <Route path="/characters" element={<GalleryScreen />} />
           <Route path="/characters/:id" element={<CardEditor />} />
-          <Route path="/personas" element={<PlaceholderScreen ns="personas" titleKey="title" />} />
-          <Route path="/lorebooks" element={<PlaceholderScreen ns="lorebooks" titleKey="title" />} />
-          <Route path="/lorebooks/:id" element={<PlaceholderScreen ns="lorebooks" titleKey="title" />} />
+          <Route path="/personas" element={<PersonasScreen />} />
+          <Route path="/lorebooks" element={<LorebooksListScreen />} />
+          <Route path="/lorebooks/:id" element={<LorebookEditor />} />
           <Route path="/settings" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
