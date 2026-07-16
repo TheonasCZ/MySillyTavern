@@ -338,7 +338,8 @@
       "connections": "Connections",
       "memory": "Memory",
       "appearance": "Appearance",
-      "backup": "Data & backup"
+      "backup": "Data & backup",
+      "diagnostics": "Diagnostics"
     },
     "backup": {
       "subtitle": "A backup saves the database and character avatars into one ZIP file. Importing a backup restores it — overwriting your current data.",
@@ -357,6 +358,12 @@
       "pendingRestart": "An import is staged — it will take effect after the app restarts.",
       "restartNow": "Restart and finish import",
       "cancelImport": "Cancel import"
+    },
+    "diagnostics": {
+      "title": "Diagnostics",
+      "subtitle": "App errors are automatically written to a file — attach it when reporting a bug.",
+      "logPathLabel": "Log path",
+      "openLogs": "Open log folder"
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",

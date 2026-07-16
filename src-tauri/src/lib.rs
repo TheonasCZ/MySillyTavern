@@ -12,6 +12,7 @@ use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
 use commands::files::{read_text_file, write_text_file};
+use commands::logging::{append_log, get_log_path};
 use commands::secrets::{delete_api_key, has_api_key, set_api_key};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,6 +54,8 @@ pub fn run() {
             request_import_backup,
             has_pending_import,
             cancel_pending_import,
+            append_log,
+            get_log_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

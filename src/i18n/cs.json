@@ -338,7 +338,8 @@
       "connections": "Připojení",
       "memory": "Paměť",
       "appearance": "Vzhled",
-      "backup": "Data a záloha"
+      "backup": "Data a záloha",
+      "diagnostics": "Diagnostika"
     },
     "backup": {
       "subtitle": "Záloha uloží databázi i avatary postav do jednoho ZIP souboru. Import zálohu obnoví — přepíše aktuální data.",
@@ -357,6 +358,12 @@
       "pendingRestart": "Import je připraven — projeví se až po restartu aplikace.",
       "restartNow": "Restartovat a dokončit import",
       "cancelImport": "Zrušit import"
+    },
+    "diagnostics": {
+      "title": "Diagnostika",
+      "subtitle": "Chyby aplikace se automaticky zapisují do souboru — přilož ho k hlášení chyby.",
+      "logPathLabel": "Cesta k logu",
+      "openLogs": "Otevřít složku logů"
     },
     "memory": {
       "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",
