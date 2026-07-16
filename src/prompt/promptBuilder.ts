@@ -199,7 +199,6 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   let historyIncluded = input.history.slice(-verbatimWindow);
 
   const systemCore = buildSystemCore(character, persona, userName);
-  const systemCoreTokens = estimateTokens(systemCore);
 
   function render(): { messages: PromptMessage[]; totalTokens: number; sectionsTokens: ReturnType<typeof sectionTokens> } {
     const mesExampleSection = mesExampleIncluded ? buildMesExampleSection(character, charName, userName) : "";
@@ -300,7 +299,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     budget,
     overBudget: current.totalTokens > budget,
     sections: {
-      systemTokens: systemCoreTokens,
+      // Includes mes_example when it's still included — matches what
+      // `estimatedTokens` actually counted for this section.
+      systemTokens: current.sectionsTokens.systemTokens,
       factsTokens: current.sectionsTokens.factsTokens,
       factsIncluded: facts.length,
       factsTotal,
