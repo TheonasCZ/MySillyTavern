@@ -9,6 +9,9 @@ interface Props {
   onStop: () => void;
   suggestions: string[] | null;
   suggesting: boolean;
+  /** Hidden when the last reply already carries its own inline options —
+   * the extra LLM call would be redundant. */
+  showSuggestButton?: boolean;
   onSuggest: () => void;
   onClearSuggestions: () => void;
 }
@@ -20,6 +23,7 @@ export function ChatInput({
   onStop,
   suggestions,
   suggesting,
+  showSuggestButton = true,
   onSuggest,
   onClearSuggestions,
 }: Props) {
@@ -76,6 +80,7 @@ export function ChatInput({
         </div>
       )}
       <div className="flex items-end gap-2">
+      {showSuggestButton && (
       <button
         type="button"
         onClick={onSuggest}
@@ -90,6 +95,7 @@ export function ChatInput({
       >
         {suggesting ? t("room.suggest.loading") : t("room.suggest.button")}
       </button>
+      )}
       <textarea
         className="min-h-[2.5rem] max-h-40 flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm"
         style={{

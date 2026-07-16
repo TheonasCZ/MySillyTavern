@@ -11,6 +11,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
+import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
 import { ChatInput } from "./ChatInput";
 import { GroupMembersPopover } from "./GroupMembersPopover";
 import { MessageList, type MemberInfo } from "./MessageList";
@@ -73,6 +74,7 @@ export function ChatScreen() {
   const { setPersona } = useChatListStore();
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
@@ -126,6 +128,17 @@ export function ChatScreen() {
     position: m.position,
   }));
   const predictedSpeakerId = isGroup ? pickNextSpeaker(speakerCandidates, lastUserText, recentSpeakerIds) : null;
+
+  // Options the model itself appended to its last reply ("Co uděláš? 1) …")
+  // replace the extra suggest-replies LLM call; the button stays only as a
+  // fallback for replies without a trailing option block.
+  const lastMessage = messages[messages.length - 1];
+  const inlineSuggestions =
+    !streaming && lastMessage?.role === "assistant" && lastMessage.id !== dismissedSuggestionsMsgId
+      ? extractInlineSuggestions(lastMessage.content)
+      : [];
+  const combinedSuggestions =
+    suggestions && suggestions.length > 0 ? suggestions : inlineSuggestions.length > 0 ? inlineSuggestions : null;
 
   const handleBranch = async (messageId: string) => {
     if (!confirm(t("room.branchConfirm") ?? "")) return;
@@ -339,10 +352,14 @@ export function ChatScreen() {
             streaming={streaming}
             onSend={(content) => void sendMessage(content)}
             onStop={() => void stop()}
-            suggestions={suggestions}
+            suggestions={combinedSuggestions}
             suggesting={suggesting}
+            showSuggestButton={inlineSuggestions.length === 0}
             onSuggest={() => void suggestReplies()}
-            onClearSuggestions={clearSuggestions}
+            onClearSuggestions={() => {
+              clearSuggestions();
+              if (lastMessage?.role === "assistant") setDismissedSuggestionsMsgId(lastMessage.id);
+            }}
           />
         </div>
 
