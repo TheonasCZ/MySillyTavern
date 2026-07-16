@@ -108,7 +108,11 @@ export function MessageList({
       const el = lastUserAnchorRef.current;
       const spacer = spacerRef.current;
       if (!container || !el || !spacer) return;
-      spacer.style.height = `${Math.max(0, container.clientHeight - 120)}px`;
+      // Full viewport height: the scroll target is 8px from the top, so the
+      // spacer must guarantee at least clientHeight of room below the user
+      // message — anything less clamps the scroll short and the view visibly
+      // hangs on the previous message instead.
+      spacer.style.height = `${container.clientHeight}px`;
       const containerRect = container.getBoundingClientRect();
       const elRect = el.getBoundingClientRect();
       container.scrollTop += elRect.bottom - containerRect.top - 8;
