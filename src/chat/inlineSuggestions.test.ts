@@ -22,6 +22,14 @@ describe("extractInlineSuggestions", () => {
     expect(extractInlineSuggestions(bold)).toEqual(["Otevřu dveře.", "Zaklepu."]);
   });
 
+  it("strips bold/italic markers inside option text", () => {
+    const reply = "…\n1. **Prozkoumám** ten *divný* krystal.\n2. *Pomalu* ustoupím.";
+    expect(extractInlineSuggestions(reply)).toEqual([
+      "Prozkoumám ten divný krystal.",
+      "Pomalu ustoupím.",
+    ]);
+  });
+
   it("ignores blank lines between options", () => {
     const reply = "Scéna.\n\n1. První.\n\n2. Druhá.\n";
     expect(extractInlineSuggestions(reply)).toEqual(["První.", "Druhá."]);

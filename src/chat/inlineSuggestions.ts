@@ -11,7 +11,8 @@ const MAX_OPTION_LENGTH = 400;
 function stripMarker(line: string): string {
   return line
     .replace(MARKER, "")
-    .replace(/^\*\*(.+)\*\*$/s, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1") // bold anywhere in the option
+    .replace(/\*(.+?)\*/g, "$1") // italics (RP action text)
     .trim();
 }
 
