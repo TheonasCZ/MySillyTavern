@@ -8,12 +8,11 @@ const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 4;
 const MAX_OPTION_LENGTH = 400;
 
+/** Only the list marker is removed — emphasis markers (**bold**, *italics*)
+ * stay in the text so the chips can render them and the clicked-in message
+ * keeps its styling. */
 function stripMarker(line: string): string {
-  return line
-    .replace(MARKER, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1") // bold anywhere in the option
-    .replace(/\*(.+?)\*/g, "$1") // italics (RP action text)
-    .trim();
+  return line.replace(MARKER, "").trim();
 }
 
 /** Returns the trailing option block of an assistant reply (marker lines at

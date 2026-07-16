@@ -1,6 +1,14 @@
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+
+const chipMarkdownComponents = {
+  em: (props: React.HTMLAttributes<HTMLElement>) => (
+    <em style={{ color: "var(--color-brass)", fontStyle: "italic" }} {...props} />
+  ),
+  p: (props: React.HTMLAttributes<HTMLParagraphElement>) => <p className="inline" {...props} />,
+};
 
 interface Props {
   disabled: boolean;
@@ -66,7 +74,7 @@ export function ChatInput({
                 color: "var(--color-text)",
               }}
             >
-              {s}
+              <ReactMarkdown components={chipMarkdownComponents}>{s}</ReactMarkdown>
             </button>
           ))}
           <button

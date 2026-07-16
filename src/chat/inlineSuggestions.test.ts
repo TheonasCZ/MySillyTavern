@@ -22,11 +22,11 @@ describe("extractInlineSuggestions", () => {
     expect(extractInlineSuggestions(bold)).toEqual(["Otevřu dveře.", "Zaklepu."]);
   });
 
-  it("strips bold/italic markers inside option text", () => {
+  it("keeps emphasis markers inside option text (chips render them)", () => {
     const reply = "…\n1. **Prozkoumám** ten *divný* krystal.\n2. *Pomalu* ustoupím.";
     expect(extractInlineSuggestions(reply)).toEqual([
-      "Prozkoumám ten divný krystal.",
-      "Pomalu ustoupím.",
+      "**Prozkoumám** ten *divný* krystal.",
+      "*Pomalu* ustoupím.",
     ]);
   });
 
