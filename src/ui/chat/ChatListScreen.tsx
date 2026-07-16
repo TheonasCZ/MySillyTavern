@@ -388,8 +388,13 @@ export function ChatListScreen() {
         {chats.map((chat) => (
           <li
             key={chat.id}
-            className="flex flex-col gap-2 rounded-[var(--radius-md)] border px-4 py-3"
+            className="flex cursor-pointer flex-col gap-2 rounded-[var(--radius-md)] border px-4 py-3 transition-colors hover:border-[var(--color-border-strong)]"
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
+            onClick={() => {
+              // The whole card opens the chat; interactive children (rename
+              // input, buttons, selects) stop propagation below.
+              if (renamingId !== chat.id) navigate(`/chat/${chat.id}`);
+            }}
           >
             <div className="flex items-center justify-between gap-2">
               {renamingId === chat.id ? (
@@ -398,6 +403,7 @@ export function ChatListScreen() {
                   className="flex-1 rounded-[var(--radius-sm)] border px-2 py-1 text-sm"
                   style={inputStyle}
                   value={renameValue}
+                  onClick={(e) => e.stopPropagation()}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void commitRename(chat.id);
@@ -418,7 +424,10 @@ export function ChatListScreen() {
               <div className="flex shrink-0 items-center gap-1 text-xs">
                 <button
                   type="button"
-                  onClick={() => startRename(chat.id, chat.title)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startRename(chat.id, chat.title);
+                  }}
                   className="rounded-[var(--radius-sm)] px-2 py-1"
                   style={{ color: "var(--color-text-muted)" }}
                 >
@@ -426,7 +435,8 @@ export function ChatListScreen() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (confirm(t("list.deleteConfirm") ?? "")) void remove(chat.id);
                   }}
                   className="rounded-[var(--radius-sm)] px-2 py-1"
@@ -457,6 +467,7 @@ export function ChatListScreen() {
                 className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
                 style={inputStyle}
                 value={chat.connectionId ?? ""}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => void setConnection(chat.id, e.target.value || null)}
               >
                 <option value="">{t("list.noConnection")}</option>
@@ -470,6 +481,7 @@ export function ChatListScreen() {
                 className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
                 style={inputStyle}
                 value={chat.personaId ?? ""}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => void setPersona(chat.id, e.target.value || null)}
               >
                 <option value="">{t("newChat.noPersona")}</option>
