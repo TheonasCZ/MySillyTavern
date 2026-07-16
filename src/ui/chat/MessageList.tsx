@@ -79,42 +79,61 @@ export function MessageList({
   // exactly once, the moment the anchor node actually mounts.
   const pendingAnchorRef = useRef(false);
 
-  useEffect(() => {
-    // Scroll to the bottom once when the chat opens, and again whenever the
-    // user sends a message. Streaming tokens deliberately do NOT stick the
-    // view to the bottom — the reply is anchored at its start instead (below)
-    // so a long generation can be read from the top without chasing it.
-    if (prevScrollHeightRef.current !== null) return;
-    const last = messages[messages.length - 1];
-    const userJustSent = !streaming && last?.role === "user";
-    if (!didInitialScrollRef.current || userJustSent) {
-      bottomRef.current?.scrollIntoView({ block: "end" });
-    }
-    if (messages.length > 0) didInitialScrollRef.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, streaming]);
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const lastUserAnchorRef = useRef<HTMLDivElement | null>(null);
+  const anchoredUserMsgIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // When a generation starts, pin the start of the reply to the top of the
-    // viewport exactly once; tokens then grow downward off-screen. If the
-    // anchor div is already mounted (the common case), scroll immediately;
-    // otherwise arm `pendingAnchorRef` so the ref callback below fires the
-    // scroll the instant the placeholder/regenerate bubble actually mounts,
-    // instead of risking a stale/missing node.
-    if (streaming && !prevStreamingRef.current) {
+    // Anchoring strategy (ChatGPT-style): when the user sends a message, a
+    // bottom spacer grows to viewport height and the view pins the END of
+    // the user's message just below the top edge. The reply then streams
+    // into the stable space beneath it — no further auto-scrolling, and the
+    // placeholder→persisted-message swap can't move anything.
+    if (prevScrollHeightRef.current !== null) return;
+    if (messages.length === 0) {
+      anchoredUserMsgIdRef.current = null;
+      if (spacerRef.current) spacerRef.current.style.height = "0px";
+      didInitialScrollRef.current = false;
+      return;
+    }
+    if (!didInitialScrollRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+      didInitialScrollRef.current = true;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (last.role === "user" && anchoredUserMsgIdRef.current !== last.id) {
+      anchoredUserMsgIdRef.current = last.id;
+      const container = scrollRef.current;
+      const el = lastUserAnchorRef.current;
+      const spacer = spacerRef.current;
+      if (!container || !el || !spacer) return;
+      spacer.style.height = `${Math.max(0, container.clientHeight - 120)}px`;
+      const containerRect = container.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      container.scrollTop += elRect.bottom - containerRect.top - 8;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, messages]);
+
+  useEffect(() => {
+    // Regenerate only: pin the start of the regenerated bubble to the top
+    // once (there's no fresh user message to anchor on). New-message streams
+    // are handled entirely by the user-message anchor above. If the bubble
+    // isn't mounted yet when `streaming` flips (buildApiMessages awaits
+    // lore/fact/embedding lookups before startStream), arm the flag so the
+    // callback ref fires the scroll the instant the node exists.
+    if (streaming && !prevStreamingRef.current && streamingMessageId !== null) {
       if (streamAnchorRef.current) {
         streamAnchorRef.current.scrollIntoView({ block: "start" });
       } else {
         pendingAnchorRef.current = true;
       }
     } else if (!streaming) {
-      // A stream that ended (finished/aborted/errored) before its anchor
-      // div ever mounted shouldn't leave a stale "pending" flag armed for
-      // whatever unrelated anchor mounts next.
       pendingAnchorRef.current = false;
     }
     prevStreamingRef.current = streaming;
-  }, [streaming]);
+  }, [streaming, streamingMessageId]);
 
   // Attached to whichever div hosts the in-progress streaming bubble
   // (regenerate target or new-message placeholder). Runs during commit, so
@@ -176,6 +195,8 @@ export function MessageList({
       )}
       {messages.map((message) => {
         const isRegeneratingThis = streaming && streamingMessageId === message.id;
+        const isLastUserMessage =
+          message.role === "user" && message.id === messages[messages.length - 1]?.id;
         const content = isRegeneratingThis ? streamingText : message.content;
         const author = message.characterId ? membersById.get(message.characterId) : undefined;
         const resolvedAuthor = author ?? fallbackCharacter;
@@ -199,20 +220,33 @@ export function MessageList({
             onSwipe={(offset) => onSwipe(message.id, offset)}
           />
         );
-        return isRegeneratingThis ? (
-          <div key={message.id} ref={setStreamAnchor}>
-            {bubble}
-          </div>
-        ) : (
-          bubble
-        );
+        if (isRegeneratingThis) {
+          return (
+            <div key={message.id} ref={setStreamAnchor}>
+              {bubble}
+            </div>
+          );
+        }
+        if (isLastUserMessage) {
+          return (
+            <div
+              key={message.id}
+              ref={(node) => {
+                lastUserAnchorRef.current = node;
+              }}
+            >
+              {bubble}
+            </div>
+          );
+        }
+        return bubble;
       })}
 
       {streaming && streamingMessageId === null && (() => {
         const streamAuthor = streamingSpeakerId ? membersById.get(streamingSpeakerId) : undefined;
         const resolvedStreamAuthor = streamAuthor ?? fallbackCharacter;
         return (
-          <div ref={setStreamAnchor}>
+          <div>
             <MessageBubble
               message={{
                 id: "__streaming__",
@@ -240,6 +274,10 @@ export function MessageList({
         );
       })()}
 
+      {/* Bottom spacer sized by the anchor effect above — gives the view
+       * room to pin the just-sent user message at the top even before the
+       * reply has any height. Kept after the stream ends so nothing jumps. */}
+      <div ref={spacerRef} aria-hidden className="shrink-0" />
       <div ref={bottomRef} />
     </div>
   );
