@@ -178,17 +178,74 @@
   },
   "memory": {
     "title": "Memory",
+    "close": "Close",
     "tabs": {
       "facts": "Facts",
       "summary": "Summary",
-      "prompt": "Lorebook & prompt"
+      "prompt": "Prompt"
+    },
+    "extractionConnection": {
+      "label": "Extraction connection",
+      "useDefault": "Same as the game connection"
+    },
+    "facts": {
+      "empty": "No facts yet.",
+      "filterLabel": "Filter",
+      "filterAll": "All categories",
+      "categories": {
+        "world": "World",
+        "player": "Player",
+        "npc": "NPC",
+        "quest": "Quest",
+        "event": "Event"
+      },
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "archive": "Archive",
+      "restore": "Restore",
+      "addNew": "Add fact",
+      "saved": "Saved.",
+      "fields": {
+        "subject": "Subject",
+        "fact": "Fact"
+      },
+      "deleteConfirm": "Permanently delete this fact?"
+    },
+    "summary": {
+      "empty": "No summary yet.",
+      "upToLabel": "Summarized up to message",
+      "save": "Save summary"
+    },
+    "prompt": {
+      "empty": "No request sent yet — after the first message, this shows exactly what the AI received.",
+      "tokensLabel": "Estimated tokens",
+      "overBudget": "Over the context budget",
+      "underBudget": "Within budget",
+      "system": "System (card + persona)",
+      "facts": "Facts",
+      "lore": "Lorebook",
+      "summarySection": "Summary",
+      "history": "History",
+      "mesExample": "Style example",
+      "truncated": "truncated",
+      "included": "included",
+      "none": "none",
+      "trimmedTitle": "What got trimmed",
+      "noneTrimmed": "Nothing was trimmed — everything fit the budget."
     }
   },
   "settings": {
     "title": "Settings",
     "sections": {
       "connections": "Connections",
+      "memory": "Memory",
       "appearance": "Appearance"
+    },
+    "memory": {
+      "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
+      "extractionInterval": "Extraction interval (messages)",
+      "verbatimWindow": "Verbatim window (messages)",
+      "saved": "Saved."
     },
     "appearance": {
       "language": "Language",

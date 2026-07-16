@@ -178,17 +178,74 @@
   },
   "memory": {
     "title": "Paměť",
+    "close": "Zavřít",
     "tabs": {
       "facts": "Fakta",
       "summary": "Shrnutí",
-      "prompt": "Lorebook & prompt"
+      "prompt": "Prompt"
+    },
+    "extractionConnection": {
+      "label": "Extrakční připojení",
+      "useDefault": "Stejné jako herní připojení"
+    },
+    "facts": {
+      "empty": "Zatím žádná fakta.",
+      "filterLabel": "Filtr",
+      "filterAll": "Všechny kategorie",
+      "categories": {
+        "world": "Svět",
+        "player": "Hráč",
+        "npc": "NPC",
+        "quest": "Úkol",
+        "event": "Událost"
+      },
+      "lock": "Zamknout",
+      "unlock": "Odemknout",
+      "archive": "Archivovat",
+      "restore": "Obnovit",
+      "addNew": "Přidat fakt",
+      "saved": "Uloženo.",
+      "fields": {
+        "subject": "Předmět",
+        "fact": "Fakt"
+      },
+      "deleteConfirm": "Opravdu trvale smazat tento fakt?"
+    },
+    "summary": {
+      "empty": "Zatím žádné shrnutí.",
+      "upToLabel": "Shrnuto po zprávu",
+      "save": "Uložit shrnutí"
+    },
+    "prompt": {
+      "empty": "Zatím nebyl odeslán žádný požadavek — po první zprávě se tu zobrazí, co přesně dostala AI.",
+      "tokensLabel": "Odhad tokenů",
+      "overBudget": "Přes rozpočet kontextu",
+      "underBudget": "V rozpočtu",
+      "system": "Systém (karta + persona)",
+      "facts": "Fakta",
+      "lore": "Lorebook",
+      "summarySection": "Shrnutí",
+      "history": "Historie",
+      "mesExample": "Ukázka stylu",
+      "truncated": "zkráceno",
+      "included": "zahrnuto",
+      "none": "žádné",
+      "trimmedTitle": "Co bylo ořezáno",
+      "noneTrimmed": "Nic nebylo ořezáno — všechno se vešlo do rozpočtu."
     }
   },
   "settings": {
     "title": "Nastavení",
     "sections": {
       "connections": "Připojení",
+      "memory": "Paměť",
       "appearance": "Vzhled"
+    },
+    "memory": {
+      "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",
+      "extractionInterval": "Extrakční interval (počet zpráv)",
+      "verbatimWindow": "Doslovné okno (počet zpráv)",
+      "saved": "Uloženo."
     },
     "appearance": {
       "language": "Jazyk",
