@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-import { buildFullSystemMessage } from "../chat/systemPrompt";
 import { getCharacter } from "../db/repositories/charactersRepo";
 import { getChat, touchChat, type Chat } from "../db/repositories/chatsRepo";
+import { listActiveFacts } from "../db/repositories/ledgerRepo";
 import { listActivatableEntries } from "../db/repositories/lorebooksRepo";
 import {
   appendSwipe,
@@ -14,7 +14,10 @@ import {
 } from "../db/repositories/messagesRepo";
 import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/personasRepo";
 import { getSetting } from "../db/repositories/settingsRepo";
+import { getSummary } from "../db/repositories/summariesRepo";
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
+import { scheduleMemoryWork } from "../memory/memoryEngine";
+import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { useConnectionsStore } from "./connectionsStore";
@@ -34,15 +37,19 @@ async function resolveChatPersona(chat: Chat): Promise<Persona | null> {
   return getDefaultPersona();
 }
 
-/** Prepends a system message built from the chat's character card, its
- * resolved persona, and activated lorebook entries (M4: full
- * PromptBuilder with ledger facts/summaries/budget trimming lands in M5).
- * Silently omits parts that fail to load (deleted character, lorebook
- * lookup error) so a degraded chat still limps along instead of failing to
- * send. */
-async function withCharacterSystemMessage(chat: Chat, history: ChatMessage[]): Promise<ChatMessage[]> {
+/** Builds the full API message array via PromptBuilder: character +
+ * persona + ledger facts + summary + activated lore + a trimmed verbatim
+ * window of `history`, cut to the connection's `context_budget` (plan
+ * §6.2). Returns the report alongside so the memory panel's "Prompt" tab
+ * can show exactly what the last request contained. Silently falls back to
+ * plain history (no system message, no report) when the character can't be
+ * loaded, so a degraded chat still limps along instead of failing to send. */
+async function buildApiMessages(
+  chat: Chat,
+  history: Message[],
+): Promise<{ messages: ChatMessage[]; report: PromptReport | null }> {
   const character = await getCharacter(chat.characterId);
-  if (!character) return history;
+  if (!character) return { messages: toApiMessages(history), report: null };
 
   const persona = await resolveChatPersona(chat);
 
@@ -65,9 +72,32 @@ async function withCharacterSystemMessage(chat: Chat, history: ChatMessage[]): P
     console.warn("lorebook activation failed", err);
   }
 
-  const systemText = buildFullSystemMessage(character, persona, loreEntries);
-  if (!systemText) return history;
-  return [{ role: "system", content: systemText }, ...history];
+  let ledgerFacts: Awaited<ReturnType<typeof listActiveFacts>> = [];
+  let summaryText: string | null = null;
+  try {
+    const [facts, summary] = await Promise.all([listActiveFacts(chat.id), getSummary(chat.id)]);
+    ledgerFacts = facts;
+    summaryText = summary?.text ?? null;
+  } catch (err) {
+    console.warn("loading ledger/summary failed", err);
+  }
+
+  const connection = resolveConnection(chat.connectionId);
+  const verbatimWindowSetting = await getSetting("verbatim_window").catch(() => null);
+  const verbatimWindow = verbatimWindowSetting ? Number(verbatimWindowSetting) : DEFAULT_VERBATIM_WINDOW;
+
+  const { messages, report } = buildPrompt({
+    character,
+    persona,
+    ledgerFacts,
+    summary: summaryText,
+    loreEntries,
+    history: toApiMessages(history),
+    contextBudget: connection?.contextBudget ?? 8000,
+    verbatimWindow,
+  });
+
+  return { messages, report };
 }
 
 type Setter = (
@@ -121,6 +151,11 @@ interface ChatState {
   error: string | null;
   handle: ChatStreamHandle | null;
   pendingFinalize: ((content: string) => Promise<void>) | null;
+  /** Report from the last PromptBuilder call for this chat — what exactly
+   * went to the model, token counts, what got trimmed. Shown in the memory
+   * panel's "Prompt" tab (plan §7 M5). Null until a message has been sent
+   * (or if the character couldn't be loaded). */
+  lastPromptReport: PromptReport | null;
 
   openChat: (chatId: string) => Promise<void>;
   closeChat: () => Promise<void>;
@@ -147,12 +182,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   error: null,
   handle: null,
   pendingFinalize: null,
+  lastPromptReport: null,
 
   openChat: async (chatId) => {
     if (get().streaming) {
       await get().stop();
     }
-    set({ chatId, loading: true, messages: [], error: null });
+    set({ chatId, loading: true, messages: [], error: null, lastPromptReport: null });
     const messages = await listMessages(chatId);
     // Ignore the result if the user has already navigated to a different
     // chat while this query was in flight.
@@ -164,7 +200,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (get().streaming) {
       await get().stop();
     }
-    set({ chatId: null, messages: [], loading: false, error: null });
+    set({ chatId: null, messages: [], loading: false, error: null, lastPromptReport: null });
   },
 
   sendMessage: async (content) => {
@@ -184,10 +220,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMessage] }));
     void touchChat(chatId);
 
-    const apiMessages = await withCharacterSystemMessage(
-      chat,
-      toApiMessages([...messages, userMessage]),
-    );
+    const { messages: apiMessages, report } = await buildApiMessages(chat, [...messages, userMessage]);
+    set({ lastPromptReport: report });
 
     const finalize = async (text: string) => {
       const finalText = text.trim();
@@ -195,6 +229,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const assistantMessage = await createMessage(chatId, "assistant", finalText);
         set((s) => ({ messages: [...s.messages, assistantMessage] }));
         void touchChat(chatId);
+        // Fire-and-forget: decides on its own whether extraction/summary is
+        // actually due, never throws, never blocks the chat (plan §6.3).
+        scheduleMemoryWork(chatId);
       }
       set({ streaming: false, streamingText: "", streamingMessageId: null });
     };
@@ -216,10 +253,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const idx = messages.findIndex((m) => m.id === messageId);
     if (idx === -1) return;
     const target = messages[idx];
-    const apiMessages = await withCharacterSystemMessage(
-      chat,
-      toApiMessages(messages.slice(0, idx)),
-    );
+    const { messages: apiMessages, report } = await buildApiMessages(chat, messages.slice(0, idx));
+    set({ lastPromptReport: report });
 
     set({ streamingMessageId: messageId });
 
@@ -229,6 +264,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const updated = await appendSwipe(target, finalText);
         set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
         void touchChat(chatId);
+        scheduleMemoryWork(chatId);
       }
       set({ streaming: false, streamingText: "", streamingMessageId: null });
     };

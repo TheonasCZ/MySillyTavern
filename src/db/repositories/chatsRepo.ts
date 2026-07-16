@@ -108,6 +108,31 @@ export async function touchChat(id: string): Promise<void> {
   await execute("UPDATE chats SET updated_at = $2 WHERE id = $1", [id, nowIso()]);
 }
 
+export async function setExtractionConnection(
+  id: string,
+  extractionConnectionId: string | null,
+): Promise<void> {
+  await execute("UPDATE chats SET extraction_connection_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    extractionConnectionId,
+    nowIso(),
+  ]);
+}
+
+/** Advances the "already extracted up to" marker — used by the memory
+ * engine after a successful extraction pass (plan §6.3). Does not bump
+ * `updated_at`: this is background bookkeeping, not a user-visible chat
+ * change (would otherwise reorder the chat list on its own). */
+export async function setLastExtractedMessageId(id: string, messageId: string): Promise<void> {
+  await execute("UPDATE chats SET last_extracted_message_id = $2 WHERE id = $1", [id, messageId]);
+}
+
+/** Advances the "already folded into the summary up to" marker — used by
+ * the memory engine after a successful summarization pass. */
+export async function setLastSummarizedMessageId(id: string, messageId: string): Promise<void> {
+  await execute("UPDATE chats SET last_summarized_message_id = $2 WHERE id = $1", [id, messageId]);
+}
+
 export async function deleteChat(id: string): Promise<void> {
   await execute("DELETE FROM chats WHERE id = $1", [id]);
 }
