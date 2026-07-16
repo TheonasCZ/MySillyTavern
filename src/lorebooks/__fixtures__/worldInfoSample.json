@@ -1,0 +1,40 @@
+{
+  "entries": {
+    "0": {
+      "uid": 0,
+      "key": ["Ashford", "the keep"],
+      "keysecondary": ["siege"],
+      "comment": "Setting: Ashford Keep",
+      "content": "Ashford Keep has stood for three centuries and never fallen to siege.",
+      "constant": false,
+      "selective": true,
+      "order": 100,
+      "disable": false,
+      "case_sensitive": false
+    },
+    "1": {
+      "uid": 1,
+      "key": [],
+      "keysecondary": [],
+      "comment": "World rules",
+      "content": "The realm's calendar uses a 10-month year; magic is rare and feared.",
+      "constant": true,
+      "selective": false,
+      "order": 200,
+      "disable": false,
+      "case_sensitive": false
+    },
+    "2": {
+      "uid": 2,
+      "key": ["Captain Vane"],
+      "keysecondary": [],
+      "comment": "NPC secret",
+      "content": "Captain Vane secretly serves the rival house of Ardenne.",
+      "constant": false,
+      "selective": true,
+      "order": 50,
+      "disable": true,
+      "case_sensitive": true
+    }
+  }
+}
