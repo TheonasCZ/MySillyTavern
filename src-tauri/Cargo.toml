@@ -32,4 +32,5 @@ futures-util = "0.3"
 base64 = "0.22"
 crc32fast = "1"
 thiserror = "2"
+uuid = { version = "1", features = ["v4"] }
 

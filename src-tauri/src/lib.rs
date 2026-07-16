@@ -1,7 +1,9 @@
 mod commands;
 mod migrations;
+mod png_card;
 mod providers;
 
+use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
 use commands::chat::{chat_abort, chat_complete, chat_stream, StreamRegistry};
 use commands::secrets::{delete_api_key, has_api_key, set_api_key};
 
@@ -23,6 +25,10 @@ pub fn run() {
             chat_complete,
             chat_stream,
             chat_abort,
+            import_card_png,
+            export_card_png,
+            read_card_json_file,
+            ensure_placeholder_avatar,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
