@@ -3,6 +3,8 @@ import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 
+import { stripEmphasis } from "../../chat/inlineSuggestions";
+
 const chipMarkdownComponents = {
   em: (props: React.HTMLAttributes<HTMLElement>) => (
     <em style={{ color: "var(--color-brass)", fontStyle: "italic" }} {...props} />
@@ -64,7 +66,7 @@ export function ChatInput({
               key={s}
               type="button"
               onClick={() => {
-                setValue(s);
+                setValue(stripEmphasis(s));
                 onClearSuggestions();
               }}
               className="max-w-full rounded-[var(--radius-md)] border px-3 py-1.5 text-left text-xs"

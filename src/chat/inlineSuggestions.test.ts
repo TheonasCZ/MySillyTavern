@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { extractInlineSuggestions } from "./inlineSuggestions";
+import { extractInlineSuggestions, stripEmphasis } from "./inlineSuggestions";
+
+describe("stripEmphasis", () => {
+  it("removes bold and italic markers, keeps text", () => {
+    expect(stripEmphasis("**Prozkoumám** ten *divný* krystal.")).toBe(
+      "Prozkoumám ten divný krystal.",
+    );
+    expect(stripEmphasis("bez formátování")).toBe("bez formátování");
+  });
+});
 
 describe("extractInlineSuggestions", () => {
   it("extracts a trailing numbered block after a question", () => {

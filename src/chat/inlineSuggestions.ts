@@ -15,6 +15,14 @@ function stripMarker(line: string): string {
   return line.replace(MARKER, "").trim();
 }
 
+/** Plain-text version of an option for the input textarea (a native
+ * textarea can't render markdown, so raw asterisks would just be noise). */
+export function stripEmphasis(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1");
+}
+
 /** Returns the trailing option block of an assistant reply (marker lines at
  * the very end, ignoring blank lines between them), or [] when the reply
  * doesn't end with one. */
