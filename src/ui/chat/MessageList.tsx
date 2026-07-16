@@ -80,15 +80,11 @@ export function MessageList({
   const pendingAnchorRef = useRef(false);
 
   const spacerRef = useRef<HTMLDivElement>(null);
-  const lastUserAnchorRef = useRef<HTMLDivElement | null>(null);
   const anchoredUserMsgIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Anchoring strategy (ChatGPT-style): when the user sends a message, a
-    // bottom spacer grows to viewport height and the view pins the END of
-    // the user's message just below the top edge. The reply then streams
-    // into the stable space beneath it — no further auto-scrolling, and the
-    // placeholder→persisted-message swap can't move anything.
+    // Initial scroll-to-bottom when a chat opens; also resets the anchor
+    // bookkeeping when the list empties (chat switch).
     if (prevScrollHeightRef.current !== null) return;
     if (messages.length === 0) {
       anchoredUserMsgIdRef.current = null;
@@ -99,26 +95,39 @@ export function MessageList({
     if (!didInitialScrollRef.current) {
       bottomRef.current?.scrollIntoView({ block: "end" });
       didInitialScrollRef.current = true;
-      return;
-    }
-    const last = messages[messages.length - 1];
-    if (last.role === "user" && anchoredUserMsgIdRef.current !== last.id) {
-      anchoredUserMsgIdRef.current = last.id;
-      const container = scrollRef.current;
-      const el = lastUserAnchorRef.current;
-      const spacer = spacerRef.current;
-      if (!container || !el || !spacer) return;
-      // Full viewport height: the scroll target is 8px from the top, so the
-      // spacer must guarantee at least clientHeight of room below the user
-      // message — anything less clamps the scroll short and the view visibly
-      // hangs on the previous message instead.
-      spacer.style.height = `${container.clientHeight}px`;
-      const containerRect = container.getBoundingClientRect();
-      const elRect = el.getBoundingClientRect();
-      container.scrollTop += elRect.bottom - containerRect.top - 8;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length, messages]);
+  }, [messages.length]);
+
+  // Anchoring strategy (ChatGPT-style): when the user sends a message, a
+  // bottom spacer grows to viewport height and the view pins the END of the
+  // user's message just below the top edge; the reply then streams into the
+  // stable space beneath it with no further auto-scrolling. Implemented as a
+  // callback ref so it runs in the commit that mounts the wrapper — an
+  // effect could observe a not-yet-attached ref and silently skip the pin
+  // for that message forever (the "view stuck on the previous reply" bug).
+  const pinUserMessage = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const msgId = node.dataset.msgId ?? null;
+    if (!msgId || anchoredUserMsgIdRef.current === msgId) return;
+    // Don't pin while the chat is still opening (initial render also mounts
+    // this wrapper when the newest message happens to be the user's).
+    if (!didInitialScrollRef.current) {
+      anchoredUserMsgIdRef.current = msgId;
+      return;
+    }
+    const container = scrollRef.current;
+    const spacer = spacerRef.current;
+    if (!container || !spacer) return;
+    anchoredUserMsgIdRef.current = msgId;
+    // Full viewport height: the scroll target is 8px from the top, so the
+    // spacer must guarantee at least clientHeight of room below the user
+    // message — anything less clamps the scroll short.
+    spacer.style.height = `${container.clientHeight}px`;
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    container.scrollTop += nodeRect.bottom - containerRect.top - 8;
+  }, []);
 
   useEffect(() => {
     // Regenerate only: pin the start of the regenerated bubble to the top
@@ -233,12 +242,7 @@ export function MessageList({
         }
         if (isLastUserMessage) {
           return (
-            <div
-              key={message.id}
-              ref={(node) => {
-                lastUserAnchorRef.current = node;
-              }}
-            >
+            <div key={message.id} data-msg-id={message.id} ref={pinUserMessage}>
               {bubble}
             </div>
           );
