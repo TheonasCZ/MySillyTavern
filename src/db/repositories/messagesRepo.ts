@@ -48,6 +48,50 @@ export async function listMessages(chatId: string): Promise<Message[]> {
   return rows.map(toMessage);
 }
 
+/** Page size for `listRecentMessages`/`listOlderMessages` — long chats load
+ * only the most recent window up front, with older messages fetched on
+ * demand as the user scrolls up (plan §9). */
+export const MESSAGE_PAGE_SIZE = 100;
+
+/** Returns the total number of messages in a chat — used to decide whether
+ * there's older history left to page in. */
+export async function countMessages(chatId: string): Promise<number> {
+  const rows = await query<{ count: number }>(
+    "SELECT COUNT(*) as count FROM messages WHERE chat_id = $1",
+    [chatId],
+  );
+  return rows[0]?.count ?? 0;
+}
+
+/** Loads the most recent `limit` messages of a chat, oldest → newest
+ * (matching `listMessages`'s ordering) so callers can render them directly
+ * without re-sorting. */
+export async function listRecentMessages(
+  chatId: string,
+  limit: number = MESSAGE_PAGE_SIZE,
+): Promise<Message[]> {
+  const rows = await query<MessageRow>(
+    "SELECT * FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT $2",
+    [chatId, limit],
+  );
+  return rows.map(toMessage).reverse();
+}
+
+/** Loads up to `limit` messages older than `beforeCreatedAt`, oldest →
+ * newest — used to page in earlier history when the user scrolls to the
+ * top of the message list. */
+export async function listOlderMessages(
+  chatId: string,
+  beforeCreatedAt: string,
+  limit: number = MESSAGE_PAGE_SIZE,
+): Promise<Message[]> {
+  const rows = await query<MessageRow>(
+    "SELECT * FROM messages WHERE chat_id = $1 AND created_at < $2 ORDER BY created_at DESC LIMIT $3",
+    [chatId, beforeCreatedAt, limit],
+  );
+  return rows.map(toMessage).reverse();
+}
+
 /** Creates a message with a single swipe variant equal to its content. */
 export async function createMessage(
   chatId: string,

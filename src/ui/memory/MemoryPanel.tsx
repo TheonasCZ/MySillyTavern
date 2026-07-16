@@ -368,10 +368,29 @@ function PromptTab() {
           <span>{t("prompt.tokensLabel")}</span>
           <strong>
             {report.estimatedTokens} / {report.budget}
+            <span className="ml-1 font-normal" style={{ color: "var(--color-text-faint)" }}>
+              ({Math.round((report.estimatedTokens / Math.max(report.budget, 1)) * 100)}%)
+            </span>
           </strong>
         </div>
+        <div
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
+          style={{ backgroundColor: "var(--color-surface-2)" }}
+          role="progressbar"
+          aria-valuenow={Math.min(100, Math.round((report.estimatedTokens / Math.max(report.budget, 1)) * 100))}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full transition-[width]"
+            style={{
+              width: `${Math.min(100, (report.estimatedTokens / Math.max(report.budget, 1)) * 100)}%`,
+              backgroundColor: report.overBudget ? "var(--color-danger)" : "var(--color-accent)",
+            }}
+          />
+        </div>
         <span
-          className="text-xs"
+          className="mt-1 inline-block text-xs"
           style={{ color: report.overBudget ? "var(--color-danger)" : "var(--color-success)" }}
         >
           {report.overBudget ? t("prompt.overBudget") : t("prompt.underBudget")}

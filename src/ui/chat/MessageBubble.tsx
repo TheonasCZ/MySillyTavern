@@ -21,8 +21,13 @@ interface Props {
   isUser: boolean;
   canEdit: boolean;
   canRegenerate: boolean;
+  /** Message content is a partial response (stream stopped/errored before
+   * completion) — shows a badge plus a "continue" action alongside
+   * regenerate (plan §9). */
+  isInterrupted?: boolean;
   onEdit: (content: string) => void;
   onRegenerate: () => void;
+  onContinue?: () => void;
   onSwipe: (offset: number) => void;
 }
 
@@ -33,8 +38,10 @@ export function MessageBubble({
   isUser,
   canEdit,
   canRegenerate,
+  isInterrupted = false,
   onEdit,
   onRegenerate,
+  onContinue,
   onSwipe,
 }: Props) {
   const { t } = useTranslation("chat");
@@ -65,6 +72,14 @@ export function MessageBubble({
           boxShadow: "var(--shadow-panel)",
         }}
       >
+        {isInterrupted && !editing && !isStreaming && (
+          <span
+            className="self-start rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide"
+            style={{ backgroundColor: "var(--color-warning)", color: "var(--color-accent-contrast)" }}
+          >
+            {t("room.interrupted")}
+          </span>
+        )}
         {editing ? (
           <div className="flex flex-col gap-2">
             <textarea
@@ -117,6 +132,11 @@ export function MessageBubble({
             {canEdit && (
               <button type="button" onClick={startEdit} className="hover:opacity-80">
                 {t("room.edit")}
+              </button>
+            )}
+            {canRegenerate && isInterrupted && onContinue && (
+              <button type="button" onClick={onContinue} className="hover:opacity-80">
+                {t("room.continue")}
               </button>
             )}
             {canRegenerate && (

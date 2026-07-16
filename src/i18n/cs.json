@@ -23,7 +23,8 @@
       "saving": "Ukládání…",
       "empty": "Zatím tu nic není."
     },
-    "comingSoon": "Tato obrazovka bude hotová v dalším milníku."
+    "comingSoon": "Tato obrazovka bude hotová v dalším milníku.",
+    "offline": "Jsi offline. Zprávy se odešlou, jakmile se připojení obnoví."
   },
   "chat": {
     "title": "Chaty",
@@ -64,8 +65,14 @@
       "previousSwipe": "Předchozí varianta",
       "nextSwipe": "Další varianta",
       "swipeOf": "{{current}} / {{total}}",
+      "interrupted": "Přerušeno",
+      "continue": "Pokračovat",
+      "loadingOlder": "Načítám starší zprávy…",
+      "scrollForOlder": "Doscroluj nahoru pro starší zprávy",
       "errors": {
         "noConnection": "Tento chat nemá vybrané připojení. Nastav ho v seznamu chatů.",
+        "offline": "Jsi offline. Zkontroluj připojení k internetu a zkus to znovu.",
+        "retry": "Zkusit znovu",
         "generic": "Chyba: {{message}}"
       }
     }

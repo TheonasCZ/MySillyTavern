@@ -29,10 +29,17 @@ export function ChatScreen() {
     streamingMessageId,
     streamingText,
     error,
+    errorRetryable,
+    retry,
+    interruptedMessageIds,
+    hasOlderMessages,
+    loadingOlderMessages,
     openChat,
     closeChat,
+    loadOlderMessages,
     sendMessage,
     regenerate,
+    continueMessage,
     editMessage,
     switchSwipe,
     stop,
@@ -133,11 +140,28 @@ export function ChatScreen() {
               <span>
                 {error === "no-connection"
                   ? t("room.errors.noConnection")
-                  : t("room.errors.generic", { message: error })}
+                  : error === "offline"
+                    ? t("room.errors.offline")
+                    : t("room.errors.generic", { message: error })}
               </span>
-              <button type="button" onClick={dismissError} className="shrink-0 opacity-80 hover:opacity-100">
-                {t("actions.close", { ns: "common" })}
-              </button>
+              <span className="flex shrink-0 items-center gap-3">
+                {errorRetryable && retry && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dismissError();
+                      retry();
+                    }}
+                    className="rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium"
+                    style={{ backgroundColor: "var(--color-danger)", color: "var(--color-accent-contrast)" }}
+                  >
+                    {t("room.errors.retry")}
+                  </button>
+                )}
+                <button type="button" onClick={dismissError} className="opacity-80 hover:opacity-100">
+                  {t("actions.close", { ns: "common" })}
+                </button>
+              </span>
             </div>
           )}
 
@@ -153,8 +177,13 @@ export function ChatScreen() {
               streaming={streaming}
               streamingMessageId={streamingMessageId}
               streamingText={streamingText}
+              interruptedMessageIds={interruptedMessageIds}
+              hasOlder={hasOlderMessages}
+              loadingOlder={loadingOlderMessages}
+              onLoadOlder={() => void loadOlderMessages()}
               onEdit={(messageId, content) => void editMessage(messageId, content)}
               onRegenerate={(messageId) => void regenerate(messageId)}
+              onContinue={(messageId) => void continueMessage(messageId)}
               onSwipe={(messageId, offset) => void switchSwipe(messageId, offset)}
             />
           )}
@@ -173,7 +202,7 @@ export function ChatScreen() {
              * slide-in instead of squeezing the chat column (plan §6.6). */}
             <div
               className="fixed inset-0 z-40 lg:hidden"
-              style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+              style={{ backgroundColor: "var(--color-overlay)" }}
               onClick={() => setMemoryOpen(false)}
             />
             <aside

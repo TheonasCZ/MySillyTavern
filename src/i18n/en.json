@@ -23,7 +23,8 @@
       "saving": "Saving…",
       "empty": "Nothing here yet."
     },
-    "comingSoon": "This screen ships in a later milestone."
+    "comingSoon": "This screen ships in a later milestone.",
+    "offline": "You're offline. Messages will send once the connection is back."
   },
   "chat": {
     "title": "Chats",
@@ -64,8 +65,14 @@
       "previousSwipe": "Previous variant",
       "nextSwipe": "Next variant",
       "swipeOf": "{{current}} / {{total}}",
+      "interrupted": "Interrupted",
+      "continue": "Continue",
+      "loadingOlder": "Loading older messages…",
+      "scrollForOlder": "Scroll up for older messages",
       "errors": {
         "noConnection": "This chat has no connection selected. Set one from the chat list.",
+        "offline": "You're offline. Check your internet connection and try again.",
+        "retry": "Try again",
         "generic": "Error: {{message}}"
       }
     }
