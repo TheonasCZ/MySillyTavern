@@ -124,9 +124,11 @@ export function MessageList({
     // spacer must guarantee at least clientHeight of room below the user
     // message — anything less clamps the scroll short.
     spacer.style.height = `${container.clientHeight}px`;
+    // Pin the TOP of the user's message to the top edge: the whole sent
+    // message stays readable and the reply fills the rest of the window.
     const containerRect = container.getBoundingClientRect();
     const nodeRect = node.getBoundingClientRect();
-    container.scrollTop += nodeRect.bottom - containerRect.top - 8;
+    container.scrollTop += nodeRect.top - containerRect.top - 8;
   }, []);
 
   useEffect(() => {
