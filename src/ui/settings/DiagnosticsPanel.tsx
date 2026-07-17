@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { openPath, revealItemInDir } from "../../platform";
+import { checkForUpdate, openPath, relaunchApp, revealItemInDir } from "../../platform";
+
+type UpdateCheckState =
+  | { phase: "idle" }
+  | { phase: "checking" }
+  | { phase: "upToDate" }
+  | { phase: "available"; version: string }
+  | { phase: "downloading" }
+  | { phase: "error" };
 
 // Diagnostics section (roadmap M11 §3): surfaces the error log path
 // (src/logging.ts writes here via the Rust `append_log` command) and
@@ -14,6 +22,7 @@ export function DiagnosticsPanel() {
   const [logPath, setLogPath] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updateCheck, setUpdateCheck] = useState<UpdateCheckState>({ phase: "idle" });
 
   useEffect(() => {
     void invoke<string>("get_log_path")
@@ -49,6 +58,31 @@ export function DiagnosticsPanel() {
     }
   };
 
+  const handleCheckUpdate = async () => {
+    setUpdateCheck({ phase: "checking" });
+    try {
+      const update = await checkForUpdate();
+      setUpdateCheck(update ? { phase: "available", version: update.version } : { phase: "upToDate" });
+    } catch {
+      setUpdateCheck({ phase: "error" });
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    setUpdateCheck({ phase: "downloading" });
+    try {
+      const update = await checkForUpdate();
+      if (!update) {
+        setUpdateCheck({ phase: "upToDate" });
+        return;
+      }
+      await update.downloadAndInstall();
+      await relaunchApp();
+    } catch {
+      setUpdateCheck({ phase: "error" });
+    }
+  };
+
   return (
     <section
       className="rounded-[var(--radius-lg)] border p-5"
@@ -71,7 +105,7 @@ export function DiagnosticsPanel() {
         </p>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void handleOpenFolder()}
@@ -90,6 +124,48 @@ export function DiagnosticsPanel() {
         >
           {t("diagnostics.openLogFile")}
         </button>
+
+        {updateCheck.phase === "available" ? (
+          <button
+            type="button"
+            onClick={() => void handleInstallUpdate()}
+            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium"
+            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast, #fff)" }}
+          >
+            {t("diagnostics.updateInstall", { version: updateCheck.version })}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleCheckUpdate()}
+            disabled={updateCheck.phase === "checking" || updateCheck.phase === "downloading"}
+            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
+          >
+            {t("diagnostics.updateCheck")}
+          </button>
+        )}
+
+        {updateCheck.phase === "checking" && (
+          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {t("diagnostics.updateChecking")}
+          </span>
+        )}
+        {updateCheck.phase === "downloading" && (
+          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {t("diagnostics.updateDownloading")}
+          </span>
+        )}
+        {updateCheck.phase === "upToDate" && (
+          <span className="text-xs" style={{ color: "var(--color-success)" }}>
+            {t("diagnostics.updateUpToDate")}
+          </span>
+        )}
+        {updateCheck.phase === "error" && (
+          <span className="text-xs" style={{ color: "var(--color-danger)" }}>
+            {t("diagnostics.updateError")}
+          </span>
+        )}
       </div>
 
       {error && (

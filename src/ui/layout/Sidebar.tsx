@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router-dom";
+import { getVersion } from "@tauri-apps/api/app";
 
 const navItems = [
   { to: "/", key: "chats", labelKey: "nav.chats" },
@@ -10,6 +12,13 @@ const navItems = [
 
 export function Sidebar() {
   const { t } = useTranslation("common");
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
 
   return (
     <nav
@@ -76,7 +85,7 @@ export function Sidebar() {
           {t("nav.settings")}
         </NavLink>
         <p className="mt-2 px-3 text-[11px]" style={{ color: "var(--color-text-faint)" }}>
-          v0.1.0-alpha
+          {version ? `v${version}` : ""}
         </p>
       </div>
     </nav>

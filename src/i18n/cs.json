@@ -484,7 +484,13 @@
       "logPathLabel": "Cesta k logu",
       "openLogs": "Otevřít složku logů",
       "openLogFile": "Otevřít log",
-      "versionLabel": "Verze aplikace"
+      "versionLabel": "Verze aplikace",
+      "updateCheck": "Zkontrolovat aktualizace",
+      "updateChecking": "Kontroluji…",
+      "updateDownloading": "Stahuji a instaluji… apka se pak sama restartuje",
+      "updateUpToDate": "Máš nejnovější verzi.",
+      "updateError": "Kontrola aktualizace se nezdařila — zkus to později.",
+      "updateInstall": "Aktualizovat na {{version}}"
     },
     "memory": {
       "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",

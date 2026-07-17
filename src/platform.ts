@@ -84,7 +84,11 @@ export async function checkForUpdate(): Promise<AvailableUpdate | null> {
         await update.downloadAndInstall();
       },
     };
-  } catch {
+  } catch (err) {
+    // Logged (not swallowed) — console.warn is forwarded to app.log by
+    // src/logging.ts, so update-check failures are diagnosable without
+    // needing devtools open on a released build.
+    console.warn("checkForUpdate failed:", err);
     return null;
   }
 }

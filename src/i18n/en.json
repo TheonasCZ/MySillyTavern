@@ -484,7 +484,13 @@
       "logPathLabel": "Log path",
       "openLogs": "Open log folder",
       "openLogFile": "Open log",
-      "versionLabel": "App version"
+      "versionLabel": "App version",
+      "updateCheck": "Check for updates",
+      "updateChecking": "Checking…",
+      "updateDownloading": "Downloading and installing… the app will restart itself",
+      "updateUpToDate": "You're on the latest version.",
+      "updateError": "Update check failed — try again later.",
+      "updateInstall": "Update to {{version}}"
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
