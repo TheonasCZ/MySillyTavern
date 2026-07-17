@@ -76,8 +76,11 @@ async function processQueue(): Promise<void> {
       resetDailyIfNeeded();
 
       // --- enabled? ---
+      // Unset (never saved in Settings → Memory) defaults to enabled, to
+      // match the checkbox's own default (useState(true) in
+      // MemorySettingsPanel) — only an explicit "0" opts out.
       const enabled = await getSetting("image_gen_enabled");
-      if (enabled !== "1") {
+      if (enabled === "0") {
         queue.length = 0; // disabled → drain the queue silently
         break;
       }
