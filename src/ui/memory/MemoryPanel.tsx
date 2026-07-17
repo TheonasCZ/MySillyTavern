@@ -12,6 +12,10 @@ import {
   type LedgerCategory,
   type LedgerFact,
 } from "../../db/repositories/ledgerRepo";
+import {
+  listEmbeddings,
+  type StoredEmbedding,
+} from "../../db/repositories/embeddingsRepo";
 import { listMessages } from "../../db/repositories/messagesRepo";
 import { getSummary, upsertSummary, type Summary } from "../../db/repositories/summariesRepo";
 import {
@@ -35,7 +39,7 @@ const inputStyle = {
 
 const CATEGORIES: LedgerCategory[] = ["world", "player", "npc", "quest", "event"];
 
-type Tab = "facts" | "summary" | "search" | "prompt";
+type Tab = "facts" | "summary" | "search" | "prompt" | "chronicle";
 
 function FactRow({
   fact,
@@ -509,6 +513,127 @@ function SearchTab({ chatId }: { chatId: string }) {
   );
 }
 
+type ChronicleEntry =
+  | { kind: "message"; id: string; timestamp: string; text: string; messageId: string }
+  | { kind: "fact"; id: string; timestamp: string; text: string; category: LedgerCategory; subject: string };
+
+function ChronicleTab({
+  chatId,
+  onJumpToMessage,
+}: {
+  chatId: string;
+  onJumpToMessage?: (messageId: string) => void;
+}) {
+  const { t } = useTranslation("memory");
+  const [entries, setEntries] = useState<ChronicleEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      try {
+        const [embeddings, facts] = await Promise.all([
+          listEmbeddings(chatId, "message"),
+          listAllFacts(chatId),
+        ]);
+
+        const msgEntries: ChronicleEntry[] = embeddings.map((e: StoredEmbedding) => ({
+          kind: "message",
+          id: e.id,
+          timestamp: e.createdAt,
+          text: e.text.length > 120 ? `${e.text.slice(0, 120)}…` : e.text,
+          messageId: e.refId,
+        }));
+
+        const factEntries: ChronicleEntry[] = facts.map((f: LedgerFact) => ({
+          kind: "fact",
+          id: f.id,
+          timestamp: f.createdAt,
+          text: `(${f.category}) ${f.subject}: ${f.fact}`,
+          category: f.category,
+          subject: f.subject,
+        }));
+
+        const merged = [...msgEntries, ...factEntries].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+        setEntries(merged);
+      } catch {
+        // silently fail
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [chatId]);
+
+  if (loading) {
+    return (
+      <p className="text-sm" style={{ color: "var(--color-text-faint)" }}>
+        {t("state.loading", { ns: "common" })}
+      </p>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: "var(--color-text-faint)" }}>
+        {t("chronicle.empty")}
+      </p>
+    );
+  }
+
+  const formatTimestamp = (iso: string): string => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString();
+    } catch {
+      return iso;
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {entries.map((entry) => (
+        <div
+          key={`${entry.kind}-${entry.id}`}
+          className="rounded-[var(--radius-sm)] border p-3 text-xs"
+          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
+        >
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span
+              className="rounded-full px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide"
+              style={{
+                backgroundColor: entry.kind === "fact" ? "var(--color-surface-2)" : "var(--color-accent)",
+                color: entry.kind === "fact" ? "var(--color-text-muted)" : "var(--color-accent-contrast)",
+              }}
+            >
+              {entry.kind === "message"
+                ? t("chronicle.messagePrefix")
+                : t("chronicle.factPrefix")}
+            </span>
+            <span style={{ color: "var(--color-text-faint)" }}>
+              {formatTimestamp(entry.timestamp)}
+            </span>
+          </div>
+          <p className="whitespace-pre-wrap" style={{ color: "var(--color-text)" }}>
+            {entry.text}
+          </p>
+          {entry.kind === "message" && onJumpToMessage && (
+            <button
+              type="button"
+              className="mt-1 text-xs underline"
+              style={{ color: "var(--color-accent)" }}
+              onClick={() => onJumpToMessage(entry.messageId)}
+            >
+              {t("chronicle.jumpToMessage")}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PromptTab() {
   const { t } = useTranslation("memory");
   const report = useChatStore((s) => s.lastPromptReport);
@@ -560,13 +685,23 @@ function ExtractionConnectionPicker({ chatId }: { chatId: string }) {
   );
 }
 
-export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () => void }) {
+export function MemoryPanel({
+  chatId,
+  onClose,
+  onJumpToMessage,
+}: {
+  chatId: string;
+  onClose: () => void;
+  /** Chronicle tab: navigate the chat to this message (closes the panel). */
+  onJumpToMessage?: (messageId: string) => void;
+}) {
   const { t } = useTranslation("memory");
   const [tab, setTab] = useState<Tab>("facts");
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "facts", label: t("tabs.facts") },
     { key: "summary", label: t("tabs.summary") },
+    { key: "chronicle", label: t("tabs.chronicle") },
     { key: "search", label: t("tabs.search") },
     { key: "prompt", label: t("tabs.prompt") },
   ];
@@ -619,6 +754,7 @@ export function MemoryPanel({ chatId, onClose }: { chatId: string; onClose: () =
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {tab === "facts" && <FactsTab chatId={chatId} />}
         {tab === "summary" && <SummaryTab chatId={chatId} />}
+        {tab === "chronicle" && <ChronicleTab chatId={chatId} onJumpToMessage={onJumpToMessage} />}
         {tab === "search" && <SearchTab chatId={chatId} />}
         {tab === "prompt" && <PromptTab />}
       </div>

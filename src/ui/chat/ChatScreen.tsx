@@ -165,6 +165,22 @@ export function ChatScreen() {
     }
   }, [streaming, ttsSpeakingId, tts]);
 
+  // Chronicle "jump to message": page older history in until the target is
+  // loaded, close the memory panel, then let MessageList scroll+highlight it.
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
+  const handleJumpToMessage = useCallback(async (messageId: string) => {
+    const state = useChatStore.getState;
+    const isLoaded = () => state().messages.some((m) => m.id === messageId);
+    let guard = 0;
+    while (!isLoaded() && state().hasOlderMessages && guard++ < 200) {
+      await state().loadOlderMessages();
+    }
+    if (!isLoaded()) return;
+    setMemoryOpen(false);
+    setScrollToMessageId(null);
+    requestAnimationFrame(() => setScrollToMessageId(messageId));
+  }, []);
+
   const handleDiceRoll = useCallback(
     async (expression: string) => {
       if (!chatId) return;
@@ -600,6 +616,7 @@ export function ChatScreen() {
               onBranch={(messageId) => void handleBranch(messageId)}
               onSpeakMessage={handleSpeakMessage}
               speakingMessageId={ttsSpeakingId}
+              scrollToMessageId={scrollToMessageId}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
               onLoadOlder={() => void loadOlderMessages()}
@@ -651,7 +668,11 @@ export function ChatScreen() {
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-96 lg:max-w-none lg:shrink-0"
               style={{ borderColor: "var(--color-border)" }}
             >
-              <MemoryPanel chatId={id} onClose={() => setMemoryOpen(false)} />
+              <MemoryPanel
+                chatId={id}
+                onClose={() => setMemoryOpen(false)}
+                onJumpToMessage={(messageId) => void handleJumpToMessage(messageId)}
+              />
             </aside>
           </>
         )}
