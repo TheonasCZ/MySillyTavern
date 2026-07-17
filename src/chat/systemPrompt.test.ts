@@ -46,6 +46,7 @@ function makePersona(partial: Partial<Persona> = {}): Persona {
     progression: "skill",
     skills: [],
     inventory: [],
+    conditions: [],
     avatarPath: null,
     isDefault: false,
     createdAt: "",

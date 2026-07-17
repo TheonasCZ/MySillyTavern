@@ -8,6 +8,7 @@ import { parseGameTags } from "./inventoryTags";
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
+  _chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
   const { cleanText, mutations, skillChanges, levelChanges, factionMutations } = parseGameTags(text);
