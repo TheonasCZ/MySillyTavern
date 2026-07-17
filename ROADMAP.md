@@ -247,6 +247,15 @@ angličtinou (vyprávění, fakta, kronika); česká kampaň se chová beze změ
 přepnutí analytických jobů na EN instrukce přejet testy a ručně ověřit
 extrakci na české kampani (fakta musí zůstat česky).
 
+**Fáze B (volitelná, až po fázi A):** anglický pivot pro PAMĚŤOVÉ artefakty
+— fakta/shrnutí/drift nálezy ukládat interně anglicky (přesnější embeddingy,
+univerzální prompty) a překládat LLM voláním jen pro zobrazení v Memory
+panelu (dávkově, kešovaně; editace uživatele v jeho jazyce se uloží zpět
+anglicky = obousměrný překlad s možností korekce). VÝSLOVNĚ NE pro samotné
+vyprávění: překladová vrstva by zabila streaming (první token ~1 s),
+zdvojnásobila požadavky proti RPD limitům a ztrátově prohnala styl prózy
+dvojím překladem. Vyprávění vždy přímo v jazyce hry přes {lang} direktivu.
+
 ---
 
 ## Průběžně (mimo milníky)
