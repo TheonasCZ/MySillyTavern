@@ -11,6 +11,8 @@ import {
   listAllFacts,
   type LedgerCategory,
 } from "../db/repositories/ledgerRepo";
+import { logUsage } from "../db/repositories/usageRepo";
+import { estimateTokens } from "../prompt/tokenEstimate";
 
 export type ExtractAction = "upsert" | "remove";
 
@@ -207,6 +209,8 @@ export async function runExtraction(
 
     const zeroTempConnection: ConnectionConfig = { ...connection, temperature: 0 };
     const raw = await chatComplete(zeroTempConnection, prompt);
+    const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+    void logUsage("memory", connection.id, inputTokens, estimateTokens(raw)).catch(() => {});
     const extracted = parseExtractorOutput(raw);
     if (extracted.length === 0) return;
 

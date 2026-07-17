@@ -40,10 +40,21 @@ import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation
 import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
+import { estimateTokens } from "../prompt/tokenEstimate";
 import { chatComplete } from "../providers/chatComplete";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
+import { logUsage } from "../db/repositories/usageRepo";
 import { useConnectionsStore } from "./connectionsStore";
+
+/** Fire-and-forget usage logging (M12 §3) — must never throw into a chat
+ * flow, hence the empty catch (an empty catch is deliberate here, not a
+ * logging gap: a usage_log write failure has nothing useful to report and
+ * an M11-style console.error would spam the console on every message). */
+function logChatUsage(connectionId: string | null, apiMessages: ChatMessage[], outputText: string) {
+  const inputTokens = apiMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+  void logUsage("chat", connectionId, inputTokens, estimateTokens(outputText)).catch(() => {});
+}
 
 /** The chat's own persona if it has one selected, otherwise the app-wide
  * default persona (if any) — same fallback as the plan describes for
@@ -284,6 +295,7 @@ function startStream(
     onDone: () => {
       const text = get().streamingText;
       set({ handle: null, pendingFinalize: null });
+      logChatUsage(connection.id, apiMessages, text);
       void finalize(text, false);
     },
     onError: (err) => {
@@ -299,6 +311,7 @@ function startStream(
       // A stream that errored out mid-response still leaves useful partial
       // text — persist it (flagged as interrupted) instead of discarding it,
       // so the user can pick it up with "continue"/"regenerate" (plan §9).
+      logChatUsage(connection.id, apiMessages, text);
       void finalize(text, true);
     },
   });
@@ -895,6 +908,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       ];
       const reply = await chatComplete(connection, apiMessages);
+      const inputTokens = apiMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+      void logUsage("suggest", connection.id, inputTokens, estimateTokens(reply)).catch(() => {});
       const suggestions = parseSuggestions(reply);
       // Guard (M11 bug sweep): this is a long-running network call — if the
       // user switched to a different chat while it was in flight, don't

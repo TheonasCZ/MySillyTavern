@@ -5,6 +5,7 @@ import { BackupPanel } from "./BackupPanel";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { MemorySettingsPanel } from "./MemorySettingsPanel";
+import { UsagePanel } from "./UsagePanel";
 
 export function SettingsScreen() {
   const { t } = useTranslation("settings");
@@ -16,6 +17,7 @@ export function SettingsScreen() {
       <MemorySettingsPanel />
       <AppearancePanel />
       <BackupPanel />
+      <UsagePanel />
       <DiagnosticsPanel />
     </div>
   );

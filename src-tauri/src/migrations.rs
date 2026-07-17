@@ -29,6 +29,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_004,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "usage_log for token/request statistics",
+            sql: MIGRATION_005,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -191,4 +197,20 @@ SELECT lower(hex(randomblob(16))), id, character_id, 0, created_at FROM chats;
 UPDATE messages SET character_id =
   (SELECT character_id FROM chats WHERE chats.id = messages.chat_id)
 WHERE role = 'assistant';
+"#;
+
+/// Per-request token/usage estimates (M12 §3) — lets the stats panel show
+/// today's/week's/month's request count (the number that matters for free
+/// tier RPD limits) and rough token totals. `connection_id` has no FK: a
+/// deleted connection shouldn't cascade-delete usage history.
+const MIGRATION_005: &str = r#"
+CREATE TABLE usage_log (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('chat','suggest','memory','embedding')),
+  connection_id TEXT,
+  input_tokens_est INTEGER NOT NULL,
+  output_tokens_est INTEGER NOT NULL
+);
+CREATE INDEX idx_usage_log_created ON usage_log(created_at);
 "#;

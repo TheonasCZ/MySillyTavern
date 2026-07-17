@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { logUsage } from "../db/repositories/usageRepo";
+import { estimateTokens } from "../prompt/tokenEstimate";
 import type { ConnectionConfig } from "./types";
 
 export interface EmbedResult {
@@ -23,5 +25,7 @@ export async function embedTexts(
     model: model ?? null,
     texts,
   });
+  const inputTokens = texts.reduce((sum, t) => sum + estimateTokens(t), 0);
+  void logUsage("embedding", connection.id, inputTokens, 0).catch(() => {});
   return { model: usedModel, vectors };
 }

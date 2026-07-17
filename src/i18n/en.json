@@ -339,7 +339,21 @@
       "memory": "Memory",
       "appearance": "Appearance",
       "backup": "Data & backup",
+      "usage": "Usage",
       "diagnostics": "Diagnostics"
+    },
+    "usage": {
+      "title": "Usage statistics",
+      "subtitle": "Estimated token usage and API request counts. Tokens are just an estimate — free tier mostly limits the number of requests per day.",
+      "today": "Today",
+      "week": "7 days",
+      "month": "30 days",
+      "requests": "Requests",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "dbSize": "Database size",
+      "refresh": "Refresh",
+      "hint": "Tokens are a rough estimate (based on text length), not an exact figure from the API. On the free tier, today's request count matters most — it's what counts against the daily quota."
     },
     "backup": {
       "subtitle": "A backup saves the database and character avatars into one ZIP file. Importing a backup restores it — overwriting your current data.",

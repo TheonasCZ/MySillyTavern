@@ -7,6 +7,8 @@ import { chatComplete } from "../providers/chatComplete";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { getSummary, upsertSummary } from "../db/repositories/summariesRepo";
 import type { Message } from "../db/repositories/messagesRepo";
+import { logUsage } from "../db/repositories/usageRepo";
+import { estimateTokens } from "../prompt/tokenEstimate";
 
 const SUMMARY_SYSTEM_PROMPT =
   "Jsi nástroj, který udržuje stručné shrnutí dosavadního příběhu RP hry. Dostaneš " +
@@ -63,6 +65,8 @@ export async function runSummarization(
     const existing = await getSummary(chatId);
     const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold);
     const text = await chatComplete(connection, prompt);
+    const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+    void logUsage("memory", connection.id, inputTokens, estimateTokens(text)).catch(() => {});
     const trimmed = text.trim();
     if (!trimmed) return;
     const upToMessageId = messagesToFold[messagesToFold.length - 1].id;

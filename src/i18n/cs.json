@@ -339,7 +339,21 @@
       "memory": "Paměť",
       "appearance": "Vzhled",
       "backup": "Data a záloha",
+      "usage": "Statistiky",
       "diagnostics": "Diagnostika"
+    },
+    "usage": {
+      "title": "Statistiky spotřeby",
+      "subtitle": "Odhad spotřeby tokenů a počet požadavků na API. Tokeny jsou jen odhad — free tier limituje hlavně počet požadavků za den.",
+      "today": "Dnes",
+      "week": "7 dní",
+      "month": "30 dní",
+      "requests": "Požadavky",
+      "inputTokens": "Vstupní tokeny",
+      "outputTokens": "Výstupní tokeny",
+      "dbSize": "Velikost databáze",
+      "refresh": "Obnovit",
+      "hint": "Tokeny jsou jen hrubý odhad (podle délky textu), ne přesná hodnota z API. U free tieru je nejdůležitější počet požadavků dnes — ten se počítá do denní kvóty."
     },
     "backup": {
       "subtitle": "Záloha uloží databázi i avatary postav do jednoho ZIP souboru. Import zálohu obnoví — přepíše aktuální data.",
