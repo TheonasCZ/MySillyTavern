@@ -153,6 +153,15 @@ v Prompt inspectoru.
 **Hotovo když:** drift test z PLAN.md §M5 projde i po 200+ zprávách bez
 ručního zásahu; detektor chytí uměle vloženy rozpor; kánon přežije extrakci.
 
+**M25.5 — plná automatika (`65d53be`):** paměť už nevyžaduje žádnou ruční
+údržbu. Migrace 19: `canon`/`stability`/`contradiction_streak`. Fakta
+potvrzená N extrakcemi (3, u world/player 2) se sama povyšují na měkký
+kánon; ten se v promptu i drift checku chová jako zamčený, ale extraktor
+ho smí opravit po 2 po sobě jdoucích rozporech (s degradací — pojistka
+proti zabetonování chyby). Při prvním otevření chatu se z karty postavy
+vydestiluje 3–5 pravidel příběhu jako seed kánonu. Uživatel zůstává
+admin: odemknout/zrušit/smazat jde vždy, jen s „tytyty" hláškou.
+
 ---
 
 ## M26 — Pokročilé prompt nástroje (užitečný výběr ze ST)
