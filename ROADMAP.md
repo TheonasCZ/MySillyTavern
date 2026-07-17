@@ -214,30 +214,35 @@ angličtiny — jazyk promptu táhne jazyk výstupu (vyprávění, extrahovaná 
 v Memory panelu musí zůstat v jazyce hry).
 
 **Rozsah:**
-1. **Centralizace prompt textů** — nový modul `src/prompt/promptTexts.ts`
-   (nebo `promptTexts/cs.ts` + `en.ts`): všechny LLM string konstanty na
-   jedno místo. Dnes žijí v: `promptBuilder.ts` (DEFAULT_RP_INSTRUCTIONS,
+1. **Centralizace prompt textů** — nový modul `src/prompt/promptTexts.ts`:
+   JEDNA univerzální anglická sada promptů (žádné soubory per jazyk!) +
+   parametr `{lang}`; jazyk výstupu vynucuje direktiva „Always respond /
+   write content in {lang}" vložená DVAKRÁT — do system promptu a na konec
+   kontextu (post-history, kde váží nejvíc). Hlavičky sekcí anglicky
+   ([STORY CANON], [WORLD FACTS], [SCENE DIRECTION]…). Few-shot příklad GM
+   označit „example shown in English; you always write in {lang}" — jediné
+   místo, kde případně dává smysl per-jazyk override, pokud by styl trpěl.
+   Dnes konstanty žijí v: `promptBuilder.ts` (DEFAULT_RP_INSTRUCTIONS,
    hlavičky sekcí [KÁNON PŘÍBĚHU]/[FAKTA SVĚTA]/[REŽIE SCÉNY]/[TICHÁ
    KOREKCE]/herní tagy/crafting/frakce), `extractor.ts`
    (EXTRACTION_SYSTEM_PROMPT), `driftDetector.ts` (DRIFT_CHECK_SYSTEM_PROMPT),
    `canonSeed.ts` (SEED_SYSTEM_PROMPT), `summarizer.ts`, `chatStore.ts`
    (instrukce „Pokračuj…", návrhy odpovědí), `director.ts` (PACE/TONE/FOCUS
    noty), `groupSpeaker`/`npcPromotion`/`inlineSuggestions`.
-2. **Jazyk hry per chat** — sloupec `chats.game_language` ('cs'|'en',
-   migrace 20), výběr při založení chatu (default = jazyk UI); všechna místa
-   z bodu 1 berou texty podle jazyka chatu, ne globálně.
-3. **Analytické joby anglicky vždy** — extraktor, drift check, seed a
-   summarizer vracejí JSON/interní text: instrukce přepsat do angličtiny
-   (přesnější, levnější) + explicitní direktiva „obsah polí (fact,
-   contradiction, summary) piš v jazyce hry: {lang}". Pozor: stávající české
-   kampaně mají česká fakta — direktiva podle jazyka chatu to drží.
+2. **Jazyk hry per chat** — sloupec `chats.game_language` (libovolný kód,
+   migrace 20), výběr při založení chatu (default = jazyk UI); dosadí se do
+   `{lang}` direktiv z bodu 1 — tím funguje kterýkoli jazyk světa.
+3. **Analytické joby** — extraktor, drift check, seed a summarizer:
+   stejný princip, anglické instrukce + „write field contents (fact,
+   contradiction, summary) in {lang}". Stávající české kampaně mají česká
+   fakta — direktiva podle jazyka chatu to drží.
 4. **UI dočištění** — vymést hardcodované fallbacky (`?? "Obnovit…"`
    v SettingsScreen apod.) a české chybové hlášky v Rustu (backup.rs
    „Databáze zatím neexistuje…") → přes i18n / anglicky s překladem na FE.
 
 **Hotovo když:** anglická karta + chat s game_language='en' hraje čistou
 angličtinou (vyprávění, fakta, kronika); česká kampaň se chová beze změny;
-žádný český string mimo `promptTexts` a `i18n/`.
+žádný český string mimo `i18n/`; prompty jsou jen anglické s {lang}.
 **Riziko:** změna znění promptů = změna chování extrakce/driftu — po
 přepnutí analytických jobů na EN instrukce přejet testy a ručně ověřit
 extrakci na české kampani (fakta musí zůstat česky).
