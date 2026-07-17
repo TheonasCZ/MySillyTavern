@@ -36,23 +36,23 @@ Dokončeno ve třech vlnách (commity `bae2320`, `a80c967`, `2be3d7b`):
    (`src-tauri/src/commands/export_chronicle.rs`, `src/chat/chronicleThemes.ts`).
 3. ✅ **Statistiky** — `UsagePanel` v Nastavení, `usageRepo`
    (požadavky + odhad tokenů za den/týden/měsíc), commit `6e75c74`.
-4. 🔨 **Prompt presety** — rozpracováno v working tree: migrace 18 (tabulka
-   `presets` + `chats.preset_id`), `presetsRepo`, `presetsStore`,
-   `PresetsPanel`. (Pův. plán říkal „migrace 5" — reálně je to migrace 18.)
+4. ✅ **Prompt presety** — hotovo (commit `3551e12`): migrace 18 (tabulka
+   `presets` + `chats.preset_id`), `PresetsPanel` v Nastavení, výběr per
+   chat v seznamu chatů, extra system prompt + přepis temperature/topP/
+   maxTokens. (Pův. plán říkal „migrace 5" — reálně je to migrace 18.)
 
 ---
 
-## M13 — TTS předčítání — 🔨 rozpracováno
-
-Implementace ve working tree (necommitnuto):
+## M13 — TTS předčítání — ✅ HOTOVO (commit `3551e12`)
 
 1. ✅ Web Speech API (`speechSynthesis`) — `src/chat/useTts.ts`
-2. 🔨 UI: tlačítko u bubliny, auto-režim, `TtsPanel` v Nastavení
+2. ✅ UI: tlačítko ▶/⏹ u bubliny, auto-režim „předčítej nové odpovědi",
+   `TtsPanel` v Nastavení (hlas, rychlost); nový stream předčítání zastaví
 3. ✅ Hlas per postava — migrace 17 (`characters.tts_voice`), pole v editoru karty
 4. ✅ Čistá logika přípravy textu — `src/chat/ttsText.ts` + testy
 
-Zbývá: ověřit dostupnost hlasů ve WebKitGTK na reálném systému (riziko
-z původního plánu trvá), doladit auto-režim při streamu.
+Zbývá ověřit ručně: dostupnost hlasů ve WebKitGTK na reálném systému
+(riziko z původního plánu trvá — panel v tom případě ukáže „žádné hlasy").
 
 ---
 
@@ -142,7 +142,7 @@ undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 | Milník | Stav | Poznámka |
 |--------|------|----------|
-| M12 dodělat | kronika-timeline + presety | malý zbytek |
-| M13 TTS | dokončit WIP | ověřit hlasy ve WebKitGTK — timebox |
+| M12 dodělat | kronika-timeline (WIP v MemoryPanel) | malý zbytek |
+| M13 TTS | ✅ hotovo | jen ručně ověřit hlasy ve WebKitGTK |
 | M14 sync | body 2–3 | velký; začít žurnálem a zprávami |
 | M15 mobil fáze B | po M14 | 8–14 dnů dle průzkumu |
