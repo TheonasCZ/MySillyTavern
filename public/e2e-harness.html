@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <title>e2e harness</title>
+    <script>
+      // ---- Tauri IPC mock (must run before the app bundle) ----
+      // Generalized from public/debug-anchor.html: mock data is now picked by
+      // ?scenario= so the same harness serves every e2e scenario in
+      // scripts/e2e.mjs instead of one hardcoded fixture.
+      //   solo  — 1 character, 119 messages, last AI reply ends with a
+      //           "Co uděláš? 1..3" options block (drives the inline chips).
+      //   group — 3 characters in chat_members, assistant messages authored
+      //           by them in rotation, auto_reply=0 (manual speaker picking).
+      (() => {
+        const params = new URLSearchParams(location.search);
+        const scenario = params.get("scenario") || "solo";
+        // The self-driving autotest (send+anchor only, for engines Playwright
+        // can't drive remotely, e.g. WebKitGTK MiniBrowser) posts measurements
+        // to this port; scripts/e2e.mjs --webkit overrides it per run.
+        const autotestPort = params.get("port") || "9911";
+
+        const callbacks = new Map();
+        let cbId = 0;
+        let seq = 0;
+        const nextId = (prefix) => `${prefix}${++seq}`;
+
+        const now = new Date().toISOString();
+        const LONG =
+          "Dlouhý odstavec vyprávění, aby zprávy měly realistickou výšku. ".repeat(8);
+
+        const connRow = {
+          id: "conn1", name: "Mock Gemini", provider: "gemini", base_url: null,
+          model: "gemini-x", temperature: 0.8, top_p: 0.95, max_tokens: 1024,
+          context_budget: 12000, created_at: now, updated_at: now,
+        };
+
+        // ---- Mutable "tables" — INSERTs from the app (send, branch) land
+        // here so later SELECTs stay consistent. ----
+        const charactersById = new Map();
+        const chatsById = new Map();
+        const chatMembers = []; // { id, chat_id, character_id, position, created_at }
+        const messages = []; // { id, chat_id, role, content, swipes, active_swipe, character_id, created_at }
+
+        function addCharacter(id, name) {
+          charactersById.set(id, {
+            id, name, description: `Testovací postava: ${name}.`,
+            personality: "", scenario: "", first_mes: "", mes_example: "",
+            alternate_greetings: "[]", system_prompt: "", post_history_instructions: "",
+            creator_notes: "", tags: "[]", avatar_path: null, card_json: null,
+            spec_version: "v2", created_at: now, updated_at: now,
+          });
+        }
+
+        function addChat(id, characterId, autoReply) {
+          chatsById.set(id, {
+            id, title: "E2E chat", character_id: characterId, persona_id: null,
+            connection_id: "conn1", extraction_connection_id: null,
+            last_extracted_message_id: null, last_summarized_message_id: null,
+            auto_reply: autoReply ? 1 : 0, created_at: now, updated_at: now,
+          });
+        }
+
+        function pushMessage(chatId, role, content, characterId, offsetMinutes) {
+          const id = nextId("m");
+          messages.push({
+            id, chat_id: chatId, role, content,
+            swipes: JSON.stringify([content]), active_swipe: 0,
+            character_id: characterId,
+            created_at: new Date(Date.now() - offsetMinutes * 60000).toISOString(),
+          });
+          return id;
+        }
+
+        if (scenario === "group") {
+          addCharacter("ch1", "Ilsa");
+          addCharacter("ch2", "Boris");
+          addCharacter("ch3", "Nadia");
+          addChat("c1", "ch1", false);
+          chatMembers.push(
+            { id: "mem1", chat_id: "c1", character_id: "ch1", position: 0, created_at: now },
+            { id: "mem2", chat_id: "c1", character_id: "ch2", position: 1, created_at: now },
+            { id: "mem3", chat_id: "c1", character_id: "ch3", position: 2, created_at: now },
+          );
+          const rotation = ["ch1", "ch2", "ch3"];
+          let turn = 0;
+          const total = 18;
+          for (let i = 0; i < total; i++) {
+            const isAssistant = i % 2 === 1;
+            if (isAssistant) {
+              const author = rotation[turn % rotation.length];
+              turn++;
+              pushMessage("c1", "assistant", `Odpověď ${i}: ${LONG}`, author, total - i);
+            } else {
+              pushMessage("c1", "user", `Zpráva hráče ${i}.`, null, total - i);
+            }
+          }
+        } else {
+          addCharacter("ch1", "Vypravec");
+          addChat("c1", "ch1", false);
+          chatMembers.push({ id: "mem1", chat_id: "c1", character_id: "ch1", position: 0, created_at: now });
+          // Realistic scale: 120 messages → pagination (LIMIT 100) leaves
+          // hasOlder=true like a real campaign; the last assistant message
+          // ends with an options block so the suggestion chips render.
+          for (let i = 0; i < 119; i++) {
+            const isAssistant = i % 2 === 0;
+            let content = `Zpráva ${i}: ${LONG}`;
+            if (i === 118) {
+              content += "\n\nCo uděláš?\n1. Prozkoumám krystal.\n2. *Ustoupím* do stínu.\n3. Zavolám na Arkose.";
+            }
+            pushMessage("c1", isAssistant ? "assistant" : "user", content, isAssistant ? "ch1" : null, 500 - i);
+          }
+        }
+        window.__MOCK_SCENARIO__ = scenario;
+
+        function routeSelect(query, values) {
+          const q = query.replace(/\s+/g, " ");
+          values = values || [];
+
+          if (q.includes("FROM chats WHERE id")) {
+            const row = chatsById.get(values[0]);
+            return row ? [row] : [];
+          }
+          if (q.includes("FROM chats ORDER BY")) return [...chatsById.values()];
+
+          if (q.includes("COUNT(*) as count FROM messages")) {
+            const chatId = values[0];
+            return [{ count: messages.filter((m) => m.chat_id === chatId).length }];
+          }
+          // listOlderMessages: WHERE chat_id = $1 AND created_at < $2 ORDER BY created_at DESC LIMIT $3
+          if (q.includes("created_at < $2 ORDER BY created_at DESC")) {
+            const [chatId, before, limit] = values;
+            const older = messages.filter((m) => m.chat_id === chatId && m.created_at < before);
+            return older.slice().reverse().slice(0, limit ?? 100);
+          }
+          // listRecentMessages: WHERE chat_id = $1 ORDER BY created_at DESC LIMIT $2
+          if (q.includes("FROM messages WHERE chat_id = $1 ORDER BY created_at DESC")) {
+            const [chatId, limit] = values;
+            return messages.filter((m) => m.chat_id === chatId).slice().reverse().slice(0, limit ?? 100);
+          }
+          // listMessages / branchChat's source copy: WHERE chat_id = $1 ORDER BY created_at ASC
+          if (q.includes("FROM messages WHERE chat_id = $1 ORDER BY created_at ASC")) {
+            const chatId = values[0];
+            return messages.filter((m) => m.chat_id === chatId);
+          }
+          if (q.includes("FROM chat_members WHERE chat_id = $1 AND character_id")) {
+            const [chatId, characterId] = values;
+            return chatMembers.filter((m) => m.chat_id === chatId && m.character_id === characterId);
+          }
+          if (q.includes("FROM chat_members")) {
+            const chatId = values[0];
+            return chatMembers.filter((m) => m.chat_id === chatId);
+          }
+          if (q.includes("FROM characters WHERE id")) {
+            const row = charactersById.get(values[0]);
+            return row ? [row] : [];
+          }
+          if (q.includes("FROM characters")) return [...charactersById.values()];
+          if (q.includes("FROM connections")) return [connRow];
+          return []; // personas, settings, facts, summaries, embeddings, lore…
+        }
+
+        function routeExecute(query, values) {
+          const q = query.replace(/\s+/g, " ");
+          values = values || [];
+
+          if (q.includes("INSERT INTO messages")) {
+            if (values.length === 8) {
+              // branchChat copy: id, chat_id, role, content, swipes, active_swipe, character_id, created_at
+              const [id, chatId, role, content, swipes, activeSwipe, characterId, createdAt] = values;
+              messages.push({ id, chat_id: chatId, role, content, swipes, active_swipe: activeSwipe, character_id: characterId, created_at: createdAt });
+            } else {
+              // createMessage: id, chat_id, role, content, swipes, character_id, created_at (active_swipe is a literal 0)
+              const [id, chatId, role, content, swipes, characterId, createdAt] = values;
+              messages.push({ id, chat_id: chatId, role, content, swipes, active_swipe: 0, character_id: characterId, created_at: createdAt });
+            }
+            return;
+          }
+          if (q.includes("UPDATE messages SET content = $2, swipes = $3, active_swipe = $4")) {
+            // appendSwipe (regenerate)
+            const [id, content, swipes, activeSwipe] = values;
+            const m = messages.find((m) => m.id === id);
+            if (m) Object.assign(m, { content, swipes, active_swipe: activeSwipe });
+            return;
+          }
+          if (q.includes("UPDATE messages SET content = $2, active_swipe = $3")) {
+            // shiftActiveSwipe
+            const [id, content, activeSwipe] = values;
+            const m = messages.find((m) => m.id === id);
+            if (m) Object.assign(m, { content, active_swipe: activeSwipe });
+            return;
+          }
+          if (q.includes("UPDATE messages SET content = $2, swipes = $3")) {
+            // updateMessageContent (manual edit)
+            const [id, content, swipes] = values;
+            const m = messages.find((m) => m.id === id);
+            if (m) Object.assign(m, { content, swipes });
+            return;
+          }
+          if (q.includes("INSERT INTO chats")) {
+            // branchChat: id, title, character_id, persona_id, connection_id,
+            // extraction_connection_id, auto_reply, created_at ($8 reused for updated_at)
+            const [id, title, characterId, personaId, connectionId, extractionConnectionId, autoReply, createdAt] = values;
+            chatsById.set(id, {
+              id, title, character_id: characterId, persona_id: personaId,
+              connection_id: connectionId, extraction_connection_id: extractionConnectionId,
+              last_extracted_message_id: null, last_summarized_message_id: null,
+              auto_reply: autoReply, created_at: createdAt, updated_at: createdAt,
+            });
+            return;
+          }
+          if (q.includes("INSERT INTO chat_members")) {
+            const [id, chatId, characterId, position, createdAt] = values;
+            chatMembers.push({ id, chat_id: chatId, character_id: characterId, position, created_at: createdAt });
+            return;
+          }
+        }
+
+        let streamTimer = null;
+        function runStream(channel) {
+          let index = 0;
+          const emit = (message) => {
+            const cb = callbacks.get(channel.id);
+            if (cb) cb({ index: index++, message });
+          };
+          emit({ event: "Start" });
+          let tokens = 0;
+          streamTimer = setInterval(() => {
+            tokens++;
+            emit({ event: "Token", data: { text: `token${tokens} nové odpovědi, která postupně roste. ` } });
+            if (tokens >= 40) {
+              clearInterval(streamTimer);
+              emit({ event: "Done", data: { finish_reason: "stop" } });
+            }
+          }, 40);
+        }
+
+        window.__TAURI_INTERNALS__ = {
+          transformCallback(cb) {
+            const id = ++cbId;
+            callbacks.set(id, cb);
+            return id;
+          },
+          unregisterCallback(id) {
+            callbacks.delete(id);
+          },
+          convertFileSrc: (p) => p,
+          invoke(cmd, args) {
+            switch (cmd) {
+              case "plugin:sql|load":
+                return Promise.resolve("sqlite:mock.db");
+              case "plugin:sql|select":
+                return Promise.resolve(routeSelect(args.query, args.values));
+              case "plugin:sql|execute":
+                routeExecute(args.query, args.values);
+                return Promise.resolve([1, 1]);
+              case "has_api_key":
+                return Promise.resolve(true);
+              case "chat_stream":
+                runStream(args.onEvent);
+                return Promise.resolve(null);
+              case "chat_abort":
+                if (streamTimer) clearInterval(streamTimer);
+                return Promise.resolve(null);
+              default:
+                return Promise.resolve(null);
+            }
+          },
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import RefreshRuntime from "/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="/@vite/client"></script>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // ---- self-driving autotest (?autotest) — the send+anchor regression
+      // only, for engines Playwright can't drive remotely (WebKitGTK
+      // MiniBrowser). scripts/e2e.mjs --webkit opens this URL, spins up a
+      // tiny HTTP server on the requested port, and evaluates the posted
+      // measurements with the same asserts as the Chromium scenario. ----
+      if (location.search.includes("autotest")) {
+        const params = new URLSearchParams(location.search);
+        const port = params.get("port") || "9911";
+        const log = (data) =>
+          fetch(`http://127.0.0.1:${port}/log`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(data),
+          }).catch(() => {});
+
+        const measure = (label) => {
+          const scrollers = [...document.querySelectorAll(".overflow-y-auto")].filter(
+            (e) => e.scrollHeight > e.clientHeight + 4,
+          );
+          const container = scrollers[0];
+          if (!container) return log({ label, error: "no container" });
+          const wrapper = container.querySelector("[data-msg-id]");
+          const cr = container.getBoundingClientRect();
+          log({
+            label,
+            scrollTop: Math.round(container.scrollTop),
+            maxScroll: container.scrollHeight - container.clientHeight,
+            pinnedId: wrapper?.dataset.msgId?.slice(0, 6) ?? null,
+            pinnedTop: wrapper ? Math.round(wrapper.getBoundingClientRect().top - cr.top) : null,
+            streamingCursor: !!container.querySelector(".animate-pulse"),
+          });
+        };
+
+        const send = (text) => {
+          const ta = document.querySelector("textarea");
+          const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+          setter.call(ta, text);
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
+          ta.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        };
+
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        (async () => {
+          await sleep(2500);
+          measure("AFTER OPEN");
+          for (let n = 1; n <= 2; n++) {
+            send(`Testovací zpráva hráče číslo ${n}, odeslaná autotestem.`);
+            for (const ms of [200, 900, 1900, 3000]) {
+              await sleep(n === 1 && ms === 200 ? 200 : 900);
+              measure(`SEND#${n} ~${ms}ms`);
+            }
+            await sleep(800);
+          }
+          log({ label: "DONE" });
+        })();
+      }
+    </script>
+  </body>
+</html>
