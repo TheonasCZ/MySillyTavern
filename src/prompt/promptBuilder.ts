@@ -93,6 +93,14 @@ export interface PromptBuilderInput {
    * "speak only as {{char}}" instruction near post_history_instructions.
    * Omitting this field (the solo-chat case) leaves the output unchanged. */
   groupMembers?: Array<{ name: string; description: string }>;
+  /** Current game-time description from `memory/gameTime.ts`, rendered as a
+   * `[PRÁVĚ TEĎ]` block right before the canon reminder. Small enough
+   * (~50 tokens) to not stress the budget. */
+  gameTimeDescription?: string;
+  /** Current mood facts from `memory/emotions.ts`, keyed by character name.
+   * When `groupMembers` are present, the mood is appended to each member's
+   * description line (e.g. `- Eliška (nálada: vyděšená): ...`). */
+  moodFacts?: Array<{ subject: string; fact: string }>;
 }
 
 export interface PromptReport {
@@ -180,13 +188,22 @@ const CANON_REMINDER_MAX_CHARS = 2400;
 
 const GROUP_MEMBER_DESCRIPTION_MAX_LEN = 500;
 
-function buildGroupMembersSection(groupMembers: Array<{ name: string; description: string }>): string {
+function buildGroupMembersSection(
+  groupMembers: Array<{ name: string; description: string }>,
+  moodFacts: Array<{ subject: string; fact: string }>,
+): string {
   if (groupMembers.length === 0) return "";
+  const moodMap = new Map<string, string>();
+  for (const mf of moodFacts) {
+    if (!moodMap.has(mf.subject)) moodMap.set(mf.subject, mf.fact);
+  }
   const lines = groupMembers.map((m) => {
     const desc = m.description.length > GROUP_MEMBER_DESCRIPTION_MAX_LEN
       ? `${m.description.slice(0, GROUP_MEMBER_DESCRIPTION_MAX_LEN)}…`
       : m.description;
-    return `- ${m.name}: ${desc}`;
+    const mood = moodMap.get(m.name);
+    const moodSuffix = mood ? ` (nálada: ${mood})` : "";
+    return `- ${m.name}${moodSuffix}: ${desc}`;
   });
   return `[Další postavy ve scéně]\n${lines.join("\n")}`;
 }
@@ -196,6 +213,7 @@ function buildSystemCore(
   persona: PersonaLike | null,
   userName: string,
   groupMembers: Array<{ name: string; description: string }>,
+  moodFacts: Array<{ subject: string; fact: string }>,
 ): string {
   const base = character.systemPrompt.trim() || DEFAULT_RP_INSTRUCTIONS;
   const parts = [base, character.description, character.personality, character.scenario].map((p) =>
@@ -205,7 +223,7 @@ function buildSystemCore(
   if (personaDescription) {
     parts.push(`[Hráčova persona — ${userName}]\n${personaDescription}`);
   }
-  const groupSection = buildGroupMembersSection(groupMembers);
+  const groupSection = buildGroupMembersSection(groupMembers, moodFacts);
   if (groupSection) parts.push(groupSection);
   return substitutePlaceholders(parts.filter(Boolean).join("\n\n"), character.name, userName);
 }
@@ -318,7 +336,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   let historyIncluded = input.history.slice(-verbatimWindow);
 
   const groupMembers = input.groupMembers ?? [];
-  const systemCore = buildSystemCore(character, persona, userName, groupMembers);
+  const moodFacts = input.moodFacts ?? [];
+  const systemCore = buildSystemCore(character, persona, userName, groupMembers, moodFacts);
 
   function render(): {
     messages: PromptMessage[];
@@ -349,6 +368,13 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (groupMembers.length > 0) {
       const groupInstruction = buildGroupSpeakerInstruction(groupMembers.map((m) => m.name));
       phi = phi ? `${phi}\n\n${groupInstruction}` : groupInstruction;
+    }
+    // Game-time block rendered before the canon reminder — small enough
+    // (~50 tokens) to not stress the budget and gives the model a sense
+    // of the current in-game moment.
+    const gameTimeDesc = input.gameTimeDescription?.trim();
+    if (gameTimeDesc) {
+      phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
     }
     // Canon reminder is appended last, closest to generation — see
     // `buildCanonReminderSection`. It is intentionally NOT part of the
