@@ -63,6 +63,12 @@ export interface CraftedMutation {
   perks: string[];
 }
 
+export interface QuestMutation {
+  op: "start" | "complete" | "fail" | "note";
+  name: string;
+  note?: string;
+}
+
 export interface FactionMutation {
   /** Faction name (lowercased for matching). */
   name: string;
@@ -80,6 +86,8 @@ interface ParsedTags {
   factionMutations: FactionMutation[];
   craftMutations: CraftMutation[];
   craftedMutations: CraftedMutation[];
+  conditionMutations: ConditionMutation[];
+  questMutations: QuestMutation[];
 }
 
 export function parseGameTags(text: string): ParsedTags {
@@ -89,6 +97,8 @@ export function parseGameTags(text: string): ParsedTags {
   const factionMutations: FactionMutation[] = [];
   const craftMutations: CraftMutation[] = [];
   const craftedMutations: CraftedMutation[] = [];
+  const conditionMutations: ConditionMutation[] = [];
+  const questMutations: QuestMutation[] = [];
 
   let cleanText = text;
 
@@ -173,5 +183,5 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations };
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations };
 }

@@ -4,6 +4,12 @@ import { createFaction, listFactions, updateReputation } from "../db/repositorie
 import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
 
+/** Tag validation feedback — stored across turns so the next prompt can
+ *  warn the AI about malformed tags from the previous response. */
+let lastTagErrors: string[] = [];
+export function getLastTagErrors(): string[] { return lastTagErrors; }
+export function clearTagErrors(): void { lastTagErrors = []; }
+
 /** Parses game tags (inventory + skill + level + faction) from the AI response,
  *  updates the persona in DB, and returns the cleaned text. */
 export async function processGameResponse(
@@ -12,7 +18,7 @@ export async function processGameResponse(
   _chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations } = parseGameTags(text);
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations } = parseGameTags(text);
   if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0) return text;
 
   // Apply inventory mutations
@@ -163,6 +169,18 @@ export async function processGameResponse(
     }
   } catch {
     // Non-critical
+  }
+
+  // Tag validation: warn about excessive or malformed tags in next prompt
+  const totalTags = mutations.length + skillChanges.length + levelChanges.length +
+    factionMutations.length + craftMutations.length + craftedMutations.length +
+    conditionMutations.length + questMutations.length;
+  lastTagErrors = [];
+  if (totalTags > 5) {
+    lastTagErrors.push(`Příliš mnoho tagů v jedné odpovědi (${totalTags}). Maximum je 3–5. Rozděl změny do více odpovědí.`);
+  }
+  if (totalTags === 0 && cleanText.length > 2000) {
+    lastTagErrors.push("Dlouhá odpověď bez tagů. Pokud došlo ke změně inventáře, dovedností, questů nebo frakcí, použij odpovídající tagy.");
   }
 
   return cleanText;
