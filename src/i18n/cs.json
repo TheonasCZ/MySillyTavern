@@ -93,13 +93,6 @@
       "branchSuffix": "(větev)",
       "groupMembers": "Členové skupiny"
     },
-    "quests": {
-      "title": "Deník úkolů",
-      "empty": "Zatím žádné úkoly.",
-      "statusActive": "Aktivní",
-      "statusCompleted": "Splněno",
-      "statusFailed": "Neúspěch"
-    },
     "group": {
       "title": "Členové skupiny",
       "addMember": "Přidat člena",
@@ -202,6 +195,7 @@
         "skills": "Dovednosti",
         "skillName": "Název",
         "inventory": "Inventář",
+        "factions": "Frakce",
         "itemName": "Předmět",
         "itemNote": "poznámka"
       },

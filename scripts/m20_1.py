@@ -1,0 +1,7 @@
+with open('src/chat/inventoryTags.ts') as f: curr = f.read()
+curr = curr.replace('export interface FactionMutation {','export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }\n\nexport interface FactionMutation {')
+curr = curr.replace('questMutations: QuestMutation[];','questMutations: QuestMutation[];\n  conditionMutations: ConditionMutation[];')
+curr = curr.replace('// Faction tag parsing','cleanText = cleanText.replace(/\[COND:([+-])([^\]]+)\]/gi, (_m, op, rest) => { const parts = rest.split(":"); const name = parts[0].trim(); const desc = parts[1]?.trim(); const dur = parts[2]?.trim(); conditionMutations.push({ op: op === "+" ? "add" : "remove", name, description: desc, duration: dur }); return ""; });\n\n  // Faction tag parsing')
+curr = curr.replace('questMutations,','questMutations,\n    conditionMutations,')
+with open('src/chat/inventoryTags.ts','w') as f: f.write(curr)
+print('ok')

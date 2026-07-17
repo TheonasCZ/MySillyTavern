@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 
 import type { Persona, PersonaDraft, PersonaUpdate, SkillEntry, InventoryEntry } from "../../db/repositories/personasRepo";
+import type { FactionRep } from "../../db/repositories/factionsRepo";
+import { listFactions } from "../../db/repositories/factionsRepo";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { getSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
@@ -36,6 +38,15 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
   const [skills, setSkills] = useState<SkillEntry[]>(initial?.skills ?? []);
   const [inventory, setInventory] = useState<InventoryEntry[]>(initial?.inventory ?? []);
   const [saving, setSaving] = useState(false);
+  const [factions, setFactions] = useState<FactionRep[]>([]);
+
+  useEffect(() => {
+    if (initial) {
+      listFactions(initial.id).then(setFactions).catch(() => setFactions([]));
+    } else {
+      setFactions([]);
+    }
+  }, [initial?.id]);
 
   const buildDraft = (): PersonaDraft | PersonaUpdate => ({
     name,
@@ -260,6 +271,35 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
           ))}
         </div>
       </div>
+
+      {/* Factions (read-only) */}
+      {initial && factions.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">{t("form.fields.factions")}</span>
+          <div className="flex flex-col gap-1.5">
+            {factions.map((f) => {
+              const pct = ((f.reputation + 100) / 200) * 100;
+              let color = "var(--color-text-muted)";
+              if (f.reputation <= -50) color = "var(--color-danger)";
+              else if (f.reputation <= -20) color = "#d4a017";
+              else if (f.reputation >= 50) color = "#c9a32e";
+              else if (f.reputation >= 20) color = "var(--color-accent)";
+              return (
+                <div key={f.id} className="flex items-center gap-2 text-xs">
+                  <span className="w-24 truncate" style={{ color: "var(--color-text)" }}>{f.factionName}</span>
+                  <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-surface-2)" }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: color }}
+                    />
+                  </div>
+                  <span className="w-10 text-right tabular-nums" style={{ color: "var(--color-text-muted)" }}>{f.reputation}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Skills */}
       <div className="flex flex-col gap-2">

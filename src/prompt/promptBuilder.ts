@@ -42,6 +42,11 @@ export interface CharacterLike {
   mesExample: string;
 }
 
+export interface FactionRepLike {
+  factionName: string;
+  reputation: number;
+}
+
 export interface PersonaLike {
   name: string;
   description: string;
@@ -54,6 +59,8 @@ export interface PersonaLike {
   level?: number;
   skills?: Array<{ name: string; level: number }>;
   inventory?: Array<{ item: string; qty: number; note?: string }>;
+  /** Current faction standings for this persona. */
+  factions?: FactionRepLike[];
 }
 
 export type LedgerCategory = "player" | "world" | "npc" | "event" | "quest";
@@ -185,6 +192,15 @@ const DEFAULT_RP_INSTRUCTIONS =
 
 export const DEFAULT_USER_NAME = "User";
 
+/** Maps a numeric reputation (-100..100) to a Czech label for the prompt. */
+function factionLabel(rep: number): string {
+  if (rep <= -50) return "nepřátelská";
+  if (rep <= -20) return "podezřívavá";
+  if (rep >= 50) return "spojenecká";
+  if (rep >= 20) return "přátelská";
+  return "neutrální";
+}
+
 export function personaDisplayName(persona: PersonaLike | null): string {
   return persona?.name.trim() || DEFAULT_USER_NAME;
 }
@@ -264,6 +280,13 @@ function buildSystemCore(
       personaLines.push("\nInventář:");
       for (const inv of persona.inventory) {
         personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
+      }
+    }
+    if (persona.factions?.length) {
+      personaLines.push("\nReputace u frakcí:");
+      for (const f of persona.factions) {
+        const label = factionLabel(f.reputation);
+        personaLines.push(`- ${f.factionName}: ${f.reputation} (${label})`);
       }
     }
     if (personaLines.length > 0) {
@@ -504,11 +527,11 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
     }
-    // Game tag instructions — tells the model to annotate item + skill/level/quest changes
+    // Game tag instructions — tells the model to annotate item + skill/level changes
     const progression = persona?.progression ?? "skill";
     const hasInv = persona?.inventory?.length;
     const hasSkills = persona?.skills?.length;
-    if (progression !== "none" && (hasInv || hasSkills || progression === "skill" || progression === "level")) {
+    if (progression !== "none" && (hasInv || (progression === "skill" && hasSkills))) {
       let tagInstructions = "[HERNÍ TAGY]\n";
       // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
@@ -527,10 +550,19 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += `Aktuálně: úroveň ${lvl}, ${xp} XP.\n`;
         tagInstructions += "Změny: [LEVEL:+částka] přidá XP.\n";
       }
-      // Quest tags — always available when progression is enabled
-      tagInstructions += "Úkoly: [QUEST:+název] nový úkol, [QUEST:+název:popis] s popisem, [QUEST:✓název] splněno, [QUEST:✗název] neúspěch, [QUEST:název:poznámka] průběžná poznámka.\n";
       tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
+    }
+
+    // Faction reputation instructions — always included when persona has any faction standings
+    const hasFactions = persona?.factions?.length;
+    if (hasFactions && persona) {
+      let factionInstructions = "[FRAKČNÍ REPUTACE]\n";
+      factionInstructions += "NPC reakce by měly odrážet reputaci u frakcí: ";
+      factionInstructions += "nepřátelské (< -50), podezřívavé (< -20), neutrální, přátelské (> 20), spojenecké (> 50).\n";
+      factionInstructions += "Změny reputace: [FACTION:+jméno:hodnota] zvýšení, [FACTION:-jméno:hodnota] snížení.\n";
+      factionInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+      phi = phi ? `${phi}\n\n${factionInstructions}` : factionInstructions;
     }
 
     // Canon reminder is appended last, closest to generation — see

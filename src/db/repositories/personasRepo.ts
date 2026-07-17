@@ -12,6 +12,13 @@ export interface InventoryEntry {
   image_path?: string;
 }
 
+export interface ConditionEntry {
+  name: string;
+  description: string;
+  expiresAt: string | null;
+  modifiers?: { stat: string; value: number }[];
+}
+
 export interface Persona {
   id: string;
   name: string;
@@ -27,6 +34,7 @@ export interface Persona {
   level?: number;
   skills: SkillEntry[];
   inventory: InventoryEntry[];
+  conditions: ConditionEntry[];
   avatarPath: string | null;
   isDefault: boolean;
   createdAt: string;
@@ -42,6 +50,7 @@ export interface PersonaDraft {
   progression?: "skill" | "level" | "none";
   skills: SkillEntry[];
   inventory: InventoryEntry[];
+  conditions?: ConditionEntry[];
   avatarPath: string | null;
 }
 
@@ -60,6 +69,7 @@ interface PersonaRow {
   level: number;
   skills: string; // JSON
   inventory: string; // JSON
+  conditions: string; // JSON
   avatar_path: string | null;
   is_default: number;
   created_at: string;
@@ -88,6 +98,7 @@ function toPersona(row: PersonaRow): Persona {
     level: row.level ?? 1,
     skills: parseJsonArray<SkillEntry[]>(row.skills, []),
     inventory: parseJsonArray<InventoryEntry[]>(row.inventory, []),
+    conditions: parseJsonArray<ConditionEntry[]>(row.conditions, []),
     avatarPath: row.avatar_path,
     isDefault: row.is_default === 1,
     createdAt: row.created_at,
@@ -153,13 +164,13 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
   const isDefault = (existing[0]?.n ?? 0) === 0;
   const description = buildPersonaDescription(draft);
   await execute(
-    `INSERT INTO personas (id, name, description, gender, age, race, appearance, progression, skills, inventory, avatar_path, is_default, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+    `INSERT INTO personas (id, name, description, gender, age, race, appearance, progression, skills, inventory, conditions, avatar_path, is_default, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
     [
       id, draft.name, description,
       draft.gender, draft.age, draft.race, draft.appearance,
       draft.progression || "skill",
-      JSON.stringify(draft.skills), JSON.stringify(draft.inventory),
+      JSON.stringify(draft.skills), JSON.stringify(draft.inventory), JSON.stringify(draft.conditions ?? []),
       draft.avatarPath, isDefault ? 1 : 0, now,
     ],
   );
@@ -170,6 +181,7 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
     progression: (draft.progression as "skill" | "level" | "none") || "skill",
     xp: 0,
     level: 1,
+    conditions: draft.conditions ?? [],
     skills: draft.skills, inventory: draft.inventory,
     avatarPath: draft.avatarPath, isDefault,
     createdAt: now, updatedAt: now,
@@ -179,11 +191,11 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
 export async function updatePersona(id: string, patch: PersonaUpdate): Promise<void> {
   const description = buildPersonaDescription(patch);
   await execute(
-    `UPDATE personas SET name = $2, description = $3, gender = $4, age = $5, race = $6, appearance = $7, progression = $8, skills = $9, inventory = $10, updated_at = $11 WHERE id = $1`,
+    `UPDATE personas SET name = $2, description = $3, gender = $4, age = $5, race = $6, appearance = $7, progression = $8, skills = $9, inventory = $10, conditions = $11, updated_at = $12 WHERE id = $1`,
     [
       id, patch.name, description,
       patch.gender, patch.age, patch.race, patch.appearance, patch.progression || "skill",
-      JSON.stringify(patch.skills), JSON.stringify(patch.inventory),
+      JSON.stringify(patch.skills), JSON.stringify(patch.inventory), JSON.stringify(patch.conditions ?? []),
       nowIso(),
     ],
   );
@@ -240,4 +252,16 @@ export async function setInventoryItemImage(
     JSON.stringify(inventory),
     nowIso(),
   ]);
+}
+
+/** Writes the full conditions array for a persona — used by the condition
+ *  mutation processor after applying [COND:...] tags. */
+export async function updatePersonaConditions(
+  personaId: string,
+  conditions: ConditionEntry[],
+): Promise<void> {
+  await execute(
+    "UPDATE personas SET conditions = $2, updated_at = $3 WHERE id = $1",
+    [personaId, JSON.stringify(conditions), nowIso()],
+  );
 }

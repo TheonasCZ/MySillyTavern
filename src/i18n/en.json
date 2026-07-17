@@ -92,13 +92,6 @@
       "branchSuffix": "(branch)",
       "groupMembers": "Group members"
     },
-    "quests": {
-      "title": "Quest Journal",
-      "empty": "No quests yet.",
-      "statusActive": "Active",
-      "statusCompleted": "Completed",
-      "statusFailed": "Failed"
-    },
     "group": {
       "title": "Group members",
       "addMember": "Add member",
@@ -200,6 +193,7 @@
         "skills": "Skills",
         "skillName": "Name",
         "inventory": "Inventory",
+        "factions": "Factions",
         "itemName": "Item",
         "itemNote": "note"
       },
