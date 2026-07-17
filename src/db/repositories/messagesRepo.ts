@@ -182,6 +182,27 @@ export interface MessageSearchHit {
   createdAt: string;
 }
 
+/** LIKE-based substring search scoped to a single chat, newest first.
+ * SQLite's default LIKE is case-insensitive for ASCII; for broader
+ * diacritics folding the all-chat search below uses TS-side folding instead. */
+export async function searchMessagesInChat(
+  chatId: string,
+  searchQuery: string,
+  limit = 20,
+): Promise<MessageSearchHit[]> {
+  const pattern = `%${searchQuery}%`;
+  const rows = await query<{ id: string; content: string; created_at: string }>(
+    "SELECT id, content, created_at FROM messages WHERE chat_id = $1 AND content LIKE $2 ORDER BY created_at DESC LIMIT $3",
+    [chatId, pattern, limit],
+  );
+  return rows.map((r) => ({
+    chatId,
+    messageId: r.id,
+    content: r.content,
+    createdAt: r.created_at,
+  }));
+}
+
 /** Case- and diacritics-insensitive substring search across all chats'
  * messages ("vez" finds "Věž"), newest first. SQLite's NOCASE only folds
  * ASCII, so the folding happens in TS — loading all message texts is plenty

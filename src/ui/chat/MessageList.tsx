@@ -48,6 +48,9 @@ interface Props {
   /** Whether the chat has more than one member — shows a name caption above
    * each assistant bubble's content. */
   isGroup?: boolean;
+  /** When set, scrolls to this message and highlights it with a yellow
+   * background. Cleared after the scroll completes. */
+  scrollToMessageId?: string | null;
   onEdit: (messageId: string, content: string) => void;
   onRegenerate: (messageId: string) => void;
   onContinue: (messageId: string) => void;
@@ -70,6 +73,7 @@ export function MessageList({
   personaName,
   streamingSpeakerId = null,
   isGroup = false,
+  scrollToMessageId = null,
   onEdit,
   onRegenerate,
   onContinue,
@@ -221,6 +225,44 @@ export function MessageList({
     }
   }, []);
 
+  // Track which element is currently highlighted so we can clear it.
+  const highlightRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    // Clear previous highlight
+    if (highlightRef.current) {
+      highlightRef.current.style.backgroundColor = "";
+      highlightRef.current = null;
+    }
+    // The virtualized region may not have rendered the target yet — retry
+    // a few times with a short delay in case it's off-screen.
+    let attempts = 0;
+    const maxAttempts = 10;
+    const tryScroll = () => {
+      const el = document.getElementById(`msg-${scrollToMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.backgroundColor = "var(--color-highlight, #fef08a)";
+        el.style.transition = "background-color 0.3s";
+        highlightRef.current = el;
+        // Fade highlight after 3 s
+        setTimeout(() => {
+          if (highlightRef.current === el) {
+            el.style.backgroundColor = "";
+            highlightRef.current = null;
+          }
+        }, 3000);
+        return;
+      }
+      attempts++;
+      if (attempts < maxAttempts) {
+        requestAnimationFrame(() => setTimeout(tryScroll, 50));
+      }
+    };
+    tryScroll();
+  }, [scrollToMessageId]);
+
   // Preserve scroll position when older messages are prepended: remember
   // the scrollHeight right before the fetch, then after the DOM updates
   // scroll forward by exactly the height that got added above the fold.
@@ -336,7 +378,7 @@ export function MessageList({
             );
           }
           return history.slice(seg.start, seg.end).map((message) => (
-            <div key={message.id} data-vid={message.id} ref={measureHistoryRef}>
+            <div key={message.id} id={`msg-${message.id}`} data-vid={message.id} ref={measureHistoryRef}>
               {renderMessage(message)}
             </div>
           ));
@@ -348,19 +390,19 @@ export function MessageList({
         const bubble = renderMessage(message);
         if (isRegeneratingThis) {
           return (
-            <div key={message.id} ref={setStreamAnchor}>
+            <div key={message.id} id={`msg-${message.id}`} ref={setStreamAnchor}>
               {bubble}
             </div>
           );
         }
         if (isLastUserMessage) {
           return (
-            <div key={message.id} data-msg-id={message.id} ref={pinUserMessage}>
+            <div key={message.id} id={`msg-${message.id}`} data-msg-id={message.id} ref={pinUserMessage}>
               {bubble}
             </div>
           );
         }
-        return bubble;
+        return <div key={message.id} id={`msg-${message.id}`}>{bubble}</div>;
       })}
 
       {streaming && streamingMessageId === null && (() => {
