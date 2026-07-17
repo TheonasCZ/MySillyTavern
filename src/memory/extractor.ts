@@ -181,7 +181,8 @@ const EXTRACTION_SYSTEM_PROMPT =
   "V případě rozporu mezi tím, co se v poslední zprávě odehrálo, a dřívějším zamčeným " +
   "([ZAMČENO]) faktem, dřívější zamčený fakt nikdy nepřepisuj (nepoužívej na něj upsert ani " +
   "remove) — konverzace se s ním musí srovnat, ne naopak.\n\n" +
-  "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.";
+  "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.\n\n" +
+  "Detekuj emoční stav postav (sub_key: 'mood', fact: popis nálady, např. 'vyděšená a nedůvěřivá').";
 
 function formatSnapshot(facts: LedgerSnapshotFact[], summary?: string): string {
   if (facts.length === 0) return "(ledger je zatím prázdný)";

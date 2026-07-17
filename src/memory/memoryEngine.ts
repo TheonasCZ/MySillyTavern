@@ -14,7 +14,7 @@ import {
 import { listChatMembers } from "../db/repositories/chatMembersRepo";
 import { getCharacter } from "../db/repositories/charactersRepo";
 import { listMessages, type Message } from "../db/repositories/messagesRepo";
-import { getSetting } from "../db/repositories/settingsRepo";
+import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import type { ConnectionConfig } from "../providers/types";
 import { DEFAULT_VERBATIM_WINDOW } from "../prompt/promptBuilder";
 import { listActivatableEntriesForMembers } from "../db/repositories/lorebooksRepo";
@@ -25,6 +25,11 @@ import {
 } from "./embeddingsEngine";
 import { runExtraction, type TranscriptChatMessage } from "./extractor";
 import { runSummarization, type TranscriptMessage } from "./summarizer";
+import {
+  advanceTime,
+  defaultGameTimeState,
+  type GameTimeState,
+} from "./gameTime";
 
 export const DEFAULT_EXTRACTION_INTERVAL = 10;
 /** How many messages must have scrolled past the verbatim window,
@@ -255,6 +260,35 @@ async function drainQueue(chatId: string, entry: QueueEntry): Promise<void> {
       entry.pendingRerun = false;
       scheduleMemoryWork(chatId);
     }
+  }
+}
+
+const GAME_TIME_SETTING_PREFIX = "game_time_";
+
+/** Advances the game clock for a chat after each assistant message and
+ *  persists the updated state to the settings table. The returned
+ *  `GameTimeState` can be passed directly to `PromptBuilder` via
+ *  `timeDescription`. Never throws — on any failure the original state
+ *  (or default) is returned so the game continues. */
+export async function advanceAndPersistTime(
+  chatId: string,
+  messageCount: number,
+): Promise<GameTimeState> {
+  try {
+    const key = `${GAME_TIME_SETTING_PREFIX}${chatId}`;
+    const raw = await getSetting(key);
+    let state: GameTimeState;
+    if (raw) {
+      state = JSON.parse(raw) as GameTimeState;
+    } else {
+      state = defaultGameTimeState();
+    }
+    const next = advanceTime(state, messageCount);
+    await setSetting(key, JSON.stringify(next));
+    return next;
+  } catch (err) {
+    console.warn("advanceAndPersistTime failed", err);
+    return defaultGameTimeState();
   }
 }
 
