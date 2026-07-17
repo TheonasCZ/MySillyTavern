@@ -43,15 +43,16 @@ export function Sidebar() {
                 color: isActive ? "var(--color-text)" : "var(--color-text-muted)",
               })}
             >
-              <span>{t(item.labelKey)}</span>
-              {"subtitleKey" in item && (
-                <span
-                  className="mt-0.5 text-[11px] leading-tight"
-                  style={{ color: "var(--color-text-faint)" }}
-                >
-                  {t(item.subtitleKey)}
-                </span>
-              )}
+              <span className="flex flex-col">
+                <span>{t(item.labelKey)}</span>
+                {"subtitleKey" in item && (
+                  <span
+                    className="text-[0.75em] leading-tight opacity-70"
+                  >
+                    {t(item.subtitleKey)}
+                  </span>
+                )}
+              </span>
             </NavLink>
           </li>
         ))}
