@@ -126,10 +126,12 @@ undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 ---
 
-## M25 — Paměť k dokonalosti (kánon, konzistence, režie)
+## M25 — Paměť k dokonalosti (kánon, konzistence, režie) — ✅ HOTOVO (`5806886`)
 
 Čísla M16–M24 přeskočena (kolize s historickými commit labely).
-**Hlavní priorita** — killer feature proti SillyTavern dotáhnout do konce.
+Pozn. k bodu 2: korekce je plně automatická — tiše se přilepí k dalšímu
+promptu (TTL 3 odeslání), nic nevyskakuje na uživatele; vidět je jen
+v Prompt inspectoru.
 
 **Rozsah:**
 1. **Kánon editor („ústava světa")** — oddělit zamčená kánon fakta od
@@ -211,7 +213,6 @@ chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem.
 
 | Milník | Velikost | Poznámka |
 |--------|----------|----------|
-| M25 paměť k dokonalosti | střední | **první** — jádro projektu, staví na hotovém |
 | M26 prompt nástroje | malý–střední | samplery + author's note + regex |
 | M27 World Info navíc | střední | vektorová aktivace = náš trumf |
 | M14 sync (body 2–3) | velký | začít žurnálem a zprávami |
