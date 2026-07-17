@@ -554,6 +554,7 @@ export function ChatScreen() {
             type="button"
             onClick={() => setInventoryOpen((v) => !v)}
             aria-pressed={inventoryOpen}
+            title={t("room.inventoryTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
@@ -567,6 +568,7 @@ export function ChatScreen() {
             type="button"
             onClick={() => setQuestsOpen((v) => !v)}
             aria-pressed={questsOpen}
+            title={t("room.questsTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
@@ -594,6 +596,7 @@ export function ChatScreen() {
             type="button"
             onClick={() => setMemoryOpen((v) => !v)}
             aria-pressed={memoryOpen}
+            title={t("room.memoryTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
@@ -601,12 +604,13 @@ export function ChatScreen() {
               color: memoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
-            {t("title", { ns: "memory" })}
+            🧠
           </button>
           <button
             type="button"
             onClick={() => setExportOpen((v) => !v)}
             aria-pressed={exportOpen}
+            title={t("room.exportTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",

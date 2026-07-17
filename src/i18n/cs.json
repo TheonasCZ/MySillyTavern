@@ -111,7 +111,11 @@
       "branchSuffix": "(větev)",
       "groupMembers": "Členové skupiny",
       "ttsPlay": "Přehrát",
-      "ttsStop": "Zastavit"
+      "ttsStop": "Zastavit",
+      "inventoryTooltip": "Inventář a vybavení",
+      "questsTooltip": "Deník questů",
+      "memoryTooltip": "Paměť a vzpomínky",
+      "exportTooltip": "Export kroniky"
     },
     "group": {
       "title": "Členové skupiny",
