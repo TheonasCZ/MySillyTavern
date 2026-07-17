@@ -536,6 +536,69 @@ describe("buildPrompt — groupMembers (group chats)", () => {
   });
 });
 
+describe("buildPrompt — MMR fact diversity (plan §A4)", () => {
+  it("MMR reorders facts: diverse topic avoids being cut first", () => {
+    // Three event facts: two about locations (nearly identical vectors),
+    // one about a character (orthogonal vector).  With plain relevance
+    // the character fact (lowest relevance = 0.5) would be cut first.
+    // MMR (λ=0.7) should push the redundant second location behind the
+    // character fact, so the cut order changes.
+    const facts = [
+      makeFact({ id: "loc-a", category: "event", subject: "Forest", fact: "Dark forest." }),
+      makeFact({ id: "loc-b", category: "event", subject: "Cave", fact: "Deep cave." }),
+      makeFact({ id: "char", category: "event", subject: "Marek", fact: "A blacksmith." }),
+    ];
+
+    const factVectors: Record<string, number[]> = {
+      "loc-a": [1.0, 0.0],
+      "loc-b": [0.95, 0.05], // cos ≈ 0.998 with loc-a → near-duplicate
+      "char":  [0.0, 1.0],   // cos ≈ 0 with both → different topic
+    };
+
+    const relevance = {
+      "loc-a": 0.9,
+      "loc-b": 0.85,
+      "char":  0.5,
+    };
+
+    const { report } = buildPrompt(
+      baseInput({ ledgerFacts: facts, factRelevance: relevance, factVectors, history: makeHistory(2), contextBudget: 1 }),
+    );
+
+    const cutOrder = report.trimmedNotes
+      .filter((n) => n.startsWith("Fakta:"))
+      .map((n) => /event\/(\w+)/.exec(n)?.[1]);
+
+    // Without MMR the cut order would be ["Marek", "Cave", "Forest"]
+    // (least relevant first).  With MMR the near-duplicate location
+    // ("Cave") is pushed to the back of the ranking and cut first,
+    // while the diverse character fact survives longer.
+    expect(cutOrder[0]).toBe("Cave");  // redundant location cut first
+    // "Marek" should NOT be first — that would mean MMR had no effect.
+    expect(cutOrder[0]).not.toBe("Marek");
+  });
+
+  it("falls back to relevance-only trimming when factVectors is absent", () => {
+    const facts = [
+      makeFact({ id: "f-high", category: "event", subject: "Crystal", fact: "Found a strange crystal." }),
+      makeFact({ id: "f-low", category: "event", subject: "Weather", fact: "It rained last week." }),
+    ];
+    const input = baseInput({
+      ledgerFacts: facts,
+      history: makeHistory(2),
+      contextBudget: 1,
+      factRelevance: { "f-high": 0.9, "f-low": 0.1 },
+      // factVectors intentionally omitted
+    });
+    const { report } = buildPrompt(input);
+    const cutOrder = report.trimmedNotes
+      .filter((n) => n.startsWith("Fakta:"))
+      .map((n) => /event\/(\w+)/.exec(n)?.[1]);
+    // Without factVectors, the least relevant ("Weather") is cut first.
+    expect(cutOrder).toEqual(["Weather", "Crystal"]);
+  });
+});
+
 describe("personaDisplayName / substitutePlaceholders", () => {
   it("falls back to 'User' when there's no persona", () => {
     expect(personaDisplayName(null)).toBe("User");

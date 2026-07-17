@@ -9,9 +9,16 @@
  * prompt is actually back within the model's real context budget. */
 const CHARS_PER_TOKEN = 3.3;
 
-/** Shared rough token estimate used across the app (PromptBuilder, lorebook
+/**
+ * Shared rough token estimate used across the app (PromptBuilder, lorebook
  * activation budget, memory panel report). Pure, no DB/Tauri import — keeps
- * PromptBuilder unit-testable without booting the Tauri runtime (plan §6.2). */
+ * PromptBuilder unit-testable without booting the Tauri runtime (plan §6.2).
+ *
+ * **This is a rough chars-per-token approximation.**  It systematically
+ * undershoots the real token count for most models.  When an accurate
+ * model-specific count is needed, prefer `countTokens()` from
+ * `./tokenCounter` (async, uses tiktoken for OpenAI models).  This function
+ * remains the universal fallback. */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / CHARS_PER_TOKEN);
