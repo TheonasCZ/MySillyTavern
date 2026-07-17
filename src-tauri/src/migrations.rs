@@ -35,6 +35,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_005,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "ledger_facts sub_key for multi-fact subjects",
+            sql: MIGRATION_006,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -213,4 +219,25 @@ CREATE TABLE usage_log (
   output_tokens_est INTEGER NOT NULL
 );
 CREATE INDEX idx_usage_log_created ON usage_log(created_at);
+"#;
+
+/// Adds `sub_key TEXT NOT NULL DEFAULT ''` to `ledger_facts` and widens the
+/// UNIQUE constraint to `(chat_id, category, subject, sub_key)` so multiple
+/// facts can coexist for the same (category, subject) pair — e.g. a player
+/// ("Hráč") who has both a sword ("má meč") and a shield ("má štít").
+/// Rebuilds the table because SQLite doesn't support ALTER TABLE DROP
+/// CONSTRAINT natively (same pattern as migration 3).
+const MIGRATION_006: &str = r#"
+CREATE TABLE ledger_facts_new (
+  id TEXT PRIMARY KEY, chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  category TEXT NOT NULL CHECK (category IN ('player','world','npc','event','quest')),
+  subject TEXT NOT NULL, sub_key TEXT NOT NULL DEFAULT '', fact TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
+  locked INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE (chat_id, category, subject, sub_key)
+);
+INSERT INTO ledger_facts_new SELECT id, chat_id, category, subject, '', fact, status, locked, created_at, updated_at FROM ledger_facts;
+DROP TABLE ledger_facts;
+ALTER TABLE ledger_facts_new RENAME TO ledger_facts;
 "#;

@@ -68,6 +68,7 @@ function fact(partial: Partial<LedgerSnapshotFact> = {}): LedgerSnapshotFact {
     id: "id1",
     category: "world",
     subject: "Ashford",
+    sub_key: "",
     fact: "The capital.",
     status: "active",
     locked: false,
@@ -82,13 +83,13 @@ function extracted(partial: Partial<ExtractedFact> = {}): ExtractedFact {
 describe("mergeExtractedFacts", () => {
   it("inserts a new fact that has no existing match", () => {
     const ops = mergeExtractedFacts([], [extracted({ subject: "Ashford" })]);
-    expect(ops).toEqual([{ kind: "insert", category: "world", subject: "Ashford", fact: "The capital city." }]);
+    expect(ops).toEqual([{ kind: "insert", category: "world", subject: "Ashford", sub_key: "", fact: "The capital city." }]);
   });
 
   it("updates an existing unlocked fact on upsert", () => {
     const ops = mergeExtractedFacts([fact()], [extracted({ fact: "Updated capital info." })]);
     expect(ops).toEqual([
-      { kind: "update", category: "world", subject: "Ashford", fact: "Updated capital info.", factId: "id1" },
+      { kind: "update", category: "world", subject: "Ashford", sub_key: "", fact: "Updated capital info.", factId: "id1" },
     ]);
   });
 
@@ -99,6 +100,7 @@ describe("mergeExtractedFacts", () => {
         kind: "skip",
         category: "world",
         subject: "Ashford",
+        sub_key: "",
         fact: "Drift attempt.",
         factId: "id1",
         reason: "locked",
@@ -126,7 +128,7 @@ describe("mergeExtractedFacts", () => {
   it("archives an existing unlocked fact on remove", () => {
     const ops = mergeExtractedFacts([fact()], [extracted({ action: "remove" })]);
     expect(ops).toEqual([
-      { kind: "archive", category: "world", subject: "Ashford", fact: "The capital city.", factId: "id1" },
+      { kind: "archive", category: "world", subject: "Ashford", sub_key: "", fact: "The capital city.", factId: "id1" },
     ]);
   });
 
@@ -136,6 +138,7 @@ describe("mergeExtractedFacts", () => {
       kind: "skip",
       category: "world",
       subject: "Ashford",
+      sub_key: "",
       fact: "The capital city.",
       factId: "id1",
       reason: "locked",
@@ -148,6 +151,7 @@ describe("mergeExtractedFacts", () => {
       kind: "skip",
       category: "world",
       subject: "Ashford",
+      sub_key: "",
       fact: "The capital city.",
       reason: "not-found",
     });
@@ -161,5 +165,78 @@ describe("mergeExtractedFacts", () => {
       extracted({ category: "npc", subject: "Innkeeper", fact: "New NPC.", action: "upsert" }),
     ]);
     expect(ops.map((o) => o.kind)).toEqual(["update", "skip", "insert"]);
+  });
+
+  // ---- sub_key identity tests ----
+
+  it("matches on (category, subject, sub_key) — different sub_key is a different fact", () => {
+    const existing = [fact({ sub_key: "sword", fact: "má meč", category: "player", subject: "Hráč" })];
+    const ops = mergeExtractedFacts(existing, [
+      extracted({ category: "player", subject: "Hráč", sub_key: "shield", fact: "má štít", action: "upsert" }),
+    ]);
+    expect(ops[0].kind).toBe("insert");
+    expect(ops[0].sub_key).toBe("shield");
+  });
+
+  it("updates the matching sub_key when it already exists", () => {
+    const existing = [fact({ sub_key: "sword", fact: "má meč", category: "player", subject: "Hráč" })];
+    const ops = mergeExtractedFacts(existing, [
+      extracted({ category: "player", subject: "Hráč", sub_key: "sword", fact: "má obouruční meč", action: "upsert" }),
+    ]);
+    expect(ops[0].kind).toBe("update");
+    expect(ops[0].sub_key).toBe("sword");
+    expect(ops[0].fact).toBe("má obouruční meč");
+  });
+
+  it("empty sub_key matches empty sub_key (backward compat)", () => {
+    const existing = [fact({ sub_key: "", subject: "Ashford" })];
+    const ops = mergeExtractedFacts(existing, [
+      extracted({ subject: "Ashford", fact: "Updated.", action: "upsert" }),
+    ]);
+    expect(ops[0].kind).toBe("update");
+    expect(ops[0].sub_key).toBe("");
+  });
+
+  it("sub_key matching is case-insensitive", () => {
+    const existing = [fact({ sub_key: "Sword", category: "player", subject: "Hráč" })];
+    const ops = mergeExtractedFacts(existing, [
+      extracted({ category: "player", subject: "HráČ", sub_key: "SWORD", fact: "updated", action: "upsert" }),
+    ]);
+    expect(ops[0].kind).toBe("update");
+    expect(ops[0].sub_key).toBe("SWORD");
+  });
+
+  it("parseExtractorOutput preserves sub_key", () => {
+    const raw = JSON.stringify([
+      { category: "player", subject: "Hráč", sub_key: "meč", fact: "má meč", action: "upsert" },
+    ]);
+    const result = parseExtractorOutput(raw);
+    expect(result[0]).toEqual({
+      category: "player",
+      subject: "Hráč",
+      sub_key: "meč",
+      fact: "má meč",
+      action: "upsert",
+    });
+  });
+
+  it("parseExtractorOutput trims sub_key whitespace", () => {
+    const raw = '[{"category":"player","subject":"Hráč","sub_key":"  meč  ","fact":"má meč","action":"upsert"}]';
+    const result = parseExtractorOutput(raw);
+    expect(result[0].sub_key).toBe("meč");
+  });
+
+  it("multiple facts for the same subject coexist with different sub_keys", () => {
+    const existing = [
+      fact({ id: "a", sub_key: "sword", fact: "má meč", category: "player", subject: "Hráč" }),
+      fact({ id: "b", sub_key: "shield", fact: "má štít", category: "player", subject: "Hráč" }),
+    ];
+    const ops = mergeExtractedFacts(existing, [
+      extracted({ category: "player", subject: "Hráč", sub_key: "sword", fact: "má zlatý meč", action: "upsert" }),
+      extracted({ category: "player", subject: "Hráč", sub_key: "shield", fact: "má stříbrný štít", action: "upsert" }),
+    ]);
+    expect(ops.map((o) => o.kind)).toEqual(["update", "update"]);
+    expect(ops[0].factId).toBe("a");
+    expect(ops[1].factId).toBe("b");
   });
 });

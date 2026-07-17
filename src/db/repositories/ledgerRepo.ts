@@ -14,6 +14,7 @@ interface LedgerFactRow {
   chat_id: string;
   category: LedgerCategory;
   subject: string;
+  sub_key: string;
   fact: string;
   status: "active" | "archived";
   locked: number;
@@ -27,6 +28,7 @@ function toFact(row: LedgerFactRow): LedgerFact {
     chatId: row.chat_id,
     category: row.category,
     subject: row.subject,
+    sub_key: row.sub_key,
     fact: row.fact,
     status: row.status,
     locked: row.locked === 1,
@@ -39,7 +41,7 @@ function toFact(row: LedgerFactRow): LedgerFact {
  * tab filters client-side. */
 export async function listAllFacts(chatId: string): Promise<LedgerFact[]> {
   const rows = await query<LedgerFactRow>(
-    "SELECT * FROM ledger_facts WHERE chat_id = $1 ORDER BY category ASC, subject ASC",
+    "SELECT * FROM ledger_facts WHERE chat_id = $1 ORDER BY category ASC, subject ASC, sub_key ASC",
     [chatId],
   );
   return rows.map(toFact);
@@ -48,7 +50,7 @@ export async function listAllFacts(chatId: string): Promise<LedgerFact[]> {
 /** Only `status = 'active'` facts — what PromptBuilder consumes. */
 export async function listActiveFacts(chatId: string): Promise<LedgerFact[]> {
   const rows = await query<LedgerFactRow>(
-    "SELECT * FROM ledger_facts WHERE chat_id = $1 AND status = 'active' ORDER BY category ASC, subject ASC",
+    "SELECT * FROM ledger_facts WHERE chat_id = $1 AND status = 'active' ORDER BY category ASC, subject ASC, sub_key ASC",
     [chatId],
   );
   return rows.map(toFact);
@@ -57,6 +59,7 @@ export async function listActiveFacts(chatId: string): Promise<LedgerFact[]> {
 export interface LedgerFactDraft {
   category: LedgerCategory;
   subject: string;
+  sub_key?: string;
   fact: string;
   locked?: boolean;
 }
@@ -68,15 +71,16 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
   const id = newId();
   const now = nowIso();
   await execute(
-    `INSERT INTO ledger_facts (id, chat_id, category, subject, fact, status, locked, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, 'active', $6, $7, $7)`,
-    [id, chatId, draft.category, draft.subject, draft.fact, draft.locked ? 1 : 0, now],
+    `INSERT INTO ledger_facts (id, chat_id, category, subject, sub_key, fact, status, locked, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $8)`,
+    [id, chatId, draft.category, draft.subject, draft.sub_key ?? '', draft.fact, draft.locked ? 1 : 0, now],
   );
   return {
     id,
     chatId,
     category: draft.category,
     subject: draft.subject,
+    sub_key: draft.sub_key ?? '',
     fact: draft.fact,
     status: "active",
     locked: !!draft.locked,
@@ -88,6 +92,7 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
 export interface LedgerFactUpdate {
   category: LedgerCategory;
   subject: string;
+  sub_key?: string;
   fact: string;
 }
 
@@ -95,8 +100,8 @@ export interface LedgerFactUpdate {
  * `setFactLocked` for that (keeps intent explicit in the UI). */
 export async function updateFact(id: string, patch: LedgerFactUpdate): Promise<void> {
   await execute(
-    `UPDATE ledger_facts SET category = $2, subject = $3, fact = $4, updated_at = $5 WHERE id = $1`,
-    [id, patch.category, patch.subject, patch.fact, nowIso()],
+    `UPDATE ledger_facts SET category = $2, subject = $3, sub_key = $4, fact = $5, updated_at = $6 WHERE id = $1`,
+    [id, patch.category, patch.subject, patch.sub_key ?? '', patch.fact, nowIso()],
   );
 }
 
@@ -120,16 +125,18 @@ export async function deleteFact(id: string): Promise<void> {
   await execute("DELETE FROM ledger_facts WHERE id = $1", [id]);
 }
 
-/** Fetches a single fact by (chatId, category, subject) case-insensitively
- * on subject — the identity the extractor merges against (plan §6.3). */
+/** Fetches a single fact by (chatId, category, subject, sub_key)
+ * case-insensitively on subject — the identity the extractor merges
+ * against (plan §6.3). */
 export async function findFactBySubject(
   chatId: string,
   category: LedgerCategory,
   subject: string,
+  sub_key?: string,
 ): Promise<LedgerFact | null> {
   const rows = await query<LedgerFactRow>(
-    `SELECT * FROM ledger_facts WHERE chat_id = $1 AND category = $2 AND lower(subject) = lower($3)`,
-    [chatId, category, subject],
+    `SELECT * FROM ledger_facts WHERE chat_id = $1 AND category = $2 AND lower(subject) = lower($3) AND sub_key = $4`,
+    [chatId, category, subject, sub_key ?? ''],
   );
   return rows[0] ? toFact(rows[0]) : null;
 }
@@ -142,9 +149,10 @@ export async function applyLedgerUpsert(
   chatId: string,
   category: LedgerCategory,
   subject: string,
+  sub_key: string,
   fact: string,
 ): Promise<void> {
-  const existing = await findFactBySubject(chatId, category, subject);
+  const existing = await findFactBySubject(chatId, category, subject, sub_key);
   if (existing) {
     if (existing.locked) return;
     await execute(
@@ -153,15 +161,16 @@ export async function applyLedgerUpsert(
     );
     return;
   }
-  await createFact(chatId, { category, subject, fact });
+  await createFact(chatId, { category, subject, sub_key, fact });
 }
 
 export async function applyLedgerRemove(
   chatId: string,
   category: LedgerCategory,
   subject: string,
+  sub_key: string,
 ): Promise<void> {
-  const existing = await findFactBySubject(chatId, category, subject);
+  const existing = await findFactBySubject(chatId, category, subject, sub_key);
   if (!existing || existing.locked) return;
   await setFactStatus(existing.id, "archived");
 }

@@ -77,8 +77,13 @@ export function expectedModel(connection: ConnectionConfig, settings: EmbeddingS
 /** The text a fact is embedded as — must stay deterministic, since it's
  * compared against `embeddings.text` to detect facts edited since their
  * last embedding. */
-export function factEmbeddingText(fact: Pick<LedgerFact, "category" | "subject" | "fact">): string {
-  return `(${fact.category}/${fact.subject}) ${fact.fact}`;
+export function factEmbeddingText(
+  fact: Pick<LedgerFact, "category" | "subject" | "fact"> & { sub_key?: string },
+): string {
+  const key = fact.sub_key
+    ? `${fact.category}/${fact.subject}/${fact.sub_key}`
+    : `${fact.category}/${fact.subject}`;
+  return `(${key}) ${fact.fact}`;
 }
 
 export interface ChunkSource {

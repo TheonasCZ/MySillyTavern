@@ -13,12 +13,21 @@ import {
 } from "../db/repositories/ledgerRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
+import { embedTexts } from "../providers/embeddings";
+import { canEmbed } from "./embeddingsEngine";
+import { listEmbeddings } from "../db/repositories/embeddingsRepo";
+import { cosineSimilarity, decodeVector } from "./vector";
 
 export type ExtractAction = "upsert" | "remove";
 
 export interface ExtractedFact {
   category: LedgerCategory;
   subject: string;
+  /** Optional disambiguation key — when multiple facts share the same
+   * (category, subject) pair (e.g. "Hráč" has both "má meč" and "má štít"),
+   * the extractor auto-suggests a short slug like "sword" / "shield" so
+   * they don't UPSERT over each other. Defaults to "" for existing facts. */
+  sub_key?: string;
   fact: string;
   action: ExtractAction;
 }
@@ -28,13 +37,16 @@ const VALID_CATEGORIES: LedgerCategory[] = ["player", "world", "npc", "event", "
 function isExtractedFact(value: unknown): value is ExtractedFact {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
+  // sub_key is optional — a string when present, otherwise defaults to ""
+  const subKeyOk = v.sub_key === undefined || v.sub_key === null || typeof v.sub_key === "string";
   return (
     typeof v.category === "string" &&
     VALID_CATEGORIES.includes(v.category as LedgerCategory) &&
     typeof v.subject === "string" &&
     v.subject.trim().length > 0 &&
     typeof v.fact === "string" &&
-    (v.action === "upsert" || v.action === "remove")
+    (v.action === "upsert" || v.action === "remove") &&
+    subKeyOk
   );
 }
 
@@ -62,6 +74,7 @@ export function parseExtractorOutput(raw: string): ExtractedFact[] {
   return parsed.filter(isExtractedFact).map((f) => ({
     category: f.category,
     subject: f.subject.trim(),
+    sub_key: typeof f.sub_key === "string" ? f.sub_key.trim() : undefined,
     fact: f.fact.trim(),
     action: f.action,
   }));
@@ -73,6 +86,7 @@ export interface LedgerSnapshotFact {
   id: string;
   category: LedgerCategory;
   subject: string;
+  sub_key: string;
   fact: string;
   status: "active" | "archived";
   locked: boolean;
@@ -84,6 +98,7 @@ export interface MergeOp {
   kind: MergeOpKind;
   category: LedgerCategory;
   subject: string;
+  sub_key: string;
   fact: string;
   /** Present for update/archive/skip — the existing row it targets. */
   factId?: string;
@@ -92,7 +107,7 @@ export interface MergeOp {
 }
 
 /** Decides, for each extracted fact, what should happen to the ledger —
- * identity is (category, lower(subject)) per plan §6.3:
+ * identity is (category, lower(subject), sub_key):
  *   - locked existing row → skip
  *   - existing row, action upsert → update its fact text
  *   - no existing row, action upsert → insert
@@ -104,30 +119,37 @@ export function mergeExtractedFacts(
   existing: LedgerSnapshotFact[],
   extracted: ExtractedFact[],
 ): MergeOp[] {
-  const findExisting = (category: LedgerCategory, subject: string) =>
-    existing.find((f) => f.category === category && f.subject.toLowerCase() === subject.toLowerCase());
+  const subKey = (sk?: string) => (sk ?? "").toLowerCase();
+  const findExisting = (category: LedgerCategory, subject: string, sub_key?: string) =>
+    existing.find(
+      (f) =>
+        f.category === category &&
+        f.subject.toLowerCase() === subject.toLowerCase() &&
+        f.sub_key.toLowerCase() === subKey(sub_key),
+    );
 
   return extracted.map((item): MergeOp => {
-    const match = findExisting(item.category, item.subject);
+    const sub_key = item.sub_key ?? "";
+    const match = findExisting(item.category, item.subject, item.sub_key);
 
     if (item.action === "remove") {
       if (!match) {
-        return { kind: "skip", category: item.category, subject: item.subject, fact: item.fact, reason: "not-found" };
+        return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, reason: "not-found" };
       }
       if (match.locked) {
-        return { kind: "skip", category: item.category, subject: item.subject, fact: item.fact, factId: match.id, reason: "locked" };
+        return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "locked" };
       }
-      return { kind: "archive", category: item.category, subject: item.subject, fact: item.fact, factId: match.id };
+      return { kind: "archive", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id };
     }
 
     // action === 'upsert'
     if (!match) {
-      return { kind: "insert", category: item.category, subject: item.subject, fact: item.fact };
+      return { kind: "insert", category: item.category, subject: item.subject, sub_key, fact: item.fact };
     }
     if (match.locked) {
-      return { kind: "skip", category: item.category, subject: item.subject, fact: item.fact, factId: match.id, reason: "locked" };
+      return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "locked" };
     }
-    return { kind: "update", category: item.category, subject: item.subject, fact: item.fact, factId: match.id };
+    return { kind: "update", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id };
   });
 }
 
@@ -137,7 +159,9 @@ const EXTRACTION_SYSTEM_PROMPT =
   "Jsi analytický nástroj, který extrahuje herní fakta z RP konverzace do strukturovaného " +
   "ledgeru. Dostaneš aktuální snapshot ledgeru (co už je zaznamenáno) a nové zprávy z hry. " +
   "Vrať POUZE JSON pole objektů ve tvaru " +
-  '{"category": "player"|"world"|"npc"|"event"|"quest", "subject": string, "fact": string, "action": "upsert"|"remove"}. ' +
+  '{"category": "player"|"world"|"npc"|"event"|"quest", "subject": string, "sub_key": string (volitelné), "fact": string, "action": "upsert"|"remove"}. ' +
+  'Použij "sub_key" pro rozlišení více faktů se stejným subjektem (např. subject "Hráč" + sub_key "meč" pro fakt "má meč" a sub_key "štít" pro fakt "má štít") — ' +
+  "zabraňuje to přepsání prvního faktu druhým. Pokud sub_key nevyplníš, použije se prázdný řetězec. " +
   "Zaznamenávej jen fakta trvalé povahy (kdo je kdo, co se stalo, kde jsme, cíle úkolů) — " +
   "ne přechodné popisy nálady nebo dialogu. Použij 'remove' pro fakta, která už neplatí.\n\n" +
   "Zvláštní pozornost věnuj faktům, které brání driftu žánru a tónu hry — tato hra se hraje " +
@@ -159,12 +183,15 @@ const EXTRACTION_SYSTEM_PROMPT =
   "remove) — konverzace se s ním musí srovnat, ne naopak.\n\n" +
   "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.";
 
-function formatSnapshot(facts: LedgerSnapshotFact[]): string {
+function formatSnapshot(facts: LedgerSnapshotFact[], summary?: string): string {
   if (facts.length === 0) return "(ledger je zatím prázdný)";
-  return facts
-    .filter((f) => f.status === "active")
-    .map((f) => `- (${f.category}/${f.subject}) ${f.fact}${f.locked ? " [ZAMČENO]" : ""}`)
-    .join("\n");
+  const active = facts.filter((f) => f.status === "active");
+  const lines = active.map((f) => {
+    const key = f.sub_key ? `${f.category}/${f.subject}/${f.sub_key}` : `${f.category}/${f.subject}`;
+    return `- (${key}) ${f.fact}${f.locked ? " [ZAMČENO]" : ""}`;
+  });
+  if (summary) lines.push(summary);
+  return lines.join("\n");
 }
 
 /** Transcript message with an optional group-chat speaker name (plan §M10)
@@ -175,6 +202,70 @@ function formatNewMessages(messages: TranscriptChatMessage[]): string {
   return messages
     .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč")}: ${m.content}`)
     .join("\n");
+}
+
+const EXTRACTION_MIN_COSINE = 0.3;
+
+/** Selects facts relevant to the new messages by embedding the messages
+ * as a query and keeping only facts whose stored embedding has a cosine
+ * similarity > `EXTRACTION_MIN_COSINE`. Locked facts and facts without an
+ * embedding yet are always included. Returns the filtered list plus a
+ * human-readable summary line for the prompt. Falls back to the full
+ * snapshot on any error (never throws per plan §9). */
+async function selectRelevantFactsForExtraction(
+  chatId: string,
+  connection: ConnectionConfig,
+  snapshot: LedgerSnapshotFact[],
+  newMessages: TranscriptChatMessage[],
+): Promise<{ filtered: LedgerSnapshotFact[]; summary: string }> {
+  try {
+    if (!canEmbed(connection)) return { filtered: snapshot, summary: "" };
+    if (snapshot.length === 0) return { filtered: snapshot, summary: "" };
+
+    const queryText = formatNewMessages(newMessages);
+    if (!queryText.trim()) return { filtered: snapshot, summary: "" };
+
+    const { vectors } = await embedTexts(connection, [queryText]);
+    const queryVec = Float32Array.from(vectors[0]);
+
+    const stored = await listEmbeddings(chatId, "fact");
+    const storedByRefId = new Map(stored.map((e) => [e.refId, e]));
+
+    const relevant: LedgerSnapshotFact[] = [];
+    const skippedLabels: string[] = [];
+
+    for (const fact of snapshot) {
+      if (fact.locked) {
+        relevant.push(fact);
+        continue;
+      }
+      const emb = storedByRefId.get(fact.id);
+      if (!emb) {
+        // Not embedded yet — include by default
+        relevant.push(fact);
+        continue;
+      }
+      const score = cosineSimilarity(queryVec, decodeVector(emb.vector));
+      if (score > EXTRACTION_MIN_COSINE) {
+        relevant.push(fact);
+      } else {
+        const key = fact.sub_key
+          ? `${fact.category}/${fact.subject}/${fact.sub_key}`
+          : `${fact.category}/${fact.subject}`;
+        skippedLabels.push(`(${key}) ${fact.fact}`);
+      }
+    }
+
+    const summary =
+      skippedLabels.length > 0
+        ? `\n(Dalších ${skippedLabels.length} faktů v ledgeru není relevantních k novým zprávám: ${skippedLabels.slice(0, 4).join("; ")}${skippedLabels.length > 4 ? "…" : ""})`
+        : "";
+
+    return { filtered: relevant, summary };
+  } catch {
+    // Any error → fall back to full snapshot (never throw per plan §9)
+    return { filtered: snapshot, summary: "" };
+  }
 }
 
 /** Runs one extraction pass for a chat: builds the prompt from the current
@@ -194,16 +285,22 @@ export async function runExtraction(
       id: f.id,
       category: f.category,
       subject: f.subject,
+      sub_key: f.sub_key,
       fact: f.fact,
       status: f.status,
       locked: f.locked,
     }));
 
+    // A6: differential extraction — only send relevant facts to the LLM
+    const { filtered, summary } = await selectRelevantFactsForExtraction(
+      chatId, connection, snapshot, newMessages,
+    );
+
     const prompt: ChatMessage[] = [
       { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
       {
         role: "user",
-        content: `Snapshot ledgeru:\n${formatSnapshot(snapshot)}\n\nNové zprávy:\n${formatNewMessages(newMessages)}`,
+        content: `Snapshot ledgeru:\n${formatSnapshot(filtered, summary)}\n\nNové zprávy:\n${formatNewMessages(newMessages)}`,
       },
     ];
 
@@ -217,9 +314,9 @@ export async function runExtraction(
     const ops = mergeExtractedFacts(snapshot, extracted);
     for (const op of ops) {
       if (op.kind === "insert" || op.kind === "update") {
-        await applyLedgerUpsert(chatId, op.category, op.subject, op.fact);
+        await applyLedgerUpsert(chatId, op.category, op.subject, op.sub_key, op.fact);
       } else if (op.kind === "archive") {
-        await applyLedgerRemove(chatId, op.category, op.subject);
+        await applyLedgerRemove(chatId, op.category, op.subject, op.sub_key);
       }
       // "skip" ops are no-ops by definition (locked, or nothing to remove).
     }
