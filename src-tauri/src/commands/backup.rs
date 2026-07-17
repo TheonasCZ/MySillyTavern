@@ -307,8 +307,8 @@ pub struct BackupEntry {
 }
 
 /// Creates a timestamped backup zip in `$APPDATA/backups/`, then rotates
-/// old backups so at most `max_count` remain.  Spawned from the setup hook
-/// (with default `max_count`) and also callable from the frontend on-demand.
+/// old backups so at most `max_count` remain. Invoked by the frontend at
+/// startup (App.tsx, honoring the auto-backup settings) and on-demand.
 #[tauri::command]
 pub fn run_auto_backup(app: AppHandle, max_count: Option<usize>) -> Result<String, String> {
     let max_count = max_count.unwrap_or(DEFAULT_MAX_BACKUPS);
@@ -394,28 +394,6 @@ pub fn list_backups(app: AppHandle) -> Result<Vec<BackupEntry>, String> {
     }
     entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(entries)
-}
-
-/// Entry-point called from the Tauri setup hook (before the frontend
-/// opens the DB). Uses the default max-backup count since the settings
-/// table isn't accessible yet. The work is spawned onto a background
-/// thread so it doesn't block startup.
-pub fn run_auto_backup_at_startup(app: &AppHandle) {
-    let app_handle = app.clone();
-    std::thread::spawn(move || {
-        if let Err(e) = (|| -> Result<(), String> {
-            let dir = backups_dir(&app_handle)?;
-            let ts = format_timestamp(SystemTime::now());
-            let name = format!("mysillytavern-backup-{ts}.zip");
-            let out_path = dir.join(&name);
-            let out_str = out_path.to_string_lossy().to_string();
-            export_backup_inner(&app_handle, &out_str)?;
-            cleanup_old_backups(&app_handle, DEFAULT_MAX_BACKUPS);
-            Ok(())
-        })() {
-            eprintln!("run_auto_backup_at_startup failed: {e}");
-        }
-    });
 }
 
 #[cfg(test)]

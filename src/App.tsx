@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import { getAutoBackupEnabled, getAutoBackupMaxCount, runAutoBackup } from "./db/backup";
 import { useSettingsStore } from "./stores/settingsStore";
 import { CardEditor } from "./ui/characters/CardEditor";
 import { GalleryScreen } from "./ui/characters/GalleryScreen";
@@ -18,6 +19,20 @@ function App() {
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  // Startup auto-backup (M14.1) — driven from the frontend so it can respect
+  // the settings stored in SQLite and checkpoint the WAL before zipping.
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (await getAutoBackupEnabled()) {
+          await runAutoBackup(await getAutoBackupMaxCount());
+        }
+      } catch (err) {
+        console.warn("startup auto-backup failed:", err);
+      }
+    })();
+  }, []);
 
   if (!hydrated) {
     return null;

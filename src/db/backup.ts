@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 import { getDb } from "./database";
+import { getSetting, setSetting } from "./repositories/settingsRepo";
 
 /** Flushes SQLite's write-ahead log into the main DB file so a copy of that
  * file alone (no `-wal`/`-shm` sidecars needed) is a complete, consistent
@@ -56,4 +57,52 @@ export async function cancelPendingImport(): Promise<void> {
 export async function restartApp(): Promise<void> {
   const { relaunch } = await import("@tauri-apps/plugin-process");
   await relaunch();
+}
+
+// ── M14.1 auto-backup ───────────────────────────────────────────────────
+
+export interface BackupEntry {
+  path: string;
+  size: number;
+  created_at: string;
+}
+
+const AUTO_BACKUP_ENABLED_KEY = "auto_backup_enabled";
+const AUTO_BACKUP_MAX_COUNT_KEY = "auto_backup_max_count";
+
+/** Reads the auto-backup enabled flag (defaults to true). */
+export async function getAutoBackupEnabled(): Promise<boolean> {
+  const raw = await getSetting(AUTO_BACKUP_ENABLED_KEY);
+  if (raw === null) return true; // default: on
+  return raw === "true";
+}
+
+export async function setAutoBackupEnabled(enabled: boolean): Promise<void> {
+  await setSetting(AUTO_BACKUP_ENABLED_KEY, enabled ? "true" : "false");
+}
+
+/** Reads the max backup count (defaults to 5). Clamped to 1–20. */
+export async function getAutoBackupMaxCount(): Promise<number> {
+  const raw = await getSetting(AUTO_BACKUP_MAX_COUNT_KEY);
+  if (raw === null) return 5;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return 5;
+  return Math.min(Math.round(n), 20);
+}
+
+export async function setAutoBackupMaxCount(count: number): Promise<void> {
+  const clamped = Math.max(1, Math.min(20, Math.round(count)));
+  await setSetting(AUTO_BACKUP_MAX_COUNT_KEY, String(clamped));
+}
+
+/** Creates a backup in `$APPDATA/backups/` and rotates old ones.
+ * Returns the path of the newly created backup. */
+export async function runAutoBackup(maxCount?: number): Promise<string> {
+  await checkpoint();
+  return invoke<string>("run_auto_backup", { maxCount: maxCount ?? null });
+}
+
+/** Lists existing auto-backups, newest first. */
+export async function listBackups(): Promise<BackupEntry[]> {
+  return invoke<BackupEntry[]>("list_backups");
 }

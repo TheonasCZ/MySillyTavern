@@ -144,21 +144,21 @@
       "addGreeting": "Add variant",
       "tagsPlaceholder": "tag1, tag2, tag3",
       "systemPromptHint": "Leave empty to use the default RP instruction.",
-        "fields": {
-          "name": "Name",
-          "description": "Description",
-          "personality": "Personality",
-          "scenario": "Scenario",
-          "firstMes": "First message",
-          "alternateGreetings": "Alternate greetings",
-          "mesExample": "Example messages",
-          "systemPrompt": "System prompt",
-          "postHistoryInstructions": "Post-history instructions",
-          "creatorNotes": "Creator notes",
-          "tags": "Tags (comma-separated)",
-          "ttsVoice": "TTS voice"
-        },
-        "ttsVoiceDefault": "Default voice",
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "personality": "Personality",
+        "scenario": "Scenario",
+        "firstMes": "First message",
+        "alternateGreetings": "Alternate greetings",
+        "mesExample": "Example messages",
+        "systemPrompt": "System prompt",
+        "postHistoryInstructions": "Post-history instructions",
+        "creatorNotes": "Creator notes",
+        "tags": "Tags (comma-separated)",
+        "ttsVoice": "TTS voice"
+      },
+      "ttsVoiceDefault": "Default voice",
       "help": {
         "name": "The character's name as the AI uses it when writing their lines and as shown in the chat.",
         "description": "The character's core description — appearance, background, key traits. Sent to the AI in every prompt, so keep it concise and to the point.",
@@ -408,13 +408,24 @@
       "importWarning": "Importing will overwrite all current data (chats, characters, personas, lorebooks, memory, and avatars) with the backup's contents. This cannot be undone. Continue and restart the app?",
       "pendingRestart": "An import is staged — it will take effect after the app restarts.",
       "restartNow": "Restart and finish import",
-      "cancelImport": "Cancel import"
+      "cancelImport": "Cancel import",
+      "autoBackupTitle": "Automatic backups",
+      "autoBackupHint": "On app start a ZIP backup is created in the backups folder and old backups are rotated out.",
+      "autoBackupEnabled": "Back up automatically on start",
+      "autoBackupMaxCount": "Keep backups",
+      "backupNow": "Back up now",
+      "backupNowRunning": "Backing up…",
+      "backupNowDone": "Backup created: {{path}}",
+      "backupNowError": "Backup failed: {{message}}",
+      "existingBackups": "Existing backups",
+      "noBackups": "No automatic backups yet."
     },
     "diagnostics": {
       "title": "Diagnostics",
       "subtitle": "App errors are automatically written to a file — attach it when reporting a bug.",
       "logPathLabel": "Log path",
-      "openLogs": "Open log folder"
+      "openLogs": "Open log folder",
+      "openLogFile": "Open log"
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
