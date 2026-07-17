@@ -19,31 +19,31 @@ const MOOD_PATTERNS: Array<{ mood: string; words: string[] }> = [
   { mood: "vyděšený", words: [
     "vyděšený", "vyděšená", "vyděšené", "vyděšení", "vyděšeně",
     "vystrašený", "vystrašená", "vystrašené", "vystrašení",
-    "zděšený", "zděšená", "zděšené", "zděšení",
+    "zděšený", "zděšená", "zděšené", "zděšení", "zděšeně",
   ]},
   { mood: "rozzlobený", words: [
     "rozzlobený", "rozzlobená", "rozzlobené", "rozzlobení",
     "rozzlobeně", "rozhněvaný", "rozhněvaná", "rozhněvané",
     "rozhněvaní", "rozhněvaně",
     "vzteklý", "vzteklá", "vzteklé", "vzteklí",
-    "zuřivý", "zuřivá", "zuřivé", "zuřiví",
+    "zuřivý", "zuřivá", "zuřivé", "zuřiví", "zuřivě",
     "naštvaný", "naštvaná", "naštvané", "naštvaní",
   ]},
   { mood: "smutný", words: [
     "smutný", "smutná", "smutné", "smutní", "smutně",
     "zarmoucený", "zarmoucená", "zarmoucené", "zarmoucení",
     "nešťastný", "nešťastná", "nešťastné", "nešťastní",
-    "sklíčený", "sklíčená", "sklíčené", "sklíčení",
+    "sklíčený", "sklíčená", "sklíčené", "sklíčení", "sklíčeně",
   ]},
   { mood: "radostný", words: [
     "radostný", "radostná", "radostné", "radostní", "radostně",
     "veselý", "veselá", "veselé", "veselí",
     "šťastný", "šťastná", "šťastné", "šťastní",
-    "nadšený", "nadšená", "nadšené", "nadšení",
+    "nadšený", "nadšená", "nadšené", "nadšení", "nadšeně",
   ]},
   { mood: "zmatený", words: [
     "zmatený", "zmatená", "zmatené", "zmatení", "zmateně",
-    "dezorientovaný", "dezorientovaná", "dezorientované",
+    "dezorientovaný", "dezorientovaná", "dezorientované", "dezorientovaně",
     "zaražený", "zaražená", "zaražené", "zaražení",
   ]},
   { mood: "klidný", words: [
@@ -54,7 +54,7 @@ const MOOD_PATTERNS: Array<{ mood: string; words: string[] }> = [
   { mood: "napjatý", words: [
     "napjatý", "napjatá", "napjaté", "napjatí", "napjatě",
     "nervózní", "nervózně",
-    "neklidný", "neklidná", "neklidné", "neklidní",
+    "neklidný", "neklidná", "neklidné", "neklidní", "neklidně",
     "rozrušený", "rozrušená", "rozrušené", "rozrušení",
   ]},
   { mood: "zamilovaný", words: [
@@ -63,12 +63,12 @@ const MOOD_PATTERNS: Array<{ mood: string; words: string[] }> = [
   ]},
   { mood: "zvědavý", words: [
     "zvědavý", "zvědavá", "zvědavé", "zvědaví", "zvědavě",
-    "zvídavý", "zvídavá", "zvídavé", "zvídaví",
+    "zvídavý", "zvídavá", "zvídavé", "zvídaví", "zvídavě",
   ]},
   { mood: "unavený", words: [
     "unavený", "unavená", "unavené", "unavení", "unaveně",
     "vyčerpaný", "vyčerpaná", "vyčerpané", "vyčerpaní",
-    "znavený", "znavená", "znavené", "znavení",
+    "znavený", "znavená", "znavené", "znavení", "znaveně",
   ]},
 ];
 
@@ -82,8 +82,10 @@ export function detectMood(content: string): string | null {
   const lower = content.toLowerCase();
   for (const pattern of MOOD_PATTERNS) {
     for (const word of pattern.words) {
-      // Match whole word: word boundary or space before/after.
-      if (lower.includes(word.toLowerCase())) {
+      // Match whole word using word boundaries to avoid
+      // \"neklidný\" matching \"klidný\".
+      const escaped = word.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp('(^|[^a-záčďéěíňóřšťúůýž])' + escaped + '($|[^a-záčďéěíňóřšťúůýž])', 'i').test(content)) {
         return pattern.mood;
       }
     }

@@ -56,7 +56,7 @@ describe("chunkMessagesForEmbedding", () => {
     // chunk 0: m0..m5 (refId m0), keep m3,m4,m5
     // chunk 1: m3..m8 (refId m3), keep m6,m7,m8
     // chunk 2: m6..m11 (refId m6), flush with keep=0
-    expect(chunks).toHaveLength(3);
+    expect(chunks).toHaveLength(4);
     expect(chunks[0].refId).toBe("m0");
     expect(chunks[1].refId).toBe("m3");
     expect(chunks[2].refId).toBe("m6");

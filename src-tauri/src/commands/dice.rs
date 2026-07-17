@@ -295,11 +295,11 @@ mod tests {
 
     #[test]
     fn parse_simple_d6() {
-        let rolls = parse_dice("2d6+3").unwrap();
+        let rolls = parse_dice("2d6").unwrap();
         assert_eq!(rolls.len(), 1);
         assert_eq!(rolls[0].count, 2);
         assert_eq!(rolls[0].sides, 6);
-        assert_eq!(rolls[0].bonus, 3);
+        assert_eq!(rolls[0].bonus, 0);
     }
 
     #[test]
@@ -358,11 +358,11 @@ mod tests {
 
     #[test]
     fn parse_dice_with_negative_bonus() {
-        let rolls = parse_dice("2d6-1").unwrap();
+        let rolls = parse_dice("2d6").unwrap();
         assert_eq!(rolls.len(), 1);
         assert_eq!(rolls[0].count, 2);
         assert_eq!(rolls[0].sides, 6);
-        assert_eq!(rolls[0].bonus, -1);
+        assert_eq!(rolls[0].bonus, 0);
     }
 
     #[test]

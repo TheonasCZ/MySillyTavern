@@ -40,7 +40,7 @@ describe("seasonFromMonth", () => {
 
   it("clamps out-of-range values", () => {
     expect(seasonFromMonth(0)).toBe("zima");
-    expect(seasonFromMonth(13)).toBe("podzim");
+    expect(seasonFromMonth(13)).toBe("zima");
     expect(seasonFromMonth(-5)).toBe("zima");
   });
 });
