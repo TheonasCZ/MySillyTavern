@@ -1,8 +1,7 @@
 name: Build Windows
 
+# Ruční smoke-test build; distribuci Windows verzí řeší release.yml (tag v*).
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
