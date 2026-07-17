@@ -74,6 +74,7 @@ export async function processGameResponse(
 
   // Apply inventory mutations
   const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
+  const newlyAddedItems: string[] = [];
   for (const m of mutations) {
     const existing = inv.find((i) => i.item.toLowerCase() === m.item.toLowerCase());
     if (m.op === "add") {
@@ -81,6 +82,7 @@ export async function processGameResponse(
         existing.qty += m.qty;
       } else {
         inv.push({ item: m.item, qty: m.qty });
+        newlyAddedItems.push(m.item);
       }
     } else {
       if (existing) {
@@ -193,6 +195,7 @@ export async function processGameResponse(
         existingItem.qty += 1;
       } else {
         inv.push({ item: cdm.resultItem, qty: 1 });
+        newlyAddedItems.push(cdm.resultItem);
       }
       // Update the recipe's perks
       const recipe = await getRecipeByResult(persona.id, cdm.resultItem);
@@ -221,6 +224,19 @@ export async function processGameResponse(
     }
   } catch {
     // Non-critical
+  }
+
+  // Auto-illustration trigger: enqueue newly added inventory items that
+  // don't have an image yet (queue itself checks image_gen_enabled/limit).
+  if (newlyAddedItems.length > 0) {
+    try {
+      const { enqueueIllustration } = await import("../memory/imageGenQueue");
+      for (const itemName of newlyAddedItems) {
+        enqueueIllustration("inventory", persona.id, `Fantasy game item icon: ${itemName}`, itemName);
+      }
+    } catch {
+      // Non-critical
+    }
   }
 
   // Tag validation: warn about excessive or malformed tags in next prompt
