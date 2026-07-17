@@ -32,6 +32,80 @@ export const DEFAULT_EXTRACTION_INTERVAL = 10;
  * §6.3 (only the extraction interval and verbatim window are settings). */
 export const SUMMARIZE_TRIGGER_THRESHOLD = 10;
 
+// ---- Adaptive extraction interval (A5) ---------------------------------
+
+/** Minimum number of messages before an early extraction can fire. */
+export const MIN_EXTRACTION_MESSAGES = 5;
+/** Info-density threshold above which we extract early. */
+export const HIGH_DENSITY_THRESHOLD = 0.6;
+
+const PROPER_NOUN_RE = /\b[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][a-záčďéěíňóřšťúůýž]+\b/g;
+const BASELINE_MESSAGE_LENGTH = 100;
+
+/**
+ * Pure heuristic: estimate how "information-dense" a batch of messages is.
+ * Returns a number 0–1 where higher means more substantial content.
+ *
+ * Three signals, each normalised to 0–1:
+ * 1. Named-entity density — capitalised words that appear ≥ 2× or are *not*
+ *    the first token of a message (excludes sentence‑start false positives).
+ * 2. Lexical diversity — unique‑word ratio (`unique / total`).
+ * 3. Average message length relative to a 100‑char baseline.
+ *
+ * The final score is the unweighted average of the three.
+ */
+export function computeInfoDensity(messages: Message[]): number {
+  if (messages.length === 0) return 0;
+
+  let totalWords = 0;
+  const wordFreq = new Map<string, number>();
+  let neCount = 0;
+
+  // First pass: count word frequencies
+  for (const m of messages) {
+    const content = m.content.trim();
+    if (content.length === 0) continue;
+    const words = content.split(/\s+/);
+    for (const w of words) {
+      totalWords++;
+      const lower = w.toLowerCase();
+      wordFreq.set(lower, (wordFreq.get(lower) ?? 0) + 1);
+    }
+  }
+
+  if (totalWords === 0) return 0;
+
+  // Second pass: count named entities
+  // Capitalised word is counted as a NE if it appears ≥ 2× OR is not the
+  // first token of its message (excludes sentence‑start false positives).
+  for (const m of messages) {
+    const content = m.content.trim();
+    if (content.length === 0) continue;
+    const words = content.split(/\s+/);
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (!PROPER_NOUN_RE.test(w)) continue;
+      const freq = wordFreq.get(w.toLowerCase()) ?? 0;
+      if (freq >= 2 || i > 0) {
+        neCount++;
+      }
+    }
+  }
+
+  // 1. NE density: cap at 0.3 NE/word → score 1.0
+  const neScore = Math.min(neCount / totalWords / 0.3, 1);
+
+  // 2. Lexical diversity: unique / total
+  const uniqueWords = wordFreq.size;
+  const lexScore = uniqueWords / totalWords;
+
+  // 3. Average message length
+  const avgLen = messages.reduce((sum, m) => sum + m.content.length, 0) / messages.length;
+  const lenScore = Math.min(avgLen / BASELINE_MESSAGE_LENGTH, 1);
+
+  return (neScore + lexScore + lenScore) / 3;
+}
+
 interface QueueEntry {
   running: boolean;
   pendingRerun: boolean;
@@ -108,7 +182,15 @@ async function runDueWork(chatId: string): Promise<void> {
     ? messages.findIndex((m) => m.id === chat.lastExtractedMessageId)
     : -1;
   const newSinceExtraction = messages.slice(lastExtractedIdx + 1);
-  if (newSinceExtraction.length >= extractionInterval) {
+
+  // Adaptive interval: extract early when information density is high
+  const density = computeInfoDensity(newSinceExtraction);
+  const effectiveInterval =
+    newSinceExtraction.length >= MIN_EXTRACTION_MESSAGES && density > HIGH_DENSITY_THRESHOLD
+      ? MIN_EXTRACTION_MESSAGES
+      : extractionInterval;
+
+  if (newSinceExtraction.length >= effectiveInterval) {
     const connection = await resolveExtractionConnection(
       chat.extractionConnectionId,
       chat.connectionId,

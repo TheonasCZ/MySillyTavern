@@ -9,6 +9,7 @@ import { getSummary, upsertSummary } from "../db/repositories/summariesRepo";
 import type { Message } from "../db/repositories/messagesRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
+import { scoreImportance, formatScoredMessages } from "./importance";
 
 const SUMMARY_SYSTEM_PROMPT =
   "Jsi nástroj, který udržuje stručné shrnutí dosavadního příběhu RP hry. Dostaneš " +
@@ -16,6 +17,12 @@ const SUMMARY_SYSTEM_PROMPT =
   "aktualizované shrnutí v maximálně přibližně 300 slovech, které zahrnuje staré i nové " +
   "podstatné události v chronologickém pořadí. Piš věcně, ve třetí osobě, bez uvozovek a " +
   "bez nadpisů — jen souvislý text shrnutí, nic jiného.\n\n" +
+  "Nové události jsou označeny značkami:\n" +
+  "- [důležité] — zpráva s vysokou informační hodnotou (klíčové dějové zvraty, důležitá " +
+  "fakta, jména, rozhodnutí). Těm věnuj největší pozornost.\n" +
+  "- [rutinní] — běžná, opakující se nebo málo informační komunikace (pozdravy, " +
+  "souhlas, krátké odpovědi). Tyto zprávy jsou již zkomprimované do souhrnných řádků; " +
+  "nezahrnuj je do shrnutí, pokud neobsahují novou informaci.\n\n" +
   "Toto shrnutí je jediná paměť dlouhodobého děje, kterou hra má — udržuj proto žánr, tón " +
   "a zavedená pravidla světa stejná, jaká byla na začátku dosavadního shrnutí, i když nové " +
   "události ve zprávách postupně vyznívají jinak (např. fantasy svět, který ve zprávách " +
@@ -37,14 +44,21 @@ function formatMessages(messages: TranscriptMessage[]): string {
 
 /** Builds the messages array for the chat_complete call. Pure/testable in
  * isolation from the DB/provider wiring. */
-export function buildSummaryPrompt(previousSummary: string, newMessages: TranscriptMessage[]): ChatMessage[] {
+export function buildSummaryPrompt(
+  previousSummary: string,
+  newMessages: TranscriptMessage[],
+  scores?: Map<string, number>,
+): ChatMessage[] {
+  const formatted = scores
+    ? formatScoredMessages(newMessages, scores)
+    : formatMessages(newMessages);
   return [
     { role: "system", content: SUMMARY_SYSTEM_PROMPT },
     {
       role: "user",
       content:
         `Dosavadní shrnutí:\n${previousSummary.trim() || "(zatím žádné)"}\n\n` +
-        `Nové události:\n${formatMessages(newMessages)}`,
+        `Nové události:\n${formatted}`,
     },
   ];
 }
@@ -63,7 +77,8 @@ export async function runSummarization(
   if (messagesToFold.length === 0) return;
   try {
     const existing = await getSummary(chatId);
-    const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold);
+    const scores = scoreImportance(messagesToFold);
+    const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold, scores);
     const text = await chatComplete(connection, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
     void logUsage("memory", connection.id, inputTokens, estimateTokens(text)).catch(() => {});
