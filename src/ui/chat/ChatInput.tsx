@@ -26,6 +26,8 @@ interface Props {
   showSuggestButton?: boolean;
   onSuggest: () => void;
   onClearSuggestions: () => void;
+  /** 0.0–1.0 fill ratio of the context budget. Green < 0.5, yellow < 0.8, red >= 0.8. */
+  contextUsage?: number;
 }
 
 export function ChatInput({
@@ -39,6 +41,7 @@ export function ChatInput({
   showSuggestButton = true,
   onSuggest,
   onClearSuggestions,
+  contextUsage,
 }: Props) {
   const { t } = useTranslation("chat");
   const [value, setValue] = useState("");
@@ -152,6 +155,22 @@ export function ChatInput({
           </button>
         </div>
       )}
+      {/* Context bar — shows how full the prompt window is */}
+      {contextUsage !== undefined && (
+        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--color-text-faint)" }}>
+          <div className="h-1 flex-1 rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-surface-2)" }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(contextUsage * 100, 100)}%`,
+                backgroundColor: contextUsage > 0.8 ? "var(--color-danger)" : contextUsage > 0.5 ? "var(--color-brass)" : "var(--color-success)",
+              }}
+            />
+          </div>
+          <span>{Math.round(contextUsage * 100)}%</span>
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
       {showSuggestButton && (
       <button

@@ -137,6 +137,12 @@ export function ChatScreen() {
   const membersById = new Map<string, MemberInfo>(
     memberCharacters.map((c) => [c.id, { name: c.name, avatarUrl: avatarSrc(c.avatarPath) }]),
   );
+
+  // Rough context usage estimate: total chars in messages / 3 chars-per-token / budget
+  const contextUsage = connection
+    ? Math.min(1, messages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) / 3 / connection.contextBudget)
+    : 0;
+
   const primaryCharacter = chat ? memberCharacters.find((c) => c.id === chat.characterId) : undefined;
   const fallbackCharacter: MemberInfo = {
     name: primaryCharacter?.name ?? "",
@@ -399,6 +405,7 @@ export function ChatScreen() {
               clearSuggestions();
               if (lastMessage?.role === "assistant") setDismissedSuggestionsMsgId(lastMessage.id);
             }}
+            contextUsage={contextUsage}
           />
         </div>
 
