@@ -27,11 +27,11 @@ Dokončeno ve třech vlnách (commity `bae2320`, `a80c967`, `2be3d7b`):
 
 ---
 
-## M12 — Nástroje vypravěče (kronika, export, statistiky) — z větší části hotovo
+## M12 — Nástroje vypravěče (kronika, export, statistiky) — ✅ HOTOVO
 
-1. ⚠️ **Kronika (timeline)** — export kroniky hotový (viz „M19" commity
-   `6697a36`, `7ae5650`: Rust `export_chronicle` + UI + témata); interaktivní
-   timeline v Memory panelu se skokem na zprávu zbývá ověřit/dodělat.
+1. ✅ **Kronika (timeline)** — záložka Kronika v Memory panelu (commit
+   `66e4908`): chronologicky scény + fakta, skok na zprávu s donačtením
+   starší historie; export kroniky viz „M19" commity `6697a36`, `7ae5650`.
 2. ✅ **Export příběhu** — HTML/Markdown export s tématy
    (`src-tauri/src/commands/export_chronicle.rs`, `src/chat/chronicleThemes.ts`).
 3. ✅ **Statistiky** — `UsagePanel` v Nastavení, `usageRepo`
@@ -59,8 +59,9 @@ Zbývá ověřit ručně: dostupnost hlasů ve WebKitGTK na reálném systému
 ## M14 — Sync a zálohy 2.0 — bod 1 hotov
 
 1. ✅ **Automatické lokální zálohy** — rotující ZIP do `$APPDATA/backups/`
-   při startu, `run_auto_backup` + `list_backups` (commit `c2342e7`),
-   UI v `BackupPanel` (working tree).
+   při startu (řízeno z frontendu, respektuje nastavení, WAL checkpoint),
+   UI v `BackupPanel`: toggle, počet, „zálohovat teď", seznam záloh
+   (commity `c2342e7`, `64fb91a`).
 2. ⬜ **Sync přes složku** (Syncthing/Nextcloud/Dropbox — bez vlastního
    cloudu): volitelná „sync složka"; žurnál změn (append-only JSONL per
    zařízení + snapshoty). Merge: last-write-wins per entita (zprávy
@@ -142,7 +143,6 @@ undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 | Milník | Stav | Poznámka |
 |--------|------|----------|
-| M12 dodělat | kronika-timeline (WIP v MemoryPanel) | malý zbytek |
 | M13 TTS | ✅ hotovo | jen ručně ověřit hlasy ve WebKitGTK |
 | M14 sync | body 2–3 | velký; začít žurnálem a zprávami |
 | M15 mobil fáze B | po M14 | 8–14 dnů dle průzkumu |
