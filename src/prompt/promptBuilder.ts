@@ -27,7 +27,10 @@
  * only size-capped at build time, never cut under budget pressure. */
 
 import type { LoreEntryLike } from "../lorebooks/activation";
+import type { ConnectionConfig } from "../providers/types";
+import { cosineSimilarity } from "../memory/vector";
 import { estimateTokens } from "./tokenEstimate";
+import { syncCountTokens } from "./tokenCounter";
 
 export interface CharacterLike {
   name: string;
@@ -93,6 +96,16 @@ export interface PromptBuilderInput {
    * "speak only as {{char}}" instruction near post_history_instructions.
    * Omitting this field (the solo-chat case) leaves the output unchanged. */
   groupMembers?: Array<{ name: string; description: string }>;
+  /** Connection whose model selects the best available token counter
+   * (tiktoken for OpenAI, etc.). When absent, falls back to the rough
+   * `estimateTokens` chars-per-token approximation. */
+  connection?: ConnectionConfig;
+  /** Optional pre-decoded fact embedding vectors (fact id → raw f32 array).
+   * When present, enables MMR-based diversity selection during fact
+   * trimming instead of the simple least-relevance-first cut.  Callers
+   * (e.g. chatStore) decode the base64 vectors once and pass them here so
+   * PromptBuilder stays pure (no DB/Tauri imports). */
+  factVectors?: Record<string, number[]>;
 }
 
 export interface PromptReport {
@@ -288,6 +301,84 @@ function buildMemoriesSection(memories: string[]): string {
     .join("\n")}`;
 }
 
+// ---- MMR diversity selection ----------------------------------------------
+
+/**
+ * Maximal Marginal Relevance (MMR) selection for fact diversity (plan §A4).
+ *
+ * Iteratively selects `k` facts from `facts` that balance relevance (λ)
+ * against diversity (1-λ).  The first fact is always the most relevant one;
+ * each subsequent pick maximizes `λ * relevance(f) - (1-λ) *
+ * max_similarity(f, already_selected)`.  Falls back to relevance-only ranking
+ * when `factVectors` is absent or a fact's vector is missing.
+ *
+ * O(n²) for n facts — fine for the typical ledger size (hundreds max). */
+function selectDiverseFacts(
+  facts: LedgerFactLike[],
+  relevance: Record<string, number>,
+  factVectors: Record<string, number[]> | undefined,
+  k: number,
+  lambda: number,
+): LedgerFactLike[] {
+  if (k >= facts.length) return [...facts];
+  if (k <= 0) return [];
+
+  const selected: LedgerFactLike[] = [];
+  const remaining = [...facts];
+
+  // Convert vectors once to Float32Array for cosineSimilarity.
+  const vectors = new Map<string, Float32Array>();
+  if (factVectors) {
+    for (const [id, vec] of Object.entries(factVectors)) {
+      vectors.set(id, Float32Array.from(vec));
+    }
+  }
+
+  // First pick: most relevant.
+  remaining.sort((a, b) => {
+    const ra = relevance[a.id] ?? 0;
+    const rb = relevance[b.id] ?? 0;
+    return rb - ra;
+  });
+  const first = remaining.shift()!;
+  selected.push(first);
+
+  // Subsequent picks: MMR.
+  while (selected.length < k && remaining.length > 0) {
+    const selVecs = selected
+      .map((s) => vectors.get(s.id))
+      .filter((v): v is Float32Array => !!v);
+
+    let bestIdx = 0;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const f = remaining[i];
+      const rel = relevance[f.id] ?? 0;
+      const fVec = vectors.get(f.id);
+
+      let maxSim = 0;
+      if (fVec && selVecs.length > 0) {
+        for (const sv of selVecs) {
+          const sim = cosineSimilarity(fVec, sv);
+          if (sim > maxSim) maxSim = sim;
+        }
+      }
+
+      const mmr = lambda * rel - (1 - lambda) * maxSim;
+      if (mmr > bestScore) {
+        bestScore = mmr;
+        bestIdx = i;
+      }
+    }
+
+    const [next] = remaining.splice(bestIdx, 1);
+    selected.push(next);
+  }
+
+  return selected;
+}
+
 function assembleSystemMessage(sections: string[]): string {
   return sections.filter(Boolean).join("\n\n");
 }
@@ -378,13 +469,24 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     history: PromptMessage[],
     phi: string,
   ) {
+    // Use model-specific counting for the three largest sections when a
+    // connection is available (plan §A3).  Falls back to the rough
+    // chars-per-token estimate for all other sections and when
+    // syncCountTokens hasn't preloaded tiktoken yet.
+    const useModel = input.connection;
+    const count = useModel
+      ? (text: string) => syncCountTokens(useModel.model, text)
+      : estimateTokens;
+
     return {
-      systemTokens: estimateTokens(core) + estimateTokens(mesExample),
-      factsTokens: estimateTokens(factsSection),
+      systemTokens: count(core) + estimateTokens(mesExample),
+      factsTokens: count(factsSection),
       loreTokens: estimateTokens(loreSection),
       summaryTokens: estimateTokens(summarySection),
       memoriesTokens: estimateTokens(memoriesSection),
-      historyTokens: history.reduce((sum, m) => sum + estimateTokens(m.content), 0) + estimateTokens(phi),
+      historyTokens: count(
+        history.map((m) => m.content).join("\n"),
+      ),
     };
   }
 
@@ -425,9 +527,36 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   }
 
   // (d) trim facts event -> quest -> npc (world/player never touched).
-  // With a relevance map, the least relevant fact in the category goes
-  // first; without one, this degrades to the original first-found order.
+  // With factVectors (plan §A4): use MMR to pre-rank facts per category
+  // so the trimmer always cuts the least diverse+relevant fact first.
+  // Without factVectors: the original relevance-only (or first-found)
+  // ordering applies.
+  const mmrRanked = new Map<LedgerCategory, LedgerFactLike[]>();
+  if (input.factVectors) {
+    for (const cat of TRIMMABLE_FACT_CATEGORIES) {
+      const catFacts = facts.filter((f) => f.category === cat);
+      if (catFacts.length > 0) {
+        mmrRanked.set(
+          cat,
+          selectDiverseFacts(catFacts, input.factRelevance ?? {}, input.factVectors, catFacts.length, 0.7),
+        );
+      } else {
+        mmrRanked.set(cat, []);
+      }
+    }
+  }
+
   const factCutIndex = (cat: LedgerCategory): number => {
+    if (input.factVectors) {
+      // Cut the last-ranked fact (least important in MMR order).
+      const ranked = mmrRanked.get(cat) ?? [];
+      if (ranked.length === 0) return -1;
+      const last = ranked[ranked.length - 1];
+      const idx = facts.findIndex((f) => f.id === last.id);
+      if (idx !== -1) ranked.pop(); // keep ranking in sync
+      return idx;
+    }
+
     let best = -1;
     let bestScore = Number.POSITIVE_INFINITY;
     facts.forEach((f, i) => {
@@ -445,6 +574,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   for (const cat of TRIMMABLE_FACT_CATEGORIES) {
     while (current.totalTokens > budget && facts.some((f) => f.category === cat)) {
       const idx = factCutIndex(cat);
+      if (idx === -1) break;
       const [removed] = facts.splice(idx, 1);
       trimmedNotes.push(`Fakta: vynechán fakt „(${removed.category}/${removed.subject})" (rozpočet kontextu).`);
       current = render();
