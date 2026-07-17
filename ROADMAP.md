@@ -1,130 +1,127 @@
 # MySillyTavern — roadmapa M11+
 
-Stav k 2026-07-16: hotovo M1–M10 (základ, chat, postavy, persony, lorebooky,
+Stav k 2026-07-17: hotovo M1–M11 (základ, chat, postavy, persony, lorebooky,
 paměť + sémantický retrieval s backfillem, komfort hraní, skupinové chaty
-s povýšením NPC, ukotvení pohledu, inline návrhy reakcí). Tento dokument
-plánuje další milníky; pořadí = doporučená priorita.
+s povýšením NPC, ukotvení pohledu, inline návrhy reakcí, stabilita M11).
+Vedle toho přibyla vlna herních featur mimo tuto roadmapu — viz sekce
+„Práce mimo roadmapu" níže. Tento dokument plánuje další milníky;
+pořadí = doporučená priorita.
+
+> **Pozor na číslování:** commity v git historii označené `M13`–`M24`
+> (structured persona, inventář, quest journal, kostky, conditions, frakce,
+> kalendář, crafting, kronika…) používají **jinou, paralelní číselnou řadu**
+> z agentní session — NEodpovídají milníkům M13–M15 v tomto dokumentu.
+> Závazné číslování je to zdejší.
 
 ---
 
-## M11 — Stabilita a výkon („mouchy ven")
+## M11 — Stabilita a výkon („mouchy ven") — ✅ HOTOVO
 
-**Motivace:** Aplikace je funkčně bohatá, ale nasbírala drobné mouchy
-(uživatel je zatím neumí popsat — potřebujeme je vidět dřív než on) a chat
-s tisíci zprávami začne narážet na limity plného renderu.
+Dokončeno ve třech vlnách (commity `bae2320`, `a80c967`, `2be3d7b`):
 
-**Rozsah:**
-1. **E2E smoke testy v harnessu** — `public/debug-anchor.html` zobecnit na
-   `public/e2e-harness.html` (mock IPC parametrizovatelný scénářem) a přidat
-   `scripts/e2e.mjs` (Playwright Chromium + volitelně WebKit MiniBrowser).
-   Scénáře: otevření chatu, odeslání + stream + kotvení (regresní test na
-   3830e33), regenerace, větvení, přepnutí mluvčího ve skupině, inline čipy.
-   Spouštět ručně `npm run e2e`; ne CI (není).
-2. **Virtualizace seznamu zpráv** — render jen viditelného okna (vlastní
-   lehká virtualizace nad stávající paginací; NE nová závislost, stačí
-   IntersectionObserver + odhad výšek, pozor na kotvení a spacer).
-   Hotovo když: chat s 2000 zprávami scrolluje plynule a kotvení funguje.
-3. **Sběr chyb do souboru** — `console.error/warn` + Rust chyby logovat do
-   `$APPDATA/logs/app.log` s rotací; v Nastavení tlačítko „Otevřít log".
-   Uživatel pak mouchy doloží logem.
-4. **Bug sweep** — projít známá slabá místa: race při rychlém přepínání
-   chatů, opuštění chatu během streamu, HMR artefakty vs. produkční build
-   (otestovat `tauri build` release!), přepnutí jazyka za běhu.
-
-**Hotovo když:** e2e scénáře zelené v obou enginech, release build ověřen,
-2000zprávový chat plynulý, chyby dohledatelné v logu.
-**Riziko:** virtualizace × kotvení — dělat po e2e testech, ať je záchytná síť.
+1. ✅ **E2E smoke testy** — `scripts/e2e.mjs` + mock IPC harness, `npm run e2e`
+2. ✅ **Virtualizace seznamu zpráv** — `src/chat/virtualWindow.ts`
+3. ✅ **Sběr chyb do souboru** — `src-tauri/src/commands/logging.rs`,
+   log v `$APPDATA/logs/`, panel Diagnostika v Nastavení
+4. ✅ **Bug sweep** — race při přepínání chatů opraveny, release build ověřen
 
 ---
 
-## M12 — Nástroje vypravěče (kronika, export, statistiky)
+## M12 — Nástroje vypravěče (kronika, export, statistiky) — z větší části hotovo
 
-**Motivace:** Několikahodinová kampaň si zaslouží artefakty: přehled děje,
-export příběhu, kontrola spotřeby.
-
-**Rozsah:**
-1. **Kronika (timeline)** — nová záložka v Memory panelu: chronologický
-   přehled „scén" (už existují jako embedding chunky `kind='message'`) +
-   event fakta. Klik na scénu → skok na zprávu v historii (vyžaduje
-   doscrollování s paginací — načíst okolí zprávy podle created_at).
-2. **Export příběhu** — Markdown/HTML export chatu: titul, postavy, souhrn,
-   zprávy s markdownem (kurzíva akcí, jména mluvčích ve skupině), volitelně
-   bez OOC instrukcí. Rust command `export_story` + dialog uložení
-   (tauri-plugin-dialog už je). HTML šablona s tématem Ember Tavern.
-3. **Statistiky** — panel v Nastavení: počty zpráv/chat, odhad spotřeby
-   tokenů za den/týden (ukládat per-request odhad do nové tabulky
-   `usage_log` — migrace 5), počet požadavků (kvůli free tier RPD limitu!),
-   velikost DB. Hlavní hodnota: uživatel vidí, kolik z denní kvóty čerpá.
-4. **Prompt presety** — pojmenované sady (system prompt dodatky, teplota…)
-   přepínatelné per chat; tabulka `presets` (v migraci 5 společně).
-
-**Hotovo když:** kronika ukazuje scény kampaně uživatele, export vytvoří
-čitelné HTML jeho hry, statistiky ukazují dnešní počet požadavků.
+1. ⚠️ **Kronika (timeline)** — export kroniky hotový (viz „M19" commity
+   `6697a36`, `7ae5650`: Rust `export_chronicle` + UI + témata); interaktivní
+   timeline v Memory panelu se skokem na zprávu zbývá ověřit/dodělat.
+2. ✅ **Export příběhu** — HTML/Markdown export s tématy
+   (`src-tauri/src/commands/export_chronicle.rs`, `src/chat/chronicleThemes.ts`).
+3. ✅ **Statistiky** — `UsagePanel` v Nastavení, `usageRepo`
+   (požadavky + odhad tokenů za den/týden/měsíc), commit `6e75c74`.
+4. 🔨 **Prompt presety** — rozpracováno v working tree: migrace 18 (tabulka
+   `presets` + `chats.preset_id`), `presetsRepo`, `presetsStore`,
+   `PresetsPanel`. (Pův. plán říkal „migrace 5" — reálně je to migrace 18.)
 
 ---
 
-## M13 — TTS předčítání
+## M13 — TTS předčítání — 🔨 rozpracováno
 
-**Motivace:** Atmosféra — vypravěč čte nahlas; z plánu §10.
+Implementace ve working tree (necommitnuto):
 
-**Rozsah:**
-1. Web Speech API (`speechSynthesis`) ve webview jako základ — zdarma,
-   offline; ověřit dostupnost hlasů ve WebKitGTK (riziko! může chybět —
-   pak fallback: Rust command + `espeak-ng`/Piper binárka, rozhodnout podle
-   průzkumu na začátku milníku).
-2. UI: tlačítko ▶ u bubliny + auto-režim „předčítej nové odpovědi"
-   (nastavení per chat), stop při novém streamu; volba hlasu a rychlosti
-   v Nastavení → Vzhled/nová sekce Zvuk.
-3. Skupiny: hlas per postava (mapování postava→hlas v kartě postavy).
-4. Čistá logika: příprava textu pro TTS (odstranit markdown, OOC bloky,
-   inline možnosti) — `src/chat/ttsText.ts` + testy.
+1. ✅ Web Speech API (`speechSynthesis`) — `src/chat/useTts.ts`
+2. 🔨 UI: tlačítko u bubliny, auto-režim, `TtsPanel` v Nastavení
+3. ✅ Hlas per postava — migrace 17 (`characters.tts_voice`), pole v editoru karty
+4. ✅ Čistá logika přípravy textu — `src/chat/ttsText.ts` + testy
 
-**Hotovo když:** odpověď jde přehrát/zastavit, auto-režim čte nové odpovědi,
-každá postava skupiny může mít vlastní hlas.
-**Riziko:** kvalita českých hlasů; průzkum PŘED implementací UI.
+Zbývá: ověřit dostupnost hlasů ve WebKitGTK na reálném systému (riziko
+z původního plánu trvá), doladit auto-režim při streamu.
 
 ---
 
-## M14 — Sync a zálohy 2.0
+## M14 — Sync a zálohy 2.0 — bod 1 hotov
 
-**Motivace:** Ruční ZIP export (M6) nestačí na hraní z více zařízení;
-z plánu §10 („sync přes soubor/cloud").
-
-**Rozsah:**
-1. **Automatické lokální zálohy** — při startu/denně rotující ZIP do
-   `$APPDATA/backups/` (reuse `export_backup`), max N kusů, nastavitelné.
-2. **Sync přes složku** (Syncthing/Nextcloud/Dropbox — bez vlastního
-   cloudu): volitelná „sync složka"; app do ní píše žurnál změn
-   (append-only JSONL per zařízení + periodické snapshoty). Merge strategie:
-   last-write-wins per entita (zprávy jsou append-only → bezkonfliktní;
-   fakta/summary podle updated_at; konflikt = zachovat obě verze faktu
-   k ručnímu sloučení v Memory panelu).
-3. **Konfliktní UI** — banner „nalezeny změny z jiného zařízení" + náhled.
+1. ✅ **Automatické lokální zálohy** — rotující ZIP do `$APPDATA/backups/`
+   při startu, `run_auto_backup` + `list_backups` (commit `c2342e7`),
+   UI v `BackupPanel` (working tree).
+2. ⬜ **Sync přes složku** (Syncthing/Nextcloud/Dropbox — bez vlastního
+   cloudu): volitelná „sync složka"; žurnál změn (append-only JSONL per
+   zařízení + snapshoty). Merge: last-write-wins per entita (zprávy
+   append-only → bezkonfliktní; fakta/summary podle updated_at; konflikt =
+   zachovat obě verze k ručnímu sloučení v Memory panelu).
+3. ⬜ **Konfliktní UI** — banner „nalezeny změny z jiného zařízení" + náhled.
 4. API klíče se NIKDY nesyncují (zůstávají v keyringu zařízení).
 
-**Hotovo když:** dvě instalace (např. desktop + notebook) sdílející složku
-si vymění nový chat i pokračování starého bez ztráty dat.
+**Hotovo když:** dvě instalace sdílející složku si vymění nový chat
+i pokračování starého bez ztráty dat.
 **Riziko:** merge edge-cases — začít žurnálem a zprávami (bezpečné),
-fakta/summary až druhá fáze. Tohle je největší milník, dělit na 2 části.
+fakta/summary až druhá fáze. Největší zbývající milník, dělit na 2 části.
 
 ---
 
-## M15 — Mobil (průzkum → port)
+## M15 — Mobil (průzkum → port) — fáze A hotová
 
-**Motivace:** Hraní z gauče; z plánu §10. Záměrně poslední — závisí na M14
-(sync) a stabilitě.
+**Fáze A (průzkum):** ✅ hotová — `docs/m15-android-pruzkum.md` (commit
+`72fe166`). Závěr: JÍT; jediná tvrdá blokace je `keyring` crate → nahradit
+`android-keyring` implementací `SecretStore` traitu. Odhad fáze B:
+8–14 člověko-dnů. Mezitím přibyl Android build v GitHub Actions
+(APK + AAB, commity `749e386`–`46f65e9`) — CI build je první krok fáze B.
 
-**Rozsah (fáze A — průzkum, timebox):** Tauri 2 Android build: zkompilovat,
-ověřit tauri-plugin-sql, keyring (Android Keystore backend `keyring` crate
-neumí — nutná náhrada: tauri-plugin-stronghold nebo vlastní EncryptedFile),
-WebView chování (kotvení!). Výstup: zpráva co funguje / co ne + rozhodnutí
-jít/nejít.
-**Rozsah (fáze B — port):** responzivní úpravy (už z velké části jsou:
-overlay panely, flex layouty), touch gesta pro swipe variant, klávesnice
-vs. input bar, Android back tlačítko.
+**Fáze B (port):** ⬜ responzivní úpravy, touch gesta pro swipe variant,
+klávesnice vs. input bar, Android back tlačítko, náhrada keyringu,
+SAF dialogy pro import/export záloh.
 
 **Hotovo když (B):** APK hratelné: otevřít chat, poslat zprávu, stream,
 paměť funguje, klíč bezpečně uložen.
+
+---
+
+## Práce mimo roadmapu (paralelní agentní session, 2026-07)
+
+Vlna featur dodaná agenty (větve `codex/*` + navazující commity s vlastním
+číslováním „M13–M24"). Vše je zmergované v masteru:
+
+**Paměť a prompt (A-řada):** multi-fact subject + diferenciální extrakce
+(A1+A6), sliding-window chunking + auto-detekce embeddingů (A2+A9), počítání
+tokenů tiktokenem + MMR ořez (A3+A4), adaptivní extrakce + importance scoring
+(A5+A10), context-aware mluvčí + stemming lorebooků (A7+A8).
+
+**Herní systémy (B-řada + „M-číslované" commity):**
+
+| Commit(y) | Featura |
+|---|---|
+| `d4c25f5` | herní čas + sledování emocí (B3+B5) |
+| `616c8f6` | Ollama auto-detect + kostky `/roll` (B7+B8) |
+| `a0d6693` | prompt inspector / debug panel (B10) |
+| `1cffffd` | strukturovaná persona, AI inventář a dovednosti, generování obrázků |
+| `6e680b9` | fronta auto-ilustrací, progression systém (skill/level/none) |
+| `70f6928` | obrázky v Memory panelu (Pollinations) |
+| `0220947` | quest journal + UI kostek |
+| `c9638ca`, `d149335` | conditions + reputace frakcí (migrace 13+14) |
+| `97e3f2c` | kalendář s českými fantasy měsíci a sezónami |
+| `7250809` | crafting (skill=kvalita, perky, recepty) |
+| `6697a36`, `7ae5650` | export kroniky (Rust + UI, témata) |
+
+**Infra:** Windows CI build (`99e9e3c`), Android CI (APK/AAB), release
+`0.1.0-alpha` (`b00fe03`), QoL (klávesové zkratky, hledání v chatu Ctrl+F,
+undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 ---
 
@@ -132,19 +129,20 @@ paměť funguje, klíč bezpečně uložen.
 
 - **Ladění paměti** — po delším hraní uživatele vyhodnotit: drží žánr?
   Vytahují se správné vzpomínky? (viz memory poznámka: nejdřív zkontrolovat,
-  zda si zvedl context budget a zamkl kánon fakta). Případně: MMR
-  diverzifikace top-K, časový decay skóre.
+  zda si zvedl context budget a zamkl kánon fakta.) MMR diverzifikace a
+  importance scoring už jsou v kódu (A-řada) — ladit parametry.
 - **Skupiny v praxi** — auto-režim výběru mluvčího doladit podle reálného
   používání (např. váha „byl osloven přímo" vs. round-robin).
 - **Mouchy z hraní** — jakmile je uživatel popíše (nebo je chytí log z M11),
   řešit přednostně před dalším milníkem.
+- **Dokumentační hygiena** — u nových milníků držet číslování z tohoto
+  souboru; commity značit `M<n>` jen podle této roadmapy.
 
-## Doporučené pořadí a velikost
+## Doporučené pořadí a velikost (zbývající práce)
 
-| Milník | Velikost | Poznámka |
-|--------|----------|----------|
-| M11 stabilita | střední | první — záchytná síť pro všechno další |
-| M12 nástroje vypravěče | střední | vysoká viditelná hodnota, nízké riziko |
-| M13 TTS | malý–střední | průzkum hlasů může milník zabít — timebox |
-| M14 sync | velký | dělit na 2 fáze, začít zálohami |
-| M15 mobil | velký | až po M14, fáze A je levný průzkum |
+| Milník | Stav | Poznámka |
+|--------|------|----------|
+| M12 dodělat | kronika-timeline + presety | malý zbytek |
+| M13 TTS | dokončit WIP | ověřit hlasy ve WebKitGTK — timebox |
+| M14 sync | body 2–3 | velký; začít žurnálem a zprávami |
+| M15 mobil fáze B | po M14 | 8–14 dnů dle průzkumu |

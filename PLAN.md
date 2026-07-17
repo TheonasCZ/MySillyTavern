@@ -1,5 +1,11 @@
 # MySillyTavern — detailní implementační plán
 
+> **Historický dokument** — původní plán milníků M1–M6, všechny jsou hotové.
+> Aktuální stav a další milníky viz `ROADMAP.md`. Detaily níže se od
+> realizace místy liší (např. React je dnes 19, ne 18; struktura `src/`
+> narostla o `chat/`, `memory/` moduly A/B-řady, RPG systémy atd.).
+> Sekce 10 „Budoucnost" je z velké části už implementovaná.
+
 ## 1. Kontext a cíl
 
 Vlastní, lepší obdoba SillyTavern: desktopová aplikace pro AI textové RPG (roleplay s kartami postav), napojená přes API klíče na Gemini / Claude / ChatGPT / DeepSeek / OpenRouter. Dlouhodobý cíl je mobilní verze (Tauri 2 Mobile / Capacitor), proto stack se sdílením ~90 % kódu.
