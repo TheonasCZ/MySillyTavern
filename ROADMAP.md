@@ -292,8 +292,15 @@ jednotné offline řešení. PŘED implementací poslechnout ukázky
    ~20–60 MB/hlas; per-postava mapování už existuje (characters.tts_voice
    — rozšířit o prefix backendu, např. "piper:cs_CZ-jirka-medium").
 3. **useTts: druhý backend** — přehrávání WAV přes HTMLAudioElement;
-   fallback řetěz piper → Web Speech → nic; rychlost = Piperův
-   length_scale parametr.
+   fallback řetěz piper → Web Speech → nic.
+3b. **Ladění hlasu + vlastní kolekce** — hlas není jen model, ale PROFIL:
+   model + posuvníky pitch shift (post-processing, ±6 půltónů),
+   tempo (length_scale) a variabilita intonace (noise_scale/noise_w).
+   Dodané presety („Temný vypravěč" = pitch −3/tempo 0.9/nízká
+   variabilita, „Stařec", „Dítě", „Hlasatel"…) + možnost uložit vlastní
+   profil pod jménem → uživatelova kolekce hlasů (tabulka
+   `tts_voice_profiles`, migrace); per-postava mapování odkazuje na
+   profil, ne přímo na model. Náhled „přehrát ukázku" u posuvníků.
 4. **Android (váže na M15 B)** — piper se kompiluje na aarch64; alternativa
    nativní Android TTS přes malý plugin jako fallback.
 
