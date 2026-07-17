@@ -91,7 +91,13 @@
         "noConnection": "Tento chat nemá vybrané připojení. Nastav ho v seznamu chatů.",
         "offline": "Jsi offline. Zkontroluj připojení k internetu a zkus to znovu.",
         "retry": "Zkusit znovu",
-        "generic": "Chyba: {{message}}"
+        "generic": "Chyba: {{message}}",
+        "rateLimitRetry": "Model má vyčerpaný limit požadavků. Zkus to znovu asi za {{seconds}} s (tlačítko níže).",
+        "rateLimit": "Model má vyčerpaný limit požadavků (u free plánů bývá i denní strop). Chvíli počkej, nebo v nastavení chatu přepni na jiný model.",
+        "badKey": "Poskytovatel odmítl API klíč. Zkontroluj ho v Nastavení → Připojení.",
+        "overloaded": "Služba modelu je momentálně přetížená nebo má výpadek. Zkus to za chvíli znovu.",
+        "modelNotFound": "Model „{{model}}“ neexistuje nebo k němu tvůj klíč nemá přístup. Vyber jiný v nastavení chatu.",
+        "modelNotFoundGeneric": "Zvolený model neexistuje nebo k němu tvůj klíč nemá přístup. Vyber jiný v nastavení chatu."
       },
       "suggest": {
         "button": "💡 Navrhni reakce",

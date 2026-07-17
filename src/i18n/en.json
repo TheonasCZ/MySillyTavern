@@ -91,7 +91,13 @@
         "noConnection": "This chat has no connection selected. Set one from the chat list.",
         "offline": "You're offline. Check your internet connection and try again.",
         "retry": "Try again",
-        "generic": "Error: {{message}}"
+        "generic": "Error: {{message}}",
+        "rateLimitRetry": "The model's request limit is exhausted. Try again in about {{seconds}} s (button below).",
+        "rateLimit": "The model's request limit is exhausted (free plans often have a daily cap). Wait a bit, or switch to another model in the chat settings.",
+        "badKey": "The provider rejected your API key. Check it in Settings → Connections.",
+        "overloaded": "The model service is currently overloaded or down. Try again in a moment.",
+        "modelNotFound": "Model “{{model}}” doesn't exist or your key can't access it. Pick another one in the chat settings.",
+        "modelNotFoundGeneric": "The selected model doesn't exist or your key can't access it. Pick another one in the chat settings."
       },
       "suggest": {
         "button": "💡 Suggest replies",

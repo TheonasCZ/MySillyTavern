@@ -17,6 +17,7 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
+import { humanizeProviderError } from "../../providers/humanizeError";
 import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
@@ -41,6 +42,30 @@ const selectStyle = {
 } as const;
 
 const MAX_VISIBLE_AVATARS = 5;
+
+/** Maps a raw provider error to a friendly, actionable banner message. */
+function formatProviderError(
+  raw: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const err = humanizeProviderError(raw);
+  switch (err.kind) {
+    case "rateLimit":
+      return err.retrySeconds
+        ? t("room.errors.rateLimitRetry", { seconds: err.retrySeconds })
+        : t("room.errors.rateLimit");
+    case "badKey":
+      return t("room.errors.badKey");
+    case "overloaded":
+      return t("room.errors.overloaded");
+    case "modelNotFound":
+      return err.model
+        ? t("room.errors.modelNotFound", { model: err.model })
+        : t("room.errors.modelNotFoundGeneric");
+    default:
+      return t("room.errors.generic", { message: err.message });
+  }
+}
 
 export function ChatScreen() {
   const { id } = useParams<{ id: string }>();
@@ -606,7 +631,7 @@ export function ChatScreen() {
                   ? t("room.errors.noConnection")
                   : error === "offline"
                     ? t("room.errors.offline")
-                    : t("room.errors.generic", { message: error })}
+                    : formatProviderError(error, t)}
               </span>
               <span className="flex shrink-0 items-center gap-3">
                 {errorRetryable && retry && (
