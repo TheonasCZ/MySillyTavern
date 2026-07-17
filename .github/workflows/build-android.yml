@@ -1,0 +1,47 @@
+name: Build Android
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platforms;android-34 build-tools;34.0.0 ndk;27.0.12077973"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Build Tauri Android (APK + AAB)
+        run: npm run tauri android build
+        env:
+          ANDROID_HOME: ${{ steps.setup-android.outputs.ANDROID_HOME }}
+          NDK_HOME: ${{ steps.setup-android.outputs.ANDROID_NDK }}
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MySillyTavern-Android
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/release/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/release/*.aab
