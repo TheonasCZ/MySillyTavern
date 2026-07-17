@@ -79,7 +79,6 @@ const MOOD_PATTERNS: Array<{ mood: string; words: string[] }> = [
  *  that need multi-emotion detection should iterate independently. */
 export function detectMood(content: string): string | null {
   if (!content) return null;
-  const lower = content.toLowerCase();
   for (const pattern of MOOD_PATTERNS) {
     for (const word of pattern.words) {
       // Match whole word using word boundaries to avoid

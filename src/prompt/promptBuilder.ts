@@ -53,6 +53,7 @@ export interface LedgerFactLike {
   id: string;
   category: LedgerCategory;
   subject: string;
+  sub_key: string;
   fact: string;
   status: "active" | "archived";
   locked: boolean;
@@ -441,6 +442,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     totalTokens: number;
     sectionsTokens: ReturnType<typeof sectionTokens>;
     canonReminderTokens: number;
+    systemText: string;
+    historyText: string;
+    phiText: string;
   } {
     const mesExampleSection = mesExampleIncluded ? buildMesExampleSection(character, charName, userName) : "";
     const factsSection = buildFactsSection(facts, charName, userName);
@@ -490,7 +494,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
 
     const historyText = historyIncluded.map((m) => `${m.role}: ${m.content}`).join("\n");
     const phiText = phi ? substitutePlaceholders(phi, charName, userName) : "";
-    return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection) };
+    return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection) , systemText, historyText, phiText };
   }
 
   function sectionTokens(

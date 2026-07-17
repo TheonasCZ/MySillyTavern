@@ -32,6 +32,7 @@ function makePersona(partial: Partial<PersonaLike> = {}): PersonaLike {
 
 function makeFact(partial: Partial<LedgerFactLike> = {}): LedgerFactLike {
   return {
+    sub_key: "",
     id: Math.random().toString(36).slice(2),
     category: "world",
     subject: "Ashford",

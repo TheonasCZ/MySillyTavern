@@ -1,4 +1,4 @@
-/** Model-specific token counting (plan §A3).
+/** Model-specific token counting (plan A3).
  *
  * Different models tokenize differently — a fixed chars-per-token estimate
  * systematically undershoots the real prompt size, which means the
@@ -6,9 +6,11 @@
  * real context budget.
  *
  * This module provides:
- * - `countTokens()` (async): tries tiktoken (OpenAI), falls back to estimate
- * - `syncCountTokens()` (sync): uses a preloaded tiktoken module if available
- * - `preloadTokenCounter()`: warms the tiktoken cache for sync use
+ * - `countTokens()` (async): returns token count for (model, text) using
+ *   the best available method (tiktoken for OpenAI, estimate for others)
+ * - `syncCountTokens()` (sync): best-effort synchronous count, uses
+ *   preloaded tiktoken or falls back to estimateTokens
+ * - `preloadTokenCounter()`: preloads tiktoken WASM in background
  *
  * Gemini's countTokens API and Anthropic's token-counting endpoint are not
  * yet implemented — those models fall back to chars-per-token. */
@@ -26,7 +28,7 @@ let tiktokenLoadAttempted = false;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let tiktokenLoadPromise: Promise<any> | null = null;
 
-async function ensureTiktoken(): Promise<unknown> {
+async function ensureTiktoken(): Promise<any> {
   if (tiktokenModule) return tiktokenModule;
   if (tiktokenLoadAttempted) return null;
   if (tiktokenLoadPromise) return tiktokenLoadPromise;
@@ -34,7 +36,9 @@ async function ensureTiktoken(): Promise<unknown> {
   tiktokenLoadAttempted = true;
   tiktokenLoadPromise = (async () => {
     try {
-      tiktokenModule = await import("tiktoken");
+      // @vite-ignore — optional dependency, may not be installed
+      // @ts-expect-error - tiktoken is an optional dependency, may not be installed
+      const __tik = "tiktoken"; tiktokenModule = await import(/* @vite-ignore */ __tik);
       return tiktokenModule;
     } catch {
       return null;
