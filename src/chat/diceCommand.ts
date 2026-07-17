@@ -19,6 +19,10 @@ export function extractDiceExpression(text: string): string {
   return match ? match[1].trim() : "";
 }
 
+export function isHelpCommand(text: string): boolean {
+  return /^\/help/i.test(text.trim());
+}
+
 /** Formats a dice roll result for the chat as a system message content.
  * The Rust `eval_dice` command already returns a fully formatted string
  * (e.g. `"2d6+3 = 8 (3+2+3) = 8"`), so we just prefix it with the dice
