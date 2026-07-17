@@ -40,8 +40,7 @@
       "icons/icon.ico"
     ],
     "android": {
-      "minSdkVersion": 26,
-      "applicationId": "com.morthos.mysillytavern"
+      "minSdkVersion": 26
     }
   }
 }
