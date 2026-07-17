@@ -149,6 +149,23 @@ export interface PromptBuilderInput {
   /** Optional extra system prompt from a prompt preset (M12.4) — appended
    * to the system core message before the lore/facts/summary sections. */
   presetExtraSystemPrompt?: string;
+  /** Retrieval detail (M25.4) — why each direct-hit memory was selected;
+   * same order as the head of `retrievedMemories`. Passed through to the
+   * report for the Prompt inspector, truncated to the memories that survive
+   * budget trimming. */
+  retrievedMemoriesDetail?: Array<{
+    snippet: string;
+    score: number;
+    decayedScore: number;
+    createdAt: string;
+  }>;
+  /** Silent drift corrections (M25.2) — produced by the drift detector when
+   * recent scenes contradicted locked canon facts. Injected into the
+   * trailing system message; the player never sees them in the UI flow. */
+  driftCorrections?: string[];
+  /** Director note (M25.3) — per-chat pacing/tone/genre steering, rendered
+   * into the trailing system message so it outweighs older instructions. */
+  directorNote?: string;
 }
 
 export interface PromptReport {
@@ -187,6 +204,19 @@ export interface PromptReport {
     historyText: string;
     /** The trailing system message (post_history_instructions + canon reminder + group speaker instruction). */
     phiText: string;
+    /** Locked (canon) facts rendered in the dedicated `[KÁNON PŘÍBĚHU]`
+     * block — always all of them; canon is never trimmed (M25.1). */
+    canonFactsIncluded: number;
+    /** Drift corrections injected this build (M25.2), verbatim — surfaced
+     * only in the Prompt inspector. */
+    driftCorrections: string[];
+    /** Retrieval detail for the included memories (M25.4). */
+    memoriesDetail: Array<{
+      snippet: string;
+      score: number;
+      decayedScore: number;
+      createdAt: string;
+    }>;
   };
   /** Human/UI-readable list of what got cut, in the order it was cut —
    * shown verbatim in the memory panel's "Prompt" tab. */
@@ -353,11 +383,29 @@ function factLine(fact: LedgerFactLike, charName: string, userName: string): str
   return `- (${fact.category}/${substitutePlaceholders(fact.subject, charName, userName)}) ${substitutePlaceholders(fact.fact, charName, userName)}`;
 }
 
+/** Renders ledger facts as two blocks (M25.1): locked facts first under
+ * `[KÁNON PŘÍBĚHU]` — the user-pinned, immutable rules of the story — then
+ * the extracted facts under `[FAKTA SVĚTA]`. The split makes the model
+ * treat canon as law rather than as one line among many. */
 function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: string): string {
   if (facts.length === 0) return "";
-  const ordered = FACT_CATEGORY_ORDER.flatMap((cat) => facts.filter((f) => f.category === cat));
-  const lines = ordered.map((f) => factLine(f, charName, userName));
-  return `[FAKTA SVĚTA — závazná]\n${lines.join("\n")}`;
+  const byCategory = (list: LedgerFactLike[]) =>
+    FACT_CATEGORY_ORDER.flatMap((cat) => list.filter((f) => f.category === cat));
+  const canon = byCategory(facts.filter((f) => f.locked));
+  const rest = byCategory(facts.filter((f) => !f.locked));
+
+  const blocks: string[] = [];
+  if (canon.length > 0) {
+    const lines = canon.map((f) => factLine(f, charName, userName));
+    blocks.push(
+      `[KÁNON PŘÍBĚHU — neporušitelná pravidla; mají přednost před vším ostatním]\n${lines.join("\n")}`,
+    );
+  }
+  if (rest.length > 0) {
+    const lines = rest.map((f) => factLine(f, charName, userName));
+    blocks.push(`[FAKTA SVĚTA — závazná]\n${lines.join("\n")}`);
+  }
+  return blocks.join("\n\n");
 }
 
 /** Builds the end-of-context canon reminder (plan: memory-anchoring fix) —
@@ -373,8 +421,10 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
  * silently lose the reminder. Returns "" when there are no world/player
  * facts to remind the model of. */
 function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, userName: string): string {
+  // Locked facts of ANY category are canon (M25.1) — include them alongside
+  // the always-reinforced world/player categories.
   const relevant = facts
-    .filter((f) => CANON_REMINDER_CATEGORIES.includes(f.category))
+    .filter((f) => f.locked || CANON_REMINDER_CATEGORIES.includes(f.category))
     .sort((a, b) => Number(b.locked) - Number(a.locked));
   if (relevant.length === 0) return "";
 
@@ -504,6 +554,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
 
   const activeFacts = input.ledgerFacts.filter((f) => f.status === "active");
   const factsTotal = activeFacts.length;
+  const driftCorrections = (input.driftCorrections ?? []).map((c) => c.trim()).filter(Boolean);
 
   // Mutable working state for the trim passes below.
   let lore = [...input.loreEntries].sort((a, b) => a.priority - b.priority); // ascending: index 0 = lowest priority = first to cut
@@ -648,12 +699,30 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       phi = phi ? `${phi}\n\n${craftInstructions}` : craftInstructions;
     }
 
+    // Director note (M25.3) — pacing/tone steering, close to generation so
+    // it wins over conflicting older style cues.
+    const director = input.directorNote?.trim();
+    if (director) {
+      phi = phi ? `${phi}\n\n[REŽIE SCÉNY]\n${director}` : `[REŽIE SCÉNY]\n${director}`;
+    }
+
     // Canon reminder is appended last, closest to generation — see
     // `buildCanonReminderSection`. It is intentionally NOT part of the
     // budget-trim passes below (never cut), only size-capped at build time.
     const canonSection = buildCanonReminderSection(facts, charName, userName);
     if (canonSection) {
       phi = phi ? `${phi}\n\n${canonSection}` : canonSection;
+    }
+
+    // Silent drift corrections (M25.2) — after the canon reminder, i.e. the
+    // very last thing the model reads. Instructs a quiet course-correction;
+    // never surfaced to the player.
+    if (driftCorrections.length > 0) {
+      const lines = driftCorrections.map((c) => `- ${c}`).join("\n");
+      const block =
+        `[TICHÁ KOREKCE — poslední scény se odchýlily od kánonu. ` +
+        `Nenápadně, bez komentáře a bez lámání příběhu je srovnej zpět:]\n${lines}`;
+      phi = phi ? `${phi}\n\n${block}` : block;
     }
     if (phi) {
       messages.push({ role: "system", content: substitutePlaceholders(phi, charName, userName) });
@@ -743,7 +812,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   const mmrRanked = new Map<LedgerCategory, LedgerFactLike[]>();
   if (input.factVectors) {
     for (const cat of TRIMMABLE_FACT_CATEGORIES) {
-      const catFacts = facts.filter((f) => f.category === cat);
+      // Locked facts are canon (M25.1) — never candidates for trimming.
+      const catFacts = facts.filter((f) => f.category === cat && !f.locked);
       if (catFacts.length > 0) {
         mmrRanked.set(
           cat,
@@ -769,7 +839,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     let best = -1;
     let bestScore = Number.POSITIVE_INFINITY;
     facts.forEach((f, i) => {
-      if (f.category !== cat) return;
+      if (f.category !== cat || f.locked) return;
       const score = input.factRelevance
         ? (input.factRelevance[f.id] ?? Number.NEGATIVE_INFINITY)
         : 0;
@@ -781,7 +851,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     return best;
   };
   for (const cat of TRIMMABLE_FACT_CATEGORIES) {
-    while (current.totalTokens > budget && facts.some((f) => f.category === cat)) {
+    while (current.totalTokens > budget && facts.some((f) => f.category === cat && !f.locked)) {
       const idx = factCutIndex(cat);
       if (idx === -1) break;
       const [removed] = facts.splice(idx, 1);
@@ -827,6 +897,11 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       systemText: current.systemText,
       historyText: current.historyText,
       phiText: current.phiText,
+      canonFactsIncluded: facts.filter((f) => f.locked).length,
+      driftCorrections,
+      // Direct hits sit at the head of the memories list and trimming pops
+      // from the tail, so the surviving prefix maps 1:1 onto the detail.
+      memoriesDetail: (input.retrievedMemoriesDetail ?? []).slice(0, memories.length),
     },
     trimmedNotes,
   };

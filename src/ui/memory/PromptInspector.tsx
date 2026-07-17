@@ -214,6 +214,52 @@ export function PromptInspector({ report }: { report: PromptReport }) {
         variant="phi"
       />
 
+      {/* Drift corrections injected this build (M25.2) — the only place a
+          silent correction is ever visible. */}
+      {report.sections.driftCorrections.length > 0 && (
+        <div
+          className="rounded-[var(--radius-sm)] border p-3"
+          style={{ borderColor: "var(--color-warning, var(--color-brass))" }}
+        >
+          <h3
+            className="mb-2 text-xs font-medium uppercase tracking-wide"
+            style={{ color: "var(--color-text-faint)" }}
+          >
+            {t("prompt.driftTitle")}
+          </h3>
+          <ul className="flex flex-col gap-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {report.sections.driftCorrections.map((c, i) => (
+              <li key={i}>• {c}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Why each memory was retrieved (M25.4) */}
+      {report.sections.memoriesDetail.length > 0 && (
+        <div>
+          <h3
+            className="mb-2 text-xs font-medium uppercase tracking-wide"
+            style={{ color: "var(--color-text-faint)" }}
+          >
+            {t("prompt.memoriesWhyTitle")}
+          </h3>
+          <ul className="flex flex-col gap-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {report.sections.memoriesDetail.map((m, i) => (
+              <li key={i}>
+                • {m.snippet}{" "}
+                <span style={{ color: "var(--color-text-faint)" }}>
+                  ({t("prompt.memoryScore", {
+                    score: m.score.toFixed(2),
+                    decayed: m.decayedScore.toFixed(2),
+                  })})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Trimmed notes */}
       <div>
         <h3

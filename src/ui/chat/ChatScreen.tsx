@@ -28,6 +28,7 @@ import {
   SEASON_EFFECTS,
 } from "../../memory/calendar";
 import { ChatInput } from "./ChatInput";
+import { DirectorPopover } from "./DirectorPopover";
 import { GroupMembersPopover } from "./GroupMembersPopover";
 import { MessageList, type MemberInfo } from "./MessageList";
 import { SpeakerPicker } from "./SpeakerPicker";
@@ -88,6 +89,7 @@ export function ChatScreen() {
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { setPersona } = useChatListStore();
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [directorOpen, setDirectorOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [questsOpen, setQuestsOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
@@ -357,7 +359,10 @@ export function ChatScreen() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      {directorOpen && id && (
+        <DirectorPopover chatId={id} onClose={() => setDirectorOpen(false)} />
+      )}
       <header
         className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-8"
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
@@ -529,6 +534,20 @@ export function ChatScreen() {
             }}
           >
             📜
+          </button>
+          <button
+            type="button"
+            onClick={() => setDirectorOpen((v) => !v)}
+            aria-pressed={directorOpen}
+            title={t("director.title")}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: directorOpen ? "var(--color-accent)" : "transparent",
+              color: directorOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            🎬
           </button>
           <button
             type="button"

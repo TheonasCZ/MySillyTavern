@@ -39,7 +39,9 @@ import {
   type SpeakerCandidate,
 } from "../chat/groupSpeaker";
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
-import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
+import { buildDirectorNote, getDirectorSettings } from "../chat/director";
+import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
+import { consumeDriftCorrections } from "../memory/driftDetector";
 import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
 import { processGameResponse } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
@@ -219,6 +221,7 @@ async function buildApiMessages(
   // the non-semantic behavior.
   let factRelevance: Record<string, number> | undefined;
   let retrievedMemories: string[] = [];
+  let retrievedMemoriesDetail: RetrievedMemoryDetail[] = [];
   const embeddingConnection = resolveConnection(chat.extractionConnectionId) ?? connection;
   if (canEmbed(embeddingConnection)) {
     try {
@@ -231,6 +234,7 @@ async function buildApiMessages(
       });
       factRelevance = context.factRelevance;
       retrievedMemories = context.memories;
+      retrievedMemoriesDetail = context.memoriesDetail;
       if (context.loreEntryIds.length > 0) {
         const byId = new Map(activatableLore.map((e) => [e.id, e]));
         loreEntries = [
@@ -265,6 +269,21 @@ async function buildApiMessages(
         .map((c) => ({ name: c.name, description: c.description }))
     : undefined;
 
+  // M25.2/M25.3: silent drift corrections (consumes one TTL tick) and the
+  // per-chat director note — both resolved in the background, never block.
+  let driftCorrections: string[] = [];
+  let directorNote: string | undefined;
+  try {
+    const [corrections, director] = await Promise.all([
+      consumeDriftCorrections(chat.id),
+      getDirectorSettings(chat.id),
+    ]);
+    driftCorrections = corrections;
+    directorNote = buildDirectorNote(director) || undefined;
+  } catch {
+    // both are steering aids — a failure must never block the prompt build
+  }
+
   const { messages, report } = buildPrompt({
     character: speaker,
     persona,
@@ -278,9 +297,12 @@ async function buildApiMessages(
     verbatimWindow,
     factRelevance,
     retrievedMemories,
+    retrievedMemoriesDetail,
     groupMembers,
     calendarDateDescription,
     presetExtraSystemPrompt: activePreset?.extraSystemPrompt || undefined,
+    driftCorrections,
+    directorNote,
   });
 
   const presetParams = activePreset ? {

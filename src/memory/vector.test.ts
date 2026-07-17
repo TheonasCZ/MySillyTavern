@@ -46,3 +46,20 @@ describe("cosineSimilarity", () => {
     expect(cosineSimilarity(Float32Array.from([0, 0]), Float32Array.from([1, 2]))).toBe(0);
   });
 });
+
+describe("applyTimeDecay (M25.4)", () => {
+  it("halves the score after one half-life and leaves fresh scores intact", async () => {
+    const { applyTimeDecay, MEMORY_DECAY_HALF_LIFE_DAYS } = await import("./embeddingsEngine");
+    const now = Date.parse("2026-07-17T12:00:00Z");
+    const halfLifeAgo = new Date(now - MEMORY_DECAY_HALF_LIFE_DAYS * 86_400_000).toISOString();
+    expect(applyTimeDecay(0.8, halfLifeAgo, now)).toBeCloseTo(0.4);
+    expect(applyTimeDecay(0.8, new Date(now).toISOString(), now)).toBeCloseTo(0.8);
+  });
+
+  it("is lenient to bad timestamps and future dates", async () => {
+    const { applyTimeDecay } = await import("./embeddingsEngine");
+    const now = Date.now();
+    expect(applyTimeDecay(0.7, "not-a-date", now)).toBe(0.7);
+    expect(applyTimeDecay(0.7, new Date(now + 86_400_000).toISOString(), now)).toBe(0.7);
+  });
+});

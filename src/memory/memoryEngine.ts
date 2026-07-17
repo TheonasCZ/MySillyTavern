@@ -23,7 +23,9 @@ import {
   syncLoreEmbeddings,
   syncMessageChunkEmbeddings,
 } from "./embeddingsEngine";
+import { runDriftCheck } from "./driftDetector";
 import { runExtraction, type TranscriptChatMessage } from "./extractor";
+import { listAllFacts } from "../db/repositories/ledgerRepo";
 import { runSummarization, type TranscriptMessage } from "./summarizer";
 import {
   advanceTime,
@@ -212,8 +214,20 @@ async function runDueWork(chatId: string): Promise<void> {
       chat.connectionId,
     );
     if (connection) {
-      await runExtraction(chatId, connection, toApiMessages(newSinceExtraction, memberNames));
+      const transcript = toApiMessages(newSinceExtraction, memberNames);
+      await runExtraction(chatId, connection, transcript);
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
+
+      // Drift check (M25.2) — same cadence and connection as extraction.
+      // Only locked facts are canon; without any there is nothing to guard.
+      try {
+        const canon = (await listAllFacts(chatId)).filter(
+          (f) => f.locked && f.status === "active",
+        );
+        await runDriftCheck(chatId, connection, canon, transcript);
+      } catch (err) {
+        console.warn("drift check scheduling failed", err);
+      }
     }
   }
 

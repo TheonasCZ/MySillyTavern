@@ -117,6 +117,32 @@
         "cancel": "Zrušit",
         "error": "Generování karty se nezdařilo. Zkus to znovu nebo uprav zadání."
       }
+    },
+    "director": {
+      "title": "Režie scény",
+      "hint": "Tichá vodítka pro vypravěče — projeví se od další zprávy.",
+      "pace": "Tempo",
+      "paces": {
+        "slow": "Pomalé, do detailu",
+        "normal": "Přirozené",
+        "fast": "Svižné"
+      },
+      "tone": "Tón",
+      "tones": {
+        "light": "Odlehčený",
+        "neutral": "Neutrální",
+        "dark": "Temný a vážný",
+        "epic": "Epický"
+      },
+      "focus": "Těžiště",
+      "focuses": {
+        "dialogue": "Rozhovory",
+        "balanced": "Vyvážené",
+        "action": "Akce",
+        "exploration": "Objevování"
+      },
+      "extra": "Vlastní pokyn",
+      "extraPlaceholder": "např. Zaveď do děje tajemného cizince…"
     }
   },
   "characters": {
@@ -309,7 +335,8 @@
         "subject": "Předmět",
         "fact": "Fakt"
       },
-      "deleteConfirm": "Opravdu trvale smazat tento fakt?"
+      "deleteConfirm": "Opravdu trvale smazat tento fakt?",
+      "canonHeader": "Kánon příběhu — zamčená pravidla"
     },
     "summary": {
       "empty": "Zatím žádné shrnutí.",
@@ -339,7 +366,10 @@
       "historyText": "Historie",
       "phiText": "Post-historie instrukce",
       "copyAsText": "Kopírovat jako text",
-      "copied": "Zkopírováno!"
+      "copied": "Zkopírováno!",
+      "driftTitle": "Tiché korekce driftu v tomto promptu",
+      "memoriesWhyTitle": "Proč byly vybrány tyto vzpomínky",
+      "memoryScore": "podobnost {{score}}, po zestárnutí {{decayed}}"
     },
     "search": {
       "placeholder": "Hledej ve vzpomínkách a faktech…",

@@ -33,6 +33,20 @@ const DEFAULT_EMBEDDING_MODELS: Record<string, string> = {
 
 export const DEFAULT_MEMORY_TOP_K = 3;
 export const DEFAULT_MEMORY_MIN_SCORE = 0.35;
+/** Time-decay half-life for scene memories (M25.4): a scene this many days
+ * old scores half its raw cosine similarity. Facts are timeless and never
+ * decayed — only message-chunk memories fade. */
+export const MEMORY_DECAY_HALF_LIFE_DAYS = 45;
+
+/** Applies exponential time decay to a relevance score. Returns the raw
+ * score for unparseable timestamps or clock skew (future dates). */
+export function applyTimeDecay(score: number, createdAtIso: string, nowMs: number): number {
+  const created = Date.parse(createdAtIso);
+  if (!Number.isFinite(created)) return score;
+  const ageDays = (nowMs - created) / 86_400_000;
+  if (ageDays <= 0) return score;
+  return score * Math.pow(0.5, ageDays / MEMORY_DECAY_HALF_LIFE_DAYS);
+}
 /** Semantic lore activations added on top of keyword hits. */
 const LORE_TOP_K = 2;
 
@@ -411,11 +425,25 @@ function topRefIds(scores: Map<string, number>, minScore: number, topK: number):
     .map(([refId]) => refId);
 }
 
+export interface RetrievedMemoryDetail {
+  /** First ~120 chars of the scene text (for the Prompt inspector). */
+  snippet: string;
+  /** Raw cosine similarity to the query. */
+  score: number;
+  /** Score after time decay — this is what the ranking used. */
+  decayedScore: number;
+  createdAt: string;
+}
+
 export interface SemanticContext {
   /** Cosine score per fact id — feeds PromptBuilder's relevance-aware trim. */
   factRelevance?: Record<string, number>;
   /** Texts of the top-K relevant older scenes, most relevant first. */
   memories: string[];
+  /** Why each direct-hit memory was selected (M25.4) — same order as the
+   * direct hits at the head of `memories`; adjacent-scene fillers have no
+   * entry. */
+  memoriesDetail: RetrievedMemoryDetail[];
   /** Lorebook entry ids activated semantically (on top of keyword hits). */
   loreEntryIds: string[];
 }
@@ -430,7 +458,7 @@ export async function retrieveSemanticContext(args: {
   /** Activatable lorebook entries NOT already keyword-selected. */
   candidateLoreIds: string[];
 }): Promise<SemanticContext> {
-  const empty: SemanticContext = { memories: [], loreEntryIds: [] };
+  const empty: SemanticContext = { memories: [], memoriesDetail: [], loreEntryIds: [] };
   const queryText = buildRelevanceQuery(args.queryTexts);
   if (!queryText.trim()) return empty;
 
@@ -455,12 +483,32 @@ export async function retrieveSemanticContext(args: {
   }
 
   const factScores = scoreRows(factRows, queryVec);
-  const messageScores = scoreRows(messageRows, queryVec);
+  const rawMessageScores = scoreRows(messageRows, queryVec);
   const loreScores = scoreRows(loreRows, queryVec);
 
   const messagesByRef = new Map(messageRows.map((e) => [e.refId, e]));
+
+  // Time decay (M25.4): older scenes fade so a months-old lookalike doesn't
+  // crowd out a fresher, slightly-less-similar one. The min-score gate runs
+  // on the decayed value — a fully faded memory just stops being retrieved.
+  const now = Date.now();
+  const messageScores = new Map<string, number>();
+  for (const [refId, score] of rawMessageScores) {
+    const row = messagesByRef.get(refId);
+    messageScores.set(refId, row ? applyTimeDecay(score, row.createdAt, now) : score);
+  }
+
   const topMessageRefIds = topRefIds(messageScores, settings.minScore, settings.topK);
   const memories = topMessageRefIds.map((refId) => messagesByRef.get(refId)!.text);
+  const memoriesDetail: RetrievedMemoryDetail[] = topMessageRefIds.map((refId) => {
+    const row = messagesByRef.get(refId)!;
+    return {
+      snippet: row.text.length > 120 ? `${row.text.slice(0, 120)}…` : row.text,
+      score: rawMessageScores.get(refId) ?? 0,
+      decayedScore: messageScores.get(refId) ?? 0,
+      createdAt: row.createdAt,
+    };
+  });
 
   // Include adjacent chunks (k-1, k+1) so scene boundaries aren't lost.
   const sortedMessageRows = [...messageRows].sort((a, b) =>
@@ -489,6 +537,7 @@ export async function retrieveSemanticContext(args: {
   return {
     factRelevance: factScores.size > 0 ? Object.fromEntries(factScores) : undefined,
     memories,
+    memoriesDetail,
     loreEntryIds: topRefIds(loreScores, settings.minScore, LORE_TOP_K),
   };
 }

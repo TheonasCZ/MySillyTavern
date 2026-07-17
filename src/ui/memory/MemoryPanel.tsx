@@ -203,8 +203,43 @@ function FactsTab({ chatId }: { chatId: string }) {
         </p>
       )}
 
+      {/* Canon (locked) facts first, visually separated (M25.1) — the lock
+          toggle IS the promote/demote action, so no extra buttons. */}
+      {visible.some((f) => f.locked) && (
+        <div
+          className="flex flex-col gap-2 rounded-[var(--radius-sm)] border p-2"
+          style={{ borderColor: "var(--color-accent)" }}
+        >
+          <span className="text-xs font-medium" style={{ color: "var(--color-accent)" }}>
+            🔒 {t("facts.canonHeader")} ({visible.filter((f) => f.locked).length})
+          </span>
+          {visible.filter((f) => f.locked).map((f) => (
+            <FactRow
+              key={f.id}
+              fact={f}
+              onSave={async (patch) => {
+                await updateFact(f.id, patch);
+                await reload();
+              }}
+              onToggleLock={async () => {
+                await setFactLocked(f.id, !f.locked);
+                await reload();
+              }}
+              onToggleStatus={async () => {
+                await setFactStatus(f.id, f.status === "active" ? "archived" : "active");
+                await reload();
+              }}
+              onDelete={async () => {
+                await deleteFact(f.id);
+                await reload();
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
-        {visible.map((f) => (
+        {visible.filter((f) => !f.locked).map((f) => (
           <FactRow
             key={f.id}
             fact={f}

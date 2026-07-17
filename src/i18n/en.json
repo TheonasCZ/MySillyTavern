@@ -117,6 +117,32 @@
         "cancel": "Cancel",
         "error": "Card generation failed. Try again or adjust the input."
       }
+    },
+    "director": {
+      "title": "Scene direction",
+      "hint": "Silent guidance for the narrator — applies from the next message.",
+      "pace": "Pace",
+      "paces": {
+        "slow": "Slow, detailed",
+        "normal": "Natural",
+        "fast": "Brisk"
+      },
+      "tone": "Tone",
+      "tones": {
+        "light": "Lighthearted",
+        "neutral": "Neutral",
+        "dark": "Dark and serious",
+        "epic": "Epic"
+      },
+      "focus": "Focus",
+      "focuses": {
+        "dialogue": "Dialogue",
+        "balanced": "Balanced",
+        "action": "Action",
+        "exploration": "Exploration"
+      },
+      "extra": "Custom instruction",
+      "extraPlaceholder": "e.g. Introduce a mysterious stranger…"
     }
   },
   "characters": {
@@ -309,7 +335,8 @@
         "subject": "Subject",
         "fact": "Fact"
       },
-      "deleteConfirm": "Permanently delete this fact?"
+      "deleteConfirm": "Permanently delete this fact?",
+      "canonHeader": "Story canon — locked rules"
     },
     "summary": {
       "empty": "No summary yet.",
@@ -339,7 +366,10 @@
       "historyText": "History",
       "phiText": "Post-history instructions",
       "copyAsText": "Copy as text",
-      "copied": "Copied!"
+      "copied": "Copied!",
+      "driftTitle": "Silent drift corrections in this prompt",
+      "memoriesWhyTitle": "Why these memories were selected",
+      "memoryScore": "similarity {{score}}, after aging {{decayed}}"
     },
     "search": {
       "placeholder": "Search memories and facts…",

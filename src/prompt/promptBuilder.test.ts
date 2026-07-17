@@ -638,3 +638,86 @@ describe("presetExtraSystemPrompt (M12.4)", () => {
     expect(systemMessage?.content).toBeDefined();
   });
 });
+
+describe("canon facts (M25.1)", () => {
+  it("renders locked facts in a [KÁNON PŘÍBĚHU] block before [FAKTA SVĚTA]", () => {
+    const { report } = buildPrompt(
+      baseInput({
+        ledgerFacts: [
+          makeFact({ subject: "Ashford", fact: "The capital city." }),
+          makeFact({ subject: "Kai", category: "player", fact: "Cannot cast magic.", locked: true }),
+        ],
+      }),
+    );
+    const sys = report.sections.systemText;
+    expect(sys).toContain("[KÁNON PŘÍBĚHU");
+    expect(sys).toContain("[FAKTA SVĚTA — závazná]");
+    expect(sys.indexOf("[KÁNON PŘÍBĚHU")).toBeLessThan(sys.indexOf("[FAKTA SVĚTA"));
+    expect(report.sections.canonFactsIncluded).toBe(1);
+  });
+
+  it("never trims locked facts even in trimmable categories", () => {
+    const lockedEvent = makeFact({
+      id: "locked-event",
+      category: "event",
+      subject: "Krystal",
+      fact: "The crystal was shattered and cannot be restored. ".repeat(3),
+      locked: true,
+    });
+    const fillerFacts = Array.from({ length: 20 }, (_, i) =>
+      makeFact({ id: `ev-${i}`, category: "event", subject: `Event ${i}`, fact: "Something happened here. ".repeat(5) }),
+    );
+    const { report } = buildPrompt(
+      baseInput({
+        ledgerFacts: [lockedEvent, ...fillerFacts],
+        contextBudget: 300,
+        history: makeHistory(MIN_VERBATIM_MESSAGES),
+      }),
+    );
+    expect(report.sections.systemText).toContain("Krystal");
+    expect(report.sections.canonFactsIncluded).toBe(1);
+  });
+
+  it("includes locked facts of any category in the end-of-context canon reminder", () => {
+    const { report } = buildPrompt(
+      baseInput({
+        character: makeCharacter({ postHistoryInstructions: "Stay in character." }),
+        ledgerFacts: [
+          makeFact({ category: "npc", subject: "Arkos", fact: "Is dead and stays dead.", locked: true }),
+        ],
+      }),
+    );
+    expect(report.sections.phiText).toContain("Arkos");
+  });
+});
+
+describe("drift corrections (M25.2)", () => {
+  it("injects corrections as the last block of the trailing system message", () => {
+    const { messages, report } = buildPrompt(
+      baseInput({
+        driftCorrections: ["Hráč: neumí sesílat magii — poslední scéna mu ji přiznala"],
+      }),
+    );
+    const last = messages[messages.length - 1];
+    expect(last.role).toBe("system");
+    expect(last.content).toContain("[TICHÁ KOREKCE");
+    expect(last.content).toContain("neumí sesílat magii");
+    expect(report.sections.driftCorrections).toHaveLength(1);
+  });
+
+  it("renders nothing when there are no corrections", () => {
+    const { report } = buildPrompt(baseInput());
+    expect(report.sections.phiText).not.toContain("[TICHÁ KOREKCE");
+    expect(report.sections.driftCorrections).toHaveLength(0);
+  });
+});
+
+describe("director note (M25.3)", () => {
+  it("renders the note into the trailing system message", () => {
+    const { report } = buildPrompt(
+      baseInput({ directorNote: "Zpomal tempo a drž temný tón." }),
+    );
+    expect(report.sections.phiText).toContain("[REŽIE SCÉNY]");
+    expect(report.sections.phiText).toContain("Zpomal tempo");
+  });
+});
