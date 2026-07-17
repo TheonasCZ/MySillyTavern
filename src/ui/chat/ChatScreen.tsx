@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { branchChat } from "../../db/repositories/chatsRepo";
 import { createMessage } from "../../db/repositories/messagesRepo";
+import { getCalendarSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { InventoryPanel } from "./InventoryPanel";
@@ -17,6 +18,12 @@ import { usePersonasStore } from "../../stores/personasStore";
 import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
+import {
+  calendarFromJSON,
+  type CalendarDate,
+  formatCalendarDateShort,
+  SEASON_EFFECTS,
+} from "../../memory/calendar";
 import { ChatInput } from "./ChatInput";
 import { GroupMembersPopover } from "./GroupMembersPopover";
 import { MessageList, type MemberInfo } from "./MessageList";
@@ -82,6 +89,8 @@ export function ChatScreen() {
   const [questsOpen, setQuestsOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
+  const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
 
   const handleDiceRoll = useCallback(
     async (expression: string) => {
@@ -122,6 +131,22 @@ export function ChatScreen() {
       void closeChat();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Load calendar date for this chat
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await getCalendarSetting(id);
+        if (cancelled) return;
+        setCalendarDate(raw ? calendarFromJSON(raw) : null);
+      } catch {
+        if (!cancelled) setCalendarDate(null);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [id]);
 
   if (!id) return null;
@@ -195,6 +220,46 @@ export function ChatScreen() {
             ← {t("room.backToList")}
           </button>
           <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
+          {calendarDate && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setCalendarExpanded((v) => !v)}
+                aria-pressed={calendarExpanded}
+                className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors"
+                style={{
+                  color: "var(--color-text-muted)",
+                  backgroundColor: calendarExpanded ? "var(--color-surface-2)" : "transparent",
+                }}
+                title={calendarDate.season}
+              >
+                {formatCalendarDateShort(calendarDate)}
+              </button>
+              {calendarExpanded && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setCalendarExpanded(false)}
+                  />
+                  <div
+                    className="absolute left-0 top-full z-40 mt-1 w-56 rounded-[var(--radius-md)] border p-3 text-xs shadow-lg"
+                    style={{
+                      borderColor: "var(--color-border-strong)",
+                      backgroundColor: "var(--color-bg-elevated)",
+                      color: "var(--color-text)",
+                    }}
+                  >
+                    <div className="font-medium">
+                      {calendarDate.season} — {calendarDate.day}. {calendarDate.month}, Rok {calendarDate.year}
+                    </div>
+                    <div className="mt-1" style={{ color: "var(--color-text-muted)" }}>
+                      {SEASON_EFFECTS[calendarDate.season] ?? ""}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>

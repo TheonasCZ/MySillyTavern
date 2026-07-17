@@ -127,6 +127,10 @@ export interface PromptBuilderInput {
    * `[PRÁVĚ TEĎ]` block right before the canon reminder. Small enough
    * (~50 tokens) to not stress the budget. */
   gameTimeDescription?: string;
+  /** Current calendar date + season effects from `memory/calendar.ts`,
+   * rendered as a `[DNEŠNÍ DATUM]` block before `[PRÁVĚ TEĎ]`. Includes
+   * season effect hints and `[TIME:+1d]` tag instructions for the model. */
+  calendarDateDescription?: string;
   /** Current mood facts from `memory/emotions.ts`, keyed by character name.
    * When `groupMembers` are present, the mood is appended to each member's
    * description line (e.g. `- Eliška (nálada: vyděšená): ...`). */
@@ -519,6 +523,13 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (groupMembers.length > 0) {
       const groupInstruction = buildGroupSpeakerInstruction(groupMembers.map((m) => m.name));
       phi = phi ? `${phi}\n\n${groupInstruction}` : groupInstruction;
+    }
+    // Calendar date + season block rendered before game-time — gives the
+    // model awareness of the fantasy date, season effects, and the [TIME:+1d]
+    // tag for advancing the calendar.
+    const calDesc = input.calendarDateDescription?.trim();
+    if (calDesc) {
+      phi = phi ? `${phi}\n\n${calDesc}` : calDesc;
     }
     // Game-time block rendered before the canon reminder — small enough
     // (~50 tokens) to not stress the budget and gives the model a sense

@@ -38,9 +38,10 @@ import {
 } from "../chat/groupSpeaker";
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
-import { scheduleMemoryWork } from "../memory/memoryEngine";
+import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
 import { processGameResponse } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
+import { calendarDescription } from "../memory/calendar";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { chatComplete } from "../providers/chatComplete";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
@@ -186,6 +187,15 @@ async function buildApiMessages(
   const verbatimWindowSetting = await getSetting("verbatim_window").catch(() => null);
   const verbatimWindow = verbatimWindowSetting ? Number(verbatimWindowSetting) : DEFAULT_VERBATIM_WINDOW;
 
+  // Calendar: ensure initialized and build the description for the prompt
+  let calendarDateDescription: string | undefined;
+  try {
+    const cal = await ensureCalendarInitialized(chat.id);
+    calendarDateDescription = calendarDescription(cal);
+  } catch (err) {
+    console.warn("calendar loading failed", err);
+  }
+
   // Semantic retrieval (M7/M8): one embedding call over the conversation
   // tail scores everything stored — facts get a relevance-aware trim order,
   // the top-K older scenes come back as `[RELEVANTNÍ VZPOMÍNKY]`, and lore
@@ -254,6 +264,7 @@ async function buildApiMessages(
     factRelevance,
     retrievedMemories,
     groupMembers,
+    calendarDateDescription,
   });
 
   return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report };

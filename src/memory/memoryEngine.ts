@@ -30,6 +30,13 @@ import {
   defaultGameTimeState,
   type GameTimeState,
 } from "./gameTime";
+import {
+  advanceDay,
+  calendarToJSON,
+  calendarFromJSON,
+  defaultCalendarDate,
+  type CalendarDate,
+} from "./calendar";
 
 // Side-effect import: loads the auto-illustration background queue so it is
 // ready to accept items as soon as facts are locked or inventory is updated.
@@ -293,6 +300,52 @@ export async function advanceAndPersistTime(
   } catch (err) {
     console.warn("advanceAndPersistTime failed", err);
     return defaultGameTimeState();
+  }
+}
+
+const CALENDAR_SETTING_PREFIX = "game_calendar_";
+
+/** Advances the fantasy calendar for a chat by one day and persists it.
+ * Companion to `advanceAndPersistTime` — the calendar tracks named days,
+ * months and seasons separately from the real-time game clock. Never throws:
+ * on any failure the default calendar (Rok 847, day 1) is returned. */
+export async function advanceAndPersistCalendar(
+  chatId: string,
+): Promise<CalendarDate> {
+  try {
+    const key = `${CALENDAR_SETTING_PREFIX}${chatId}`;
+    const raw = await getSetting(key);
+    let cal: CalendarDate;
+    if (raw) {
+      cal = calendarFromJSON(JSON.parse(raw));
+    } else {
+      cal = defaultCalendarDate();
+    }
+    const next = advanceDay(cal);
+    await setSetting(key, JSON.stringify(calendarToJSON(next)));
+    return next;
+  } catch (err) {
+    console.warn("advanceAndPersistCalendar failed", err);
+    return defaultCalendarDate();
+  }
+}
+
+/** Initializes the calendar for a chat if it hasn't been set yet.
+ * Safe to call on every chat open — only writes the first time. */
+export async function ensureCalendarInitialized(chatId: string): Promise<CalendarDate> {
+  try {
+    const key = `${CALENDAR_SETTING_PREFIX}${chatId}`;
+    const raw = await getSetting(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return calendarFromJSON(parsed);
+    }
+    const cal = defaultCalendarDate();
+    await setSetting(key, JSON.stringify(calendarToJSON(cal)));
+    return cal;
+  } catch (err) {
+    console.warn("ensureCalendarInitialized failed", err);
+    return defaultCalendarDate();
   }
 }
 

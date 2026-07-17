@@ -22,3 +22,34 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   const rows = await query<SettingRow>("SELECT key, value FROM settings", []);
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
+
+// ---- Calendar helpers (plan M23) ----------------------------------------
+
+export const CALENDAR_SETTING_KEY = "game_calendar";
+
+export interface CalendarJSON {
+  year: number;
+  dayOfYear: number;
+}
+
+/** Reads the stored calendar for a chat, or returns null if never set. */
+export async function getCalendarSetting(chatId: string): Promise<CalendarJSON | null> {
+  const key = `${CALENDAR_SETTING_KEY}_${chatId}`;
+  const raw = await getSetting(key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as CalendarJSON;
+    if (typeof parsed.year === "number" && typeof parsed.dayOfYear === "number") {
+      return parsed;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/** Persists the calendar JSON for a chat. */
+export async function setCalendarSetting(chatId: string, cal: CalendarJSON): Promise<void> {
+  const key = `${CALENDAR_SETTING_KEY}_${chatId}`;
+  await setSetting(key, JSON.stringify(cal));
+}
