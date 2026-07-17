@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 
 import { branchChat } from "../../db/repositories/chatsRepo";
 import { createMessage } from "../../db/repositories/messagesRepo";
-import { execute, newId, nowIso } from "../../db/database";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
-import { listMessages } from "../../db/repositories/messagesRepo";
-import { listQuests } from "../../db/repositories/questsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
-import { toConnectionDto } from "../../providers/dto";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { InventoryPanel } from "./InventoryPanel";
 import { QuestPanel } from "./QuestPanel";
@@ -19,9 +15,6 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
-import { chunkMessages, chunkToExportFormat } from "../../chat/chronicleChunker";
-import { THEME_LABELS } from "../../chat/chronicleThemes";
-import type { ExportStatus } from "../../chat/chronicleTypes";
 import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
@@ -98,14 +91,6 @@ export function ChatScreen() {
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportJobId, setExportJobId] = useState<string | null>(null);
-  const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
-  const [exportTheme, setExportTheme] = useState("fantasy");
-  const [exportFormat, setExportFormat] = useState("html");
-  const [exportIllustrations, setExportIllustrations] = useState(true);
-  const [exportConnectionId, setExportConnectionId] = useState("");
-  const exportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const handleDiceRoll = useCallback(
     async (expression: string) => {
@@ -217,116 +202,6 @@ export function ChatScreen() {
     if (!confirm(t("room.branchConfirm") ?? "")) return;
     const branched = await branchChat(id, messageId, t("room.branchSuffix"));
     if (branched) navigate(`/chat/${branched.id}`);
-  };
-
-  // ── Chronicle Export ──────────────────────────────────────────────
-  const startExport = async () => {
-    if (!id || !exportConnectionId) return;
-    const conn = connections.find((c) => c.id === exportConnectionId);
-    if (!conn) return;
-
-    try {
-      const allMessages = await listMessages(id);
-      const quests = await listQuests(id);
-      const chunks = chunkMessages(allMessages, quests);
-      const chunksJson = JSON.stringify(chunks.map(chunkToExportFormat));
-
-      const jobId = newId();
-      const now = nowIso();
-
-      // Create export_jobs row in DB
-      await execute(
-        `INSERT INTO export_jobs
-          (id, chat_id, persona_id, status, progress, total_chunks, current_chunk,
-           connection_id, theme, format, include_illustrations, chunks_json, created_at, updated_at)
-         VALUES ($1, $2, $3, 'running', 0, $4, 0, $5, $6, $7, $8, $9, $10, $11)`,
-        [
-          jobId,
-          id,
-          chat?.personaId ?? null,
-          chunks.length,
-          exportConnectionId,
-          exportTheme,
-          exportFormat,
-          exportIllustrations ? 1 : 0,
-          chunksJson,
-          now,
-          now,
-        ],
-      );
-
-      setExportJobId(jobId);
-      setExportOpen(false);
-
-      // Get output directory from Rust (we'll use a default)
-      const outputDir = ""; // Rust will use a default path
-
-      await invoke("start_export", {
-        jobId,
-        connection: toConnectionDto(conn),
-        chunksJson,
-        theme: exportTheme,
-        format: exportFormat,
-        includeIllustrations: exportIllustrations,
-        outputDir,
-      });
-
-      // Start polling for status
-      exportPollRef.current = setInterval(async () => {
-        try {
-          const status: ExportStatus = await invoke("get_export_status", { jobId });
-          setExportStatus(status);
-          if (status.status === "completed" || status.status === "failed") {
-            if (exportPollRef.current) {
-              clearInterval(exportPollRef.current);
-              exportPollRef.current = null;
-            }
-            // Update DB
-            const n = nowIso();
-            await execute(
-              `UPDATE export_jobs SET status = $2, progress = $3, current_chunk = $4, output_path = $5, updated_at = $6 WHERE id = $1`,
-              [jobId, status.status, status.progress, status.current_chunk, status.output_path ?? null, n],
-            );
-          } else {
-            // Update DB progress
-            await execute(
-              `UPDATE export_jobs SET progress = $2, current_chunk = $3, updated_at = $4 WHERE id = $1`,
-              [jobId, status.progress, status.current_chunk, nowIso()],
-            );
-          }
-        } catch {
-          // Polling error - ignore
-        }
-      }, 2000);
-    } catch (err) {
-      console.error("export start failed", err);
-    }
-  };
-
-  const cancelExport = async () => {
-    if (!exportJobId) return;
-    if (exportPollRef.current) {
-      clearInterval(exportPollRef.current);
-      exportPollRef.current = null;
-    }
-    try {
-      await invoke("cancel_export", { jobId: exportJobId });
-      await execute(
-        `UPDATE export_jobs SET status = 'failed', output_path = 'Cancelled', updated_at = $2 WHERE id = $1`,
-        [exportJobId, nowIso()],
-      );
-      setExportStatus(null);
-      setExportJobId(null);
-    } catch (err) {
-      console.error("export cancel failed", err);
-    }
-  };
-
-  const openExportFile = () => {
-    if (exportStatus?.output_path) {
-      // The Rust side writes to app data dir; open via shell
-      invoke("read_text_file", { path: exportStatus.output_path }).catch(() => {});
-    }
   };
 
   return (
@@ -476,80 +351,6 @@ export function ChatScreen() {
                 onClose={() => setGroupOpen(false)}
               />
             )}
-            {exportOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
-                <div
-                  className="absolute right-0 top-full z-50 mt-1 w-72 rounded-[var(--radius-md)] border p-4 shadow-lg"
-                  style={{
-                    borderColor: "var(--color-border-strong)",
-                    backgroundColor: "var(--color-bg-elevated)",
-                    color: "var(--color-text)",
-                  }}
-                >
-                  <h3 className="mb-3 font-[var(--font-display)] text-sm">Exportovat kroniku</h3>
-                  <div className="flex flex-col gap-2 text-xs">
-                    <label>
-                      Připojení:
-                      <select
-                        className="ml-1 rounded-[var(--radius-sm)] border px-1 py-0.5"
-                        style={selectStyle}
-                        value={exportConnectionId}
-                        onChange={(e) => setExportConnectionId(e.target.value)}
-                      >
-                        {connections.filter((c) => c.purposes.includes("chat")).map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Téma:
-                      <select
-                        className="ml-1 rounded-[var(--radius-sm)] border px-1 py-0.5"
-                        style={selectStyle}
-                        value={exportTheme}
-                        onChange={(e) => setExportTheme(e.target.value)}
-                      >
-                        {Object.entries(THEME_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Formát:
-                      <select
-                        className="ml-1 rounded-[var(--radius-sm)] border px-1 py-0.5"
-                        style={selectStyle}
-                        value={exportFormat}
-                        onChange={(e) => setExportFormat(e.target.value)}
-                      >
-                        <option value="html">HTML</option>
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={exportIllustrations}
-                        onChange={(e) => setExportIllustrations(e.target.checked)}
-                      />
-                      Ilustrace
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => void startExport()}
-                      disabled={!exportConnectionId}
-                      className="mt-2 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium transition-colors"
-                      style={{
-                        backgroundColor: exportConnectionId ? "var(--color-accent)" : "var(--color-surface-2)",
-                        color: exportConnectionId ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-                      }}
-                    >
-                      Spustit export
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
           </div>
           <button
             type="button"
@@ -590,82 +391,8 @@ export function ChatScreen() {
           >
             {t("title", { ns: "memory" })}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (exportJobId && exportStatus?.status === "running") return;
-              if (exportJobId && exportStatus?.status === "completed") {
-                openExportFile();
-                return;
-              }
-              setExportOpen(true);
-              setExportConnectionId(chat?.connectionId ?? connections[0]?.id ?? "");
-            }}
-            title={exportJobId && exportStatus?.status === "running" ? "Export běží..." : "Exportovat kroniku"}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: exportOpen ? "var(--color-accent)" : "transparent",
-              color: exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            📖
-          </button>
         </div>
       </header>
-
-      {exportJobId && exportStatus && (
-        <div
-          className="flex items-center gap-3 border-b px-4 py-2 sm:px-8"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
-        >
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            📖 Export kroniky {exportStatus.status === "running" ? "běží" : exportStatus.status === "completed" ? "dokončen" : "selhal"}
-            {exportStatus.status === "running" && ` (${exportStatus.currentChunk}/${exportStatus.totalChunks})`}
-          </span>
-          {exportStatus.status === "running" && (
-            <>
-              <div className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: "var(--color-surface-2)" }}>
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${exportStatus.totalChunks > 0 ? (exportStatus.currentChunk / exportStatus.totalChunks) * 100 : 0}%`,
-                    backgroundColor: "var(--color-accent)",
-                  }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void cancelExport()}
-                className="rounded-[var(--radius-sm)] px-2 py-0.5 text-xs"
-                style={{ color: "var(--color-danger)", borderColor: "var(--color-danger)", border: "1px solid" }}
-              >
-                Zrušit
-              </button>
-            </>
-          )}
-          {exportStatus.status === "completed" && exportStatus.outputPath && (
-            <button
-              type="button"
-              onClick={openExportFile}
-              className="rounded-[var(--radius-sm)] border px-2 py-0.5 text-xs"
-              style={{ borderColor: "var(--color-accent)", color: "var(--color-accent)" }}
-            >
-              Otevřít soubor
-            </button>
-          )}
-          {(exportStatus.status === "completed" || exportStatus.status === "failed") && (
-            <button
-              type="button"
-              onClick={() => { setExportJobId(null); setExportStatus(null); }}
-              className="rounded-[var(--radius-sm)] px-2 py-0.5 text-xs"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
