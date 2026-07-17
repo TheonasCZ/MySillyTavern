@@ -41,6 +41,46 @@ describe("chunkMessagesForEmbedding", () => {
     expect(chunk.text).toContain("Hráč: Vytáhnu krystal.");
     expect(chunk.text).toContain("Vypravěč: Krystal se rozzáří.");
   });
+
+  it("overlap=0 behaves the same as no overlap", () => {
+    const messages = Array.from({ length: 8 }, (_, i) => msg(`m${i}`, "user", `krátká ${i}`));
+    const noOverlap = chunkMessagesForEmbedding(messages);
+    const explicitZero = chunkMessagesForEmbedding(messages, 0);
+    expect(explicitZero).toEqual(noOverlap);
+  });
+
+  it("overlap=3 carries last 3 messages into next chunk", () => {
+    const messages = Array.from({ length: 12 }, (_, i) => msg(`m${i}`, "user", `krátká ${i}`));
+    const chunks = chunkMessagesForEmbedding(messages, 3);
+    // 12 messages, chunk size 6, overlap 3:
+    // chunk 0: m0..m5 (refId m0), keep m3,m4,m5
+    // chunk 1: m3..m8 (refId m3), keep m6,m7,m8
+    // chunk 2: m6..m11 (refId m6), flush with keep=0
+    expect(chunks).toHaveLength(3);
+    expect(chunks[0].refId).toBe("m0");
+    expect(chunks[1].refId).toBe("m3");
+    expect(chunks[2].refId).toBe("m6");
+  });
+
+  it("overlap text appears in both chunks that share messages", () => {
+    const messages = [
+      msg("a", "user", "Ahoj"),
+      msg("b", "assistant", "Nazdar"),
+      msg("c", "user", "Jak je?"),
+      msg("d", "assistant", "Dobře."),
+      msg("e", "user", "Super."),
+      msg("f", "assistant", "Fajn."),
+      msg("g", "user", "Konec."),
+    ];
+    // 7 messages, chunk size 6, overlap 3:
+    // chunk 0: a..f (refId a), keep d,e,f
+    // chunk 1: d..g (refId d)
+    const chunks = chunkMessagesForEmbedding(messages, 3);
+    expect(chunks).toHaveLength(2);
+    // Both chunks should contain messages d, e, f
+    expect(chunks[0].text).toContain("Hráč: Super.");
+    expect(chunks[1].text).toContain("Hráč: Super.");
+  });
 });
 
 describe("selectBackfillCandidates", () => {
