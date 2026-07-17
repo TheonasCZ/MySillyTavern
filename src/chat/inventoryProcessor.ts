@@ -2,6 +2,7 @@ import type { Persona } from "../db/repositories/personasRepo";
 import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
 import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
+import { advanceAndPersistCalendar } from "../memory/memoryEngine";
 import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
 
@@ -19,8 +20,19 @@ export async function processGameResponse(
   chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && questMutations.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations, timeMutations } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0) return text;
+
+  // Apply time mutations: [TIME:+Nd] advances the calendar by N days each.
+  if (chatId) {
+    for (const tm of timeMutations) {
+      try {
+        for (let i = 0; i < tm.days; i++) await advanceAndPersistCalendar(chatId);
+      } catch {
+        // Non-critical
+      }
+    }
+  }
 
   // Apply quest mutations: [QUEST:+name] / [QUEST:✓name] / [QUEST:-name] / [QUEST:name: note]
   if (chatId) {

@@ -69,6 +69,13 @@ export interface QuestMutation {
   note?: string;
 }
 
+/** Only day-level advancement is modeled — the calendar has no clock. An
+ *  absolute-time tag like `[TIME: 14:00]` is still stripped from the
+ *  visible text but produces no mutation (nothing to apply it to). */
+export interface TimeMutation {
+  days: number;
+}
+
 export interface FactionMutation {
   /** Faction name (lowercased for matching). */
   name: string;
@@ -88,6 +95,7 @@ interface ParsedTags {
   craftedMutations: CraftedMutation[];
   conditionMutations: ConditionMutation[];
   questMutations: QuestMutation[];
+  timeMutations: TimeMutation[];
 }
 
 export function parseGameTags(text: string): ParsedTags {
@@ -99,6 +107,7 @@ export function parseGameTags(text: string): ParsedTags {
   const craftedMutations: CraftedMutation[] = [];
   const conditionMutations: ConditionMutation[] = [];
   const questMutations: QuestMutation[] = [];
+  const timeMutations: TimeMutation[] = [];
 
   let cleanText = text;
 
@@ -132,6 +141,18 @@ export function parseGameTags(text: string): ParsedTags {
       name: name.trim(),
       delta: op === "+" ? parseInt(nStr, 10) : -parseInt(nStr, 10),
       absolute: null,
+    });
+    return "";
+  });
+
+  // Also handle progress-style, no +/- at all: [SKILL: name 3/10] — sets the
+  // absolute level to the first number (models often write this instead of
+  // the documented forms above).
+  cleanText = cleanText.replace(/\[SKILL:\s*([^\]:+-]+?)\s+(\d+)\s*\/\s*\d+\s*\]/gi, (_m, name: string, levelStr: string) => {
+    skillChanges.push({
+      name: name.trim(),
+      delta: 0,
+      absolute: parseInt(levelStr, 10),
     });
     return "";
   });
@@ -230,5 +251,14 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations };
+  // Parse time tags: [TIME:+Nd] advances the calendar by N days. Any other
+  // [TIME:...] content (e.g. an absolute clock time like "14:00", which the
+  // day-only calendar can't represent) is stripped but produces no mutation.
+  cleanText = cleanText.replace(/\[TIME:\s*([^\]]*)\]/gi, (_m, inner: string) => {
+    const m = inner.match(/^\+(\d+)\s*d$/i);
+    if (m) timeMutations.push({ days: parseInt(m[1], 10) });
+    return "";
+  });
+
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations, timeMutations };
 }

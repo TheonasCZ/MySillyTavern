@@ -50,3 +50,35 @@ describe("parseGameTags — condition tags", () => {
     ]);
   });
 });
+
+describe("parseGameTags — skill tags", () => {
+  it("parses the documented +/- forms", () => {
+    expect(parseGameTags("[SKILL:+Pěst]").skillChanges).toEqual([
+      { name: "Pěst", delta: 1, absolute: null },
+    ]);
+    expect(parseGameTags("[SKILL:Pěst+2]").skillChanges).toEqual([
+      { name: "Pěst", delta: 2, absolute: null },
+    ]);
+  });
+
+  it("parses the loose progress format the model actually emits", () => {
+    const { skillChanges, cleanText } = parseGameTags(
+      "Text. [SKILL: Rozebírání artefaktů 3/10] Text.",
+    );
+    expect(skillChanges).toEqual([{ name: "Rozebírání artefaktů", delta: 0, absolute: 3 }]);
+    expect(cleanText).not.toContain("[SKILL");
+  });
+});
+
+describe("parseGameTags — time tags", () => {
+  it("parses [TIME:+Nd] as a day-advance mutation", () => {
+    expect(parseGameTags("[TIME:+1d]").timeMutations).toEqual([{ days: 1 }]);
+    expect(parseGameTags("[TIME:+3d]").timeMutations).toEqual([{ days: 3 }]);
+  });
+
+  it("strips an unsupported clock-time tag without producing a mutation", () => {
+    const { timeMutations, cleanText } = parseGameTags("Scéna. [TIME: 14:00] Pokračuje.");
+    expect(timeMutations).toEqual([]);
+    expect(cleanText).not.toContain("[TIME");
+  });
+});

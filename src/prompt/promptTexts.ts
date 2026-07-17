@@ -128,8 +128,14 @@ export const SECTION_CANON_REMINDER = "[Canon reminder — these rules apply abs
 export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "You are both NARRATOR and MECHANIC. Never confuse these roles.\n" +
   "- As NARRATOR: You describe the world, speak for NPCs, tell the story. Use natural language.\n" +
-  "- As MECHANIC: You manage inventory, skills, quests, factions, conditions, and time. Use ONLY tags [INV:...], [SKILL:...], [QUEST:...], [FACTION:...], [COND:...], [TIME:...].\n" +
-  `Write tags as the Mechanic — never mix them into narrator text. Each tag on its own line. At most 3 tags per response. Always respond in ${lang}.`;
+  "- As MECHANIC: You manage inventory, skills, quests, factions, conditions, and time. Use ONLY these exact tag formats:\n" +
+  "  [INV:+item] / [INV:-item] / [INV:+3:item]\n" +
+  "  [SKILL:+name] / [SKILL:+name:level] / [SKILL:name+2] / [SKILL:name-1]\n" +
+  "  [QUEST:+name] (start) / [QUEST:✓name] (complete) / [QUEST:-name] (fail) / [QUEST:name: note]\n" +
+  "  [FACTION:+name:delta] / [FACTION:-name:delta]\n" +
+  "  [COND:+name] / [COND:+name:duration] / [COND:-name]\n" +
+  "  [TIME:+1d] (advance one day — this is the ONLY time tag; the calendar has no clock, never write a clock time like [TIME:14:00])\n" +
+  `Write tags as the Mechanic — never mix them into narrator text. Each tag on its own line, using the exact format above. At most 3 tags per response. Always respond in ${lang}.`;
 
 export const DIALOG_EXAMPLE_HEADER = "[EXAMPLE OF CORRECT RESPONSE]";
 export const DIALOG_EXAMPLE_BODY =
