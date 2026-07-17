@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -51,6 +51,20 @@ export function ChatInput({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const draftBeforeHistoryRef = useRef("");
 
+  // Auto-save draft — restore on mount, save on change
+  const draftKey = "chat_draft";
+  useEffect(() => {
+    if (draftKey) {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) setValue(saved);
+    }
+  }, [draftKey]);
+
+  const handleChange = (val: string) => {
+    setValue(val);
+    if (draftKey) localStorage.setItem(draftKey, val);
+  };
+
   // Expose insertText via a global callback — InventoryPanel calls this
   // to insert item names into the input without a complex prop chain.
   if (typeof window !== "undefined") {
@@ -72,6 +86,7 @@ export function ChatInput({
         historyRef.current = [trimmed, ...historyRef.current.slice(0, 50)];
         setHistoryIndex(-1);
         setValue("");
+        localStorage.removeItem(draftKey);
         setDiceFlash(true);
         setTimeout(() => setDiceFlash(false), 300);
         return;
@@ -83,6 +98,7 @@ export function ChatInput({
     historyRef.current = [trimmed, ...historyRef.current.slice(0, 49)];
     setHistoryIndex(-1);
     setValue("");
+    localStorage.removeItem(draftKey);
   }, [value, disabled, onSend, onDiceRoll]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -199,7 +215,7 @@ export function ChatInput({
         placeholder={t("room.inputPlaceholder") ?? ""}
         value={value}
         disabled={disabled}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
         rows={1}
       />
