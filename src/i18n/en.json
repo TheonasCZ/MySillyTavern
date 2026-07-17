@@ -310,7 +310,12 @@
       "trimmedTitle": "What got trimmed",
       "noneTrimmed": "Nothing was trimmed — everything fit the budget.",
       "memories": "Memories",
-      "canonReminder": "Canon reminder"
+      "canonReminder": "Canon reminder",
+      "systemText": "System message",
+      "historyText": "History",
+      "phiText": "Post-history instructions",
+      "copyAsText": "Copy as text",
+      "copied": "Copied!"
     },
     "search": {
       "placeholder": "Search memories and facts…",

@@ -125,6 +125,12 @@ export interface PromptReport {
     /** Number of other group members rendered in `[Další postavy ve scéně]`.
      * Only present for group-chat builds (`input.groupMembers` given). */
     groupMembersIncluded?: number;
+    /** The full assembled system prompt text (system core + sections). */
+    systemText: string;
+    /** The verbatim history messages concatenated as "role: content\n". */
+    historyText: string;
+    /** The trailing system message (post_history_instructions + canon reminder + group speaker instruction). */
+    phiText: string;
   };
   /** Human/UI-readable list of what got cut, in the order it was cut —
    * shown verbatim in the memory panel's "Prompt" tab. */
@@ -325,6 +331,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     totalTokens: number;
     sectionsTokens: ReturnType<typeof sectionTokens>;
     canonReminderTokens: number;
+    systemText: string;
+    historyText: string;
+    phiText: string;
   } {
     const mesExampleSection = mesExampleIncluded ? buildMesExampleSection(character, charName, userName) : "";
     const factsSection = buildFactsSection(facts, charName, userName);
@@ -365,7 +374,10 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const totalTokens = sectionsTok.systemTokens + sectionsTok.factsTokens + sectionsTok.loreTokens +
       sectionsTok.summaryTokens + sectionsTok.memoriesTokens + sectionsTok.historyTokens;
 
-    return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection) };
+    const historyText = historyIncluded.map((m) => `${m.role}: ${m.content}`).join("\n");
+    const phiText = phi ? substitutePlaceholders(phi, charName, userName) : "";
+
+    return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection), systemText, historyText, phiText };
   }
 
   function sectionTokens(
@@ -384,7 +396,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       loreTokens: estimateTokens(loreSection),
       summaryTokens: estimateTokens(summarySection),
       memoriesTokens: estimateTokens(memoriesSection),
-      historyTokens: history.reduce((sum, m) => sum + estimateTokens(m.content), 0) + estimateTokens(phi),
+      historyTokens: estimateTokens(
+        history.map((m) => `${m.role}: ${m.content}`).join("\n"),
+      ) + estimateTokens(phi),
     };
   }
 
@@ -485,6 +499,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       mesExampleIncluded,
       canonReminderTokens: current.canonReminderTokens,
       ...(input.groupMembers ? { groupMembersIncluded: groupMembers.length } : {}),
+      systemText: current.systemText,
+      historyText: current.historyText,
+      phiText: current.phiText,
     },
     trimmedNotes,
   };
