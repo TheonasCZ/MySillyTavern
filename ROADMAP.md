@@ -200,10 +200,13 @@ drží styl, regex pravidlo umlčí zvolenou frázi.
    (náš trumf — ST na tohle potřebuje extension). Práh + budget v
    nastavení, viditelné v Prompt inspectoru.
 
-5. **Generátor lorebooků z kampaně** — jeden LLM průchod přeskupí
-   existující ledger fakta + shrnutí + kroniku do lorebook záznamů
-   s klíčovými slovy (a rovnou embeddingy pro bod 4); UI: tlačítko
-   „Vygenerovat lorebook z této kampaně" v editoru lorebooků.
+5. **Automatické plnění lorebooku** (duch M25.5 — žádná ruční povinnost):
+   při každém běhu summarizeru se ze skládaných scén na pozadí destilují
+   TRVALÉ znalosti světa (místa, artefakty, legendy, zvyky — NE dějové
+   události, ty patří kronice/ledgeru) do kampaňového lorebooku
+   s klíčovými slovy + embeddingy; dedup proti existujícím záznamům
+   (sémantická podobnost). Uživatel-admin: záznamy jde editovat/mazat.
+   Tlačítko „Přegenerovat z celé kampaně" jen jako ruční doplněk.
 
 **Hotovo když:** import ST World Info se selective/sticky poli zachová
 chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem;
