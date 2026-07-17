@@ -18,6 +18,10 @@ export async function setSetting(key: string, value: string): Promise<void> {
   );
 }
 
+export async function resetAllSettings(): Promise<void> {
+  await execute("DELETE FROM settings", []);
+}
+
 export async function getAllSettings(): Promise<Record<string, string>> {
   const rows = await query<SettingRow>("SELECT key, value FROM settings", []);
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));

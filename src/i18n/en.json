@@ -514,6 +514,9 @@
       "connection": "Illustration connection",
       "connectionHelp": "Gemini connection used for image generation. If none selected, the default chat connection is used.",
       "saved": "Saved."
-    }
+    },
+    "resetButton": "Reset to defaults",
+    "resetConfirm": "Reset all settings to defaults?",
+    "resetDone": "Settings reset!"
   }
 }

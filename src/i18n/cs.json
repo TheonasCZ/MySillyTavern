@@ -138,7 +138,6 @@
       "exportError": "Export selhal: {{message}}",
       "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
-      "saved": "Uloženo.",
       "specVersion": "Formát karty: {{version}}",
       "addGreeting": "Přidat variantu",
       "tagsPlaceholder": "tag1, tag2, tag3",
@@ -225,7 +224,6 @@
       "backToList": "Zpět na lorebooky",
       "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tento lorebook včetně všech záznamů a přiřazení?",
-      "saved": "Uloženo.",
       "importWorldInfo": "Import World Info",
       "importing": "Importuji…",
       "importError": "Import selhal: {{message}}",
@@ -306,7 +304,6 @@
         "subject": "Předmět",
         "fact": "Fakt"
       },
-      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu trvale smazat tento fakt?"
     },
     "summary": {
@@ -489,9 +486,8 @@
         "success": "Spojení funguje. Odpověď: {{reply}}",
         "failure": "Spojení selhalo: {{message}}"
       },
-      "saved": "Uloženo.",
-      "deleteConfirm": "Opravdu smazat toto připojení? Smaže se i uložený klíč.",
       "saved": "Připojení uloženo.",
+      "deleteConfirm": "Opravdu smazat toto připojení? Smaže se i uložený klíč.",
       "models": {
         "load": "Načíst modely",
         "loading": "Načítám modely…",
@@ -519,6 +515,9 @@
       "connection": "Ilustrační připojení",
       "connectionHelp": "Gemini připojení použité pro generování obrázků. Pokud není vybrané, použije se výchozí chatové připojení.",
       "saved": "Uloženo."
-    }
+    },
+    "resetButton": "Obnovit výchozí hodnoty",
+    "resetConfirm": "Opravdu obnovit všechna nastavení?",
+    "resetDone": "Obnoveno!"
   }
 }

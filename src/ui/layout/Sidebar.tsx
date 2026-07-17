@@ -66,6 +66,9 @@ export function Sidebar() {
         >
           {t("nav.settings")}
         </NavLink>
+        <p className="mt-2 px-3 text-[11px]" style={{ color: "var(--color-text-faint)" }}>
+          v0.1.0-alpha
+        </p>
       </div>
     </nav>
   );
