@@ -45,6 +45,12 @@ export interface CharacterLike {
 export interface PersonaLike {
   name: string;
   description: string;
+  gender?: string;
+  age?: number | null;
+  race?: string;
+  appearance?: string;
+  skills?: Array<{ name: string; level: number }>;
+  inventory?: Array<{ item: string; qty: number; note?: string }>;
 }
 
 export type LedgerCategory = "player" | "world" | "npc" | "event" | "quest";
@@ -164,7 +170,7 @@ export interface PromptBuildResult {
   report: PromptReport;
 }
 
-export const DEFAULT_VERBATIM_WINDOW = 20;
+export const DEFAULT_VERBATIM_WINDOW = 6;
 export const MIN_VERBATIM_MESSAGES = 4;
 
 const DEFAULT_RP_INSTRUCTIONS =
@@ -239,9 +245,27 @@ function buildSystemCore(
   const parts = [base, character.description, character.personality, character.scenario].map((p) =>
     p.trim(),
   );
-  const personaDescription = persona?.description.trim();
-  if (personaDescription) {
-    parts.push(`[Hráčova persona — ${userName}]\n${personaDescription}`);
+  if (persona) {
+    const personaLines: string[] = [];
+    const identity: string[] = [];
+    if (persona.gender) identity.push(persona.gender);
+    if (persona.age) identity.push(`${persona.age} let`);
+    if (persona.race) identity.push(persona.race);
+    if (identity.length > 0) personaLines.push(identity.join(", "));
+    if (persona.appearance) personaLines.push(`\nVzhled: ${persona.appearance}`);
+    if (persona.skills?.length) {
+      personaLines.push("\nDovednosti:");
+      for (const s of persona.skills) personaLines.push(`- ${s.name} (úroveň ${s.level})`);
+    }
+    if (persona.inventory?.length) {
+      personaLines.push("\nInventář:");
+      for (const inv of persona.inventory) {
+        personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
+      }
+    }
+    if (personaLines.length > 0) {
+      parts.push(`[Hráčova persona — ${userName}]\n${personaLines.join("\n")}`);
+    }
   }
   const groupSection = buildGroupMembersSection(groupMembers, moodFacts);
   if (groupSection) parts.push(groupSection);
@@ -477,6 +501,25 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
     }
+    // Game tag instructions — tells the model to annotate item + skill changes
+    const hasInv = persona?.inventory?.length;
+    const hasSkills = persona?.skills?.length;
+    if (hasInv || hasSkills) {
+      let tagInstructions = "[HERNÍ TAGY]\n";
+      if (hasInv && persona) {
+        const inv = persona.inventory ?? [];
+        tagInstructions += `Aktuální inventář: ${inv.map((i) => i.item + (i.qty > 1 ? ` x${i.qty}` : "")).join(", ")}.\n`;
+        tagInstructions += "Změny inventáře: [INV:+předmět] získání, [INV:-předmět] ztráta, [INV:+počet:předmět] množství.\n";
+      }
+      if (hasSkills && persona) {
+        const sk = persona.skills ?? [];
+        tagInstructions += `Aktuální dovednosti: ${sk.map((s) => `${s.name} ${s.level}`).join(", ")}.\n`;
+        tagInstructions += "Změny dovedností: [SKILL:+nová] naučení (level 1), [SKILL:+jméno:level] nastavení úrovně, [SKILL:jméno+1] zvýšení.\n";
+      }
+      tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+      phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
+    }
+
     // Canon reminder is appended last, closest to generation — see
     // `buildCanonReminderSection`. It is intentionally NOT part of the
     // budget-trim passes below (never cut), only size-capped at build time.

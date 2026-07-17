@@ -5,6 +5,7 @@
 pub mod claude;
 pub mod embeddings;
 pub mod gemini;
+pub mod image_gen;
 pub mod openai;
 pub mod sse;
 

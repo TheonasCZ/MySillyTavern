@@ -41,6 +41,30 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_006,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "personas: structured fields (gender, age, race, appearance, skills, inventory)",
+            sql: MIGRATION_007,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "ledger_facts: image_path for auto-generated illustrations",
+            sql: MIGRATION_008,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 9,
+            description: "connections: purpose column (chat, image, embedding)",
+            sql: MIGRATION_009,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "connections: multi-purpose JSON array replaces single-purpose column",
+            sql: MIGRATION_010,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -240,4 +264,35 @@ CREATE TABLE ledger_facts_new (
 INSERT INTO ledger_facts_new SELECT id, chat_id, category, subject, '', fact, status, locked, created_at, updated_at FROM ledger_facts;
 DROP TABLE ledger_facts;
 ALTER TABLE ledger_facts_new RENAME TO ledger_facts;
+"#;
+
+/// Personas get structured fields so the app (and AI) can work with discrete
+/// attributes instead of a single free-text description. `skills` and
+/// `inventory` are JSON TEXT arrays — the repo layer handles serialisation.
+const MIGRATION_007: &str = r#"
+ALTER TABLE personas ADD COLUMN gender TEXT NOT NULL DEFAULT '';
+ALTER TABLE personas ADD COLUMN age INTEGER;
+ALTER TABLE personas ADD COLUMN race TEXT NOT NULL DEFAULT '';
+ALTER TABLE personas ADD COLUMN appearance TEXT NOT NULL DEFAULT '';
+ALTER TABLE personas ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE personas ADD COLUMN inventory TEXT NOT NULL DEFAULT '[]';
+"#;
+
+/// Optional illustration path for locked ledger facts — populated by the
+/// background image generator so the memory panel can show a visual
+/// alongside each fact's text.
+const MIGRATION_008: &str = r#"
+ALTER TABLE ledger_facts ADD COLUMN image_path TEXT;
+"#;
+
+/// V1: single-purpose column. Superseded by v10 (multi-purpose JSON array).
+const MIGRATION_009: &str = r#"
+ALTER TABLE connections ADD COLUMN purpose TEXT NOT NULL DEFAULT 'chat';
+"#;
+
+/// V2: replaces the single `purpose` column with a JSON array `purposes`
+/// so one connection can serve multiple purposes (e.g. chat + image).
+const MIGRATION_010: &str = r#"
+ALTER TABLE connections ADD COLUMN purposes TEXT NOT NULL DEFAULT '["chat","image","embedding"]';
+UPDATE connections SET purposes = json_array(purpose);
 "#;

@@ -39,6 +39,7 @@ import {
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { canEmbed, retrieveSemanticContext } from "../memory/embeddingsEngine";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
+import { processGameResponse } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { chatComplete } from "../providers/chatComplete";
@@ -296,7 +297,13 @@ function startStream(
       const text = get().streamingText;
       set({ handle: null, pendingFinalize: null });
       logChatUsage(connection.id, apiMessages, text);
-      void finalize(text, false);
+      // Process inventory tags — resolve persona and clean text
+      const chat = get().chat;
+      void (async () => {
+        const persona = chat ? await resolveChatPersona(chat) : null;
+        const finalText = await processGameResponse(persona, text);
+        void finalize(finalText, false);
+      })();
     },
     onError: (err) => {
       const text = get().streamingText;

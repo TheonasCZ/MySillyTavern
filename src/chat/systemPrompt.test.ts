@@ -39,6 +39,12 @@ function makePersona(partial: Partial<Persona> = {}): Persona {
     id: "p1",
     name: "Kai",
     description: "",
+    gender: "",
+    age: null,
+    race: "",
+    appearance: "",
+    skills: [],
+    inventory: [],
     avatarPath: null,
     isDefault: false,
     createdAt: "",
@@ -79,12 +85,12 @@ describe("buildCharacterSystemPrompt", () => {
     expect(prompt).not.toContain("{{user}}");
   });
 
-  it("includes the persona's description as a labeled block", () => {
+  it("includes the persona's structured fields as a labeled block", () => {
     const prompt = buildCharacterSystemPrompt(
       makeCharacter(),
-      makePersona({ name: "Kai", description: "A retired sellsword, {{char}}'s old friend." }),
+      makePersona({ name: "Kai", gender: "female", appearance: "{{char}}'s old friend, a retired sellsword." }),
     );
-    expect(prompt).toContain("A retired sellsword, Elara's old friend.");
+    expect(prompt).toContain("Elara's old friend, a retired sellsword.");
   });
 
   it("omits the persona block entirely when there's no persona", () => {

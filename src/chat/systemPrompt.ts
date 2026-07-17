@@ -39,9 +39,36 @@ export function buildCharacterSystemPrompt(character: Character, persona: Person
     p.trim(),
   );
 
-  const personaDescription = persona?.description.trim();
-  if (personaDescription) {
-    parts.push(`[Hráčova persona — ${userName}]\n${personaDescription}`);
+  // Build persona description from structured fields
+  if (persona) {
+    const personaLines: string[] = [];
+    const identity: string[] = [];
+    if (persona.gender) identity.push(persona.gender);
+    if (persona.age) identity.push(`${persona.age} let`);
+    if (persona.race) identity.push(persona.race);
+    if (identity.length > 0) personaLines.push(identity.join(", "));
+
+    if (persona.appearance) {
+      personaLines.push(`\nVzhled: ${persona.appearance}`);
+    }
+
+    if (persona.skills.length > 0) {
+      personaLines.push("\nDovednosti:");
+      for (const s of persona.skills) {
+        personaLines.push(`- ${s.name} (úroveň ${s.level})`);
+      }
+    }
+
+    if (persona.inventory.length > 0) {
+      personaLines.push("\nInventář:");
+      for (const inv of persona.inventory) {
+        personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
+      }
+    }
+
+    if (personaLines.length > 0) {
+      parts.push(`[Hráčova persona — ${userName}]\n${personaLines.join("\n")}`);
+    }
   }
 
   const joined = parts.filter(Boolean).join("\n\n");

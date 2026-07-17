@@ -37,7 +37,7 @@ async function ensureTiktoken(): Promise<any> {
   tiktokenLoadPromise = (async () => {
     try {
       // @vite-ignore — optional dependency, may not be installed
-      // @ts-expect-error - tiktoken is an optional dependency, may not be installed
+      // @ts-ignore - tiktoken is an optional dependency, may not be installed
       const __tik = "tiktoken"; tiktokenModule = await import(/* @vite-ignore */ __tik);
       return tiktokenModule;
     } catch {

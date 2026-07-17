@@ -49,6 +49,7 @@
     "list": {
       "updatedAt": "Naposledy upraveno {{date}}",
       "noConnection": "Bez připojení",
+      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tento chat i s celou historií?",
       "searchPlaceholder": "Hledat ve všech chatech…",
       "searchResults": "Výsledky hledání ({{count}})",
@@ -135,6 +136,7 @@
       "exportPng": "Export do PNG",
       "exporting": "Exportuji…",
       "exportError": "Export selhal: {{message}}",
+      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
       "saved": "Uloženo.",
       "specVersion": "Formát karty: {{version}}",
@@ -178,20 +180,33 @@
     "form": {
       "fields": {
         "name": "Jméno",
-        "namePlaceholder": "Např. Kai",
-        "description": "Popis",
-        "descriptionPlaceholder": "Kdo je hráč, jak vypadá, jaký má vztah k postavě…"
+        "namePlaceholder": "Např. Morthos",
+        "gender": "Pohlaví",
+        "genderPlaceholder": "muž",
+        "age": "Věk",
+        "race": "Rasa",
+        "racePlaceholder": "člověk",
+        "appearance": "Vzhled",
+        "appearancePlaceholder": "Jak persona vypadá — vlasy, oči, postava, oblečení…",
+        "skills": "Dovednosti",
+        "skillName": "Název",
+        "inventory": "Inventář",
+        "itemName": "Předmět",
+        "itemNote": "poznámka"
       },
-      "help": {
-        "name": "Jméno, kterým tě AI oslovuje a kterým se nahradí zástupný symbol „user“ v kartách postav a lorebooku.",
-        "description": "Popis tvé role v příběhu — vzhled, pozadí, vztah k postavě. Posílá se AI jako součást systémové zprávy v každém promptu."
-      },
-      "descriptionHint": "Zobrazí se AI jako popis hráčovy persony v systémové zprávě.",
+      "addSkill": "Přidat dovednost",
+      "addItem": "Přidat předmět",
       "pickAvatar": "Vybrat avatar",
       "isDefaultBadge": "Toto je výchozí persona pro nové chaty.",
       "makeDefault": "Nastavit jako výchozí",
-      "deleteConfirm": "Opravdu smazat tuto personu? Chaty na ni navázané zůstanou, ale ztratí referenci."
-    }
+      "saved": "Uloženo.",
+      "deleteConfirm": "Opravdu smazat tuto personu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
+      "generateAvatar": "Generovat"
+    },
+    "importButton": "Import JSON",
+    "importPngButton": "Import PNG",
+    "exportJson": "Export JSON",
+    "exportPng": "Export PNG"
   },
   "lorebooks": {
     "title": "Lorebooky",
@@ -203,6 +218,7 @@
     },
     "editor": {
       "backToList": "Zpět na lorebooky",
+      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tento lorebook včetně všech záznamů a přiřazení?",
       "saved": "Uloženo.",
       "importWorldInfo": "Import World Info",
@@ -285,6 +301,7 @@
         "subject": "Předmět",
         "fact": "Fakt"
       },
+      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu trvale smazat tento fakt?"
     },
     "summary": {
@@ -342,6 +359,7 @@
     "sections": {
       "connections": "Připojení",
       "memory": "Paměť",
+      "illustrations": "Ilustrace",
       "appearance": "Vzhled",
       "backup": "Data a záloha",
       "usage": "Statistiky",
@@ -432,7 +450,8 @@
         "topP": "Top P",
         "maxTokens": "Max tokenů",
         "contextBudget": "Rozpočet kontextu",
-        "apiKey": "API klíč"
+        "apiKey": "API klíč",
+        "purpose": "Účel"
       },
       "help": {
         "name": "Vlastní název tohoto připojení, jen pro tvou orientaci v seznamu (např. „Gemini Free“). Na chování AI nemá vliv.",
@@ -443,7 +462,8 @@
         "topP": "Omezuje výběr slov na nejpravděpodobnější část. Většinou nech výchozí; ladí se buď temperature, nebo top P, ne obojí.",
         "maxTokens": "Maximální délka odpovědi modelu v tokenech. Vyšší hodnota umožní delší odpovědi, ale prodlouží čekání a zvýší cenu.",
         "contextBudget": "Kolik tokenů kontextu (historie chatu, karta postavy, paměť…) se maximálně pošle modelu v jednom dotazu. Celý tento prompt se posílá znovu s každou zprávou — vyšší rozpočet tedy znamená pomalejší odpovědi a u free tieru dřívější narážení na limit tokenů za minutu (denní kvótu požadavků neovlivní). Paměť hry přitom nezlepší: klíčová fakta chrání pořadí ořezávání a připomínka kánonu na konci promptu. Doporučený rozsah je 8 000–16 000 pro free tier; víc dává smysl jen s placeným klíčem.",
-        "apiKey": "Přístupový klíč k API poskytovatele. Ukládá se šifrovaně v systémovém keyringu, nikdy v databázi aplikace, a po uložení se už nezobrazí."
+        "apiKey": "Přístupový klíč k API poskytovatele. Ukládá se šifrovaně v systémovém keyringu, nikdy v databázi aplikace, a po uložení se už nezobrazí.",
+        "purpose": "K čemu připojení slouží — chat, generování obrázků, nebo embeddingy."
       },
       "providers": {
         "gemini": "Gemini",
@@ -464,6 +484,7 @@
         "success": "Spojení funguje. Odpověď: {{reply}}",
         "failure": "Spojení selhalo: {{message}}"
       },
+      "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat toto připojení? Smaže se i uložený klíč.",
       "saved": "Připojení uloženo.",
       "models": {
@@ -473,7 +494,26 @@
         "manual": "zadat ručně",
         "pick": "vybrat ze seznamu",
         "error": "Načtení modelů selhalo: {{message}}"
+      },
+      "createAndTest": "Vytvořit a otestovat",
+      "testAndLoad": "Otestovat a načíst modely",
+      "creating": "Vytvářím…",
+      "purposes": {
+        "chat": "Chat (text)",
+        "image": "Ilustrace (obrázky)",
+        "embedding": "Embedding (vektory)"
       }
+    },
+    "illustrations": {
+      "title": "Ilustrace",
+      "subtitle": "Automatické generování ilustrací pro inventář a zamčené fackty.",
+      "enabled": "Automatické ilustrace",
+      "enabledHelp": "Když je zapnuto, aplikace automaticky generuje ilustrace k novým předmětům a zamčeným faktům. Používá Gemini API.",
+      "limit": "Denní limit",
+      "limitHelp": "0 = bez omezení. Maximální počet automaticky generovaných obrázků za den.",
+      "connection": "Ilustrační připojení",
+      "connectionHelp": "Gemini připojení použité pro generování obrázků. Pokud není vybrané, použije se výchozí chatové připojení.",
+      "saved": "Uloženo."
     }
   }
 }

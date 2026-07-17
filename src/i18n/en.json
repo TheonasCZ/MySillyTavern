@@ -178,20 +178,32 @@
     "form": {
       "fields": {
         "name": "Name",
-        "namePlaceholder": "e.g. Kai",
-        "description": "Description",
-        "descriptionPlaceholder": "Who the player is, what they look like, their relation to the character…"
+        "namePlaceholder": "e.g. Morthos",
+        "gender": "Gender",
+        "genderPlaceholder": "male",
+        "age": "Age",
+        "race": "Race",
+        "racePlaceholder": "human",
+        "appearance": "Appearance",
+        "appearancePlaceholder": "What the persona looks like — hair, eyes, build, clothing…",
+        "skills": "Skills",
+        "skillName": "Name",
+        "inventory": "Inventory",
+        "itemName": "Item",
+        "itemNote": "note"
       },
-      "help": {
-        "name": "The name the AI addresses you by, replacing the \"user\" placeholder in character cards and lorebook entries.",
-        "description": "A description of your role in the story — appearance, background, relation to the character. Sent to the AI as part of the system message in every prompt."
-      },
-      "descriptionHint": "Shown to the AI as the player persona's description in the system message.",
+      "addSkill": "Add skill",
+      "addItem": "Add item",
       "pickAvatar": "Choose avatar",
       "isDefaultBadge": "This is the default persona for new chats.",
       "makeDefault": "Set as default",
-      "deleteConfirm": "Delete this persona? Chats pointing to it will keep working but lose the reference."
-    }
+      "deleteConfirm": "Delete this persona? Chats pointing to it will keep working but lose the reference.",
+      "generateAvatar": "Generate"
+    },
+    "importButton": "Import JSON",
+    "importPngButton": "Import PNG",
+    "exportJson": "Export JSON",
+    "exportPng": "Export PNG"
   },
   "lorebooks": {
     "title": "Lorebooks",
@@ -342,6 +354,7 @@
     "sections": {
       "connections": "Connections",
       "memory": "Memory",
+      "illustrations": "Illustrations",
       "appearance": "Appearance",
       "backup": "Data & backup",
       "usage": "Usage",
@@ -432,7 +445,8 @@
         "topP": "Top P",
         "maxTokens": "Max tokens",
         "contextBudget": "Context budget",
-        "apiKey": "API key"
+        "apiKey": "API key",
+        "purpose": "Purpose"
       },
       "help": {
         "name": "A custom label for this connection, just for your own orientation in the list (e.g. \"Gemini Free\"). Has no effect on the AI's behavior.",
@@ -443,7 +457,8 @@
         "topP": "Limits word choice to the most likely portion. Usually leave at default; tune either temperature or top P, not both.",
         "maxTokens": "The maximum length of the model's response, in tokens. A higher value allows longer answers, but increases wait time and cost.",
         "contextBudget": "The maximum amount of context tokens (chat history, character card, memory…) sent to the model per request. The whole prompt is re-sent with every message — a higher budget therefore means slower replies and, on the free tier, hitting the tokens-per-minute limit sooner (it does not affect the daily request quota). It also doesn't improve the game's memory: key facts are protected by the trim order and the canon reminder at the end of the prompt. The recommended range is 8,000-16,000 for the free tier; going higher only makes sense with a paid key.",
-        "apiKey": "The provider's API access key. Stored encrypted in the system keyring, never in the app database, and not shown again after saving."
+        "apiKey": "The provider's API access key. Stored encrypted in the system keyring, never in the app database, and not shown again after saving.",
+        "purpose": "What this connection is used for — chat, image generation, or embeddings."
       },
       "providers": {
         "gemini": "Gemini",
@@ -473,7 +488,26 @@
         "manual": "enter manually",
         "pick": "pick from list",
         "error": "Failed to load models: {{message}}"
+      },
+      "createAndTest": "Create & test",
+      "testAndLoad": "Test & load models",
+      "creating": "Creating…",
+      "purposes": {
+        "chat": "Chat (text)",
+        "image": "Illustrations (images)",
+        "embedding": "Embeddings (vectors)"
       }
+    },
+    "illustrations": {
+      "title": "Illustrations",
+      "subtitle": "Automatic illustration generation for inventory items and locked facts.",
+      "enabled": "Auto illustrations",
+      "enabledHelp": "When enabled, the app automatically generates illustrations for new items and locked facts using the Gemini API.",
+      "limit": "Daily limit",
+      "limitHelp": "0 = unlimited. Maximum number of auto-generated images per day.",
+      "connection": "Illustration connection",
+      "connectionHelp": "Gemini connection used for image generation. If none selected, the default chat connection is used.",
+      "saved": "Saved."
     }
   }
 }

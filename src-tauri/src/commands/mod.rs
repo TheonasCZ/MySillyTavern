@@ -3,5 +3,6 @@ pub mod cards;
 pub mod chat;
 pub mod dice;
 pub mod files;
+pub mod image_gen;
 pub mod logging;
 pub mod secrets;

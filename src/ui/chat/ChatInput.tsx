@@ -45,6 +45,15 @@ export function ChatInput({
   const [diceFlash, setDiceFlash] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Expose insertText via a global callback — InventoryPanel calls this
+  // to insert item names into the input without a complex prop chain.
+  if (typeof window !== "undefined") {
+    (window as unknown as Record<string, unknown>).__mstInsertPrompt = (text: string) => {
+      setValue((prev) => (prev ? `${prev} ${text}` : text));
+      textareaRef.current?.focus();
+    };
+  }
+
   const submit = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;

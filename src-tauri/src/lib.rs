@@ -13,8 +13,9 @@ use commands::chat::{
 };
 use commands::dice::eval_dice;
 use commands::files::{read_text_file, write_text_file};
+use commands::image_gen::generate_illustration;
 use commands::logging::{append_log, get_log_path};
-use commands::secrets::{delete_api_key, has_api_key, set_api_key};
+use commands::secrets::{delete_api_key, has_api_key, init_store, set_api_key};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,10 +30,7 @@ pub fn run() {
         )
         .manage(StreamRegistry::default())
         .setup(|app| {
-            // Must run before the frontend's first `Database.load()` call
-            // (the sql plugin only opens the DB lazily on that call, not at
-            // plugin-registration time above) so a staged import can safely
-            // replace the DB file on disk (plan §7 M6).
+            init_store(app.handle())?;
             apply_pending_import(app.handle());
             Ok(())
         })
@@ -58,6 +56,7 @@ pub fn run() {
             append_log,
             get_log_path,
             eval_dice,
+            generate_illustration,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

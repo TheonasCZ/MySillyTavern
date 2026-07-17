@@ -7,6 +7,7 @@ import { branchChat } from "../../db/repositories/chatsRepo";
 import { createMessage } from "../../db/repositories/messagesRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
+import { InventoryPanel } from "./InventoryPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -76,6 +77,7 @@ export function ChatScreen() {
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { setPersona } = useChatListStore();
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
 
@@ -279,6 +281,19 @@ export function ChatScreen() {
           </div>
           <button
             type="button"
+            onClick={() => setInventoryOpen((v) => !v)}
+            aria-pressed={inventoryOpen}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: inventoryOpen ? "var(--color-accent)" : "transparent",
+              color: inventoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            🎒
+          </button>
+          <button
+            type="button"
             onClick={() => setMemoryOpen((v) => !v)}
             aria-pressed={memoryOpen}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
@@ -389,8 +404,6 @@ export function ChatScreen() {
 
         {memoryOpen && (
           <>
-            {/* Overlay on narrow widths — the panel becomes a full-height
-             * slide-in instead of squeezing the chat column (plan §6.6). */}
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
@@ -401,6 +414,21 @@ export function ChatScreen() {
               style={{ borderColor: "var(--color-border)" }}
             >
               <MemoryPanel chatId={id} onClose={() => setMemoryOpen(false)} />
+            </aside>
+          </>
+        )}
+        {inventoryOpen && persona && (
+          <>
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => setInventoryOpen(false)}
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <InventoryPanel persona={persona} onClose={() => setInventoryOpen(false)} />
             </aside>
           </>
         )}

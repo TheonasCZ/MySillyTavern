@@ -1,10 +1,11 @@
-import type { ConnectionConfig, ConnectionDraft } from "../../providers/types";
+import type { ConnectionConfig, ConnectionDraft, ConnectionPurpose } from "../../providers/types";
 import { execute, newId, nowIso, query } from "../database";
 
 interface ConnectionRow {
   id: string;
   name: string;
   provider: string;
+  purposes: string;  // JSON array
   base_url: string | null;
   model: string;
   temperature: number;
@@ -15,11 +16,16 @@ interface ConnectionRow {
   updated_at: string;
 }
 
+function parsePurposes(raw: string): ConnectionPurpose[] {
+  try { return JSON.parse(raw); } catch { return ["chat", "image", "embedding"]; }
+}
+
 function toConfig(row: ConnectionRow): ConnectionConfig {
   return {
     id: row.id,
     name: row.name,
     provider: row.provider as ConnectionConfig["provider"],
+    purposes: parsePurposes(row.purposes),
     baseUrl: row.base_url,
     model: row.model,
     temperature: row.temperature,
@@ -49,52 +55,36 @@ export async function createConnection(draft: ConnectionDraft): Promise<Connecti
   const now = nowIso();
   await execute(
     `INSERT INTO connections
-      (id, name, provider, base_url, model, temperature, top_p, max_tokens, context_budget, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      (id, name, provider, purposes, base_url, model, temperature, top_p, max_tokens, context_budget, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [
-      id,
-      draft.name,
-      draft.provider,
-      draft.baseUrl,
-      draft.model,
-      draft.temperature,
-      draft.topP,
-      draft.maxTokens,
-      draft.contextBudget,
-      now,
-      now,
+      id, draft.name, draft.provider,
+      JSON.stringify(draft.purposes),
+      draft.baseUrl, draft.model,
+      draft.temperature, draft.topP, draft.maxTokens,
+      draft.contextBudget, now, now,
     ],
   );
   return { id, createdAt: now, updatedAt: now, ...draft };
 }
 
-export async function updateConnection(
-  id: string,
-  draft: ConnectionDraft,
-): Promise<ConnectionConfig> {
+export async function updateConnection(id: string, draft: ConnectionDraft): Promise<ConnectionConfig> {
   const now = nowIso();
   await execute(
     `UPDATE connections SET
-      name = $2, provider = $3, base_url = $4, model = $5,
-      temperature = $6, top_p = $7, max_tokens = $8, context_budget = $9, updated_at = $10
+      name = $2, provider = $3, purposes = $4, base_url = $5, model = $6,
+      temperature = $7, top_p = $8, max_tokens = $9, context_budget = $10, updated_at = $11
      WHERE id = $1`,
     [
-      id,
-      draft.name,
-      draft.provider,
-      draft.baseUrl,
-      draft.model,
-      draft.temperature,
-      draft.topP,
-      draft.maxTokens,
-      draft.contextBudget,
-      now,
+      id, draft.name, draft.provider,
+      JSON.stringify(draft.purposes),
+      draft.baseUrl, draft.model,
+      draft.temperature, draft.topP, draft.maxTokens,
+      draft.contextBudget, now,
     ],
   );
   const existing = await getConnection(id);
-  if (!existing) {
-    throw new Error(`Connection ${id} not found after update`);
-  }
+  if (!existing) throw new Error(`Connection ${id} not found after update`);
   return existing;
 }
 

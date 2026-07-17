@@ -9,6 +9,7 @@ import {
 } from "../../memory/embeddingsEngine";
 import { DEFAULT_EXTRACTION_INTERVAL } from "../../memory/memoryEngine";
 import { DEFAULT_VERBATIM_WINDOW } from "../../prompt/promptBuilder";
+import { useConnectionsStore } from "../../stores/connectionsStore";
 import { FieldHelp } from "../common/FieldHelp";
 
 const inputStyle = {
@@ -32,15 +33,25 @@ export function MemorySettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [disabledProviders, setDisabledProviders] = useState<string[]>([]);
 
+  // Image gen settings
+  const [imgEnabled, setImgEnabled] = useState(true);
+  const [imgLimit, setImgLimit] = useState("0");
+  const [imgConnectionId, setImgConnectionId] = useState("");
+  const connections = useConnectionsStore((s) => s.connections);
+  const imageConnections = connections.filter((c) => c.purposes.includes("image"));
+
   useEffect(() => {
     void (async () => {
-      const [interval, window, model, k, score, disabled] = await Promise.all([
+      const [interval, window, model, k, score, disabled, imgEn, imgLi, imgConn] = await Promise.all([
         getSetting("extraction_interval"),
         getSetting("verbatim_window"),
         getSetting("embedding_model"),
         getSetting("memory_top_k"),
         getSetting("memory_min_score"),
         getDisabledEmbeddingProviders(),
+        getSetting("image_gen_enabled"),
+        getSetting("image_gen_limit"),
+        getSetting("image_gen_connection_id"),
       ]);
       if (interval) setExtractionInterval(interval);
       if (window) setVerbatimWindow(window);
@@ -48,6 +59,9 @@ export function MemorySettingsPanel() {
       if (k) setTopK(k);
       if (score) setMinScore(score);
       if (disabled.length > 0) setDisabledProviders(disabled);
+      if (imgEn !== null) setImgEnabled(imgEn !== "0");
+      if (imgLi !== null) setImgLimit(imgLi);
+      if (imgConn) setImgConnectionId(imgConn);
     })();
   }, []);
 
@@ -64,13 +78,16 @@ export function MemorySettingsPanel() {
     setVerbatimWindow(String(window));
     setTopK(String(k));
     setMinScore(String(score));
-    await Promise.all([
-      setSetting("extraction_interval", String(interval)),
-      setSetting("verbatim_window", String(window)),
-      setSetting("embedding_model", embeddingModel.trim()),
-      setSetting("memory_top_k", String(k)),
-      setSetting("memory_min_score", String(score)),
-    ]);
+      await Promise.all([
+        setSetting("extraction_interval", String(interval)),
+        setSetting("verbatim_window", String(window)),
+        setSetting("embedding_model", embeddingModel.trim()),
+        setSetting("memory_top_k", String(k)),
+        setSetting("memory_min_score", String(score)),
+        setSetting("image_gen_enabled", imgEnabled ? "1" : "0"),
+        setSetting("image_gen_limit", imgLimit),
+        setSetting("image_gen_connection_id", imgConnectionId),
+      ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -164,6 +181,64 @@ export function MemorySettingsPanel() {
             onChange={(e) => setMinScore(e.target.value)}
           />
         </label>
+      </div>
+
+      {/* Illustration settings */}
+      <h3 className="mb-1 mt-6 text-sm font-medium">{t("illustrations.title")}</h3>
+      <p className="mb-3 text-xs" style={{ color: "var(--color-text-faint)" }}>
+        {t("illustrations.subtitle")}
+      </p>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={imgEnabled}
+            onChange={(e) => setImgEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="flex items-center gap-1">
+            {t("illustrations.enabled")}
+            <FieldHelp text={t("illustrations.enabledHelp")} />
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="flex items-center gap-1">
+            {t("illustrations.limit")}
+            <FieldHelp text={t("illustrations.limitHelp")} />
+          </span>
+          <input
+            type="number"
+            min={0}
+            className="w-32 rounded-[var(--radius-sm)] border px-2 py-1.5"
+            style={inputStyle}
+            value={imgLimit}
+            onChange={(e) => setImgLimit(e.target.value)}
+          />
+        </label>
+
+        {imageConnections.length > 0 && (
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1">
+              {t("illustrations.connection")}
+              <FieldHelp text={t("illustrations.connectionHelp")} />
+            </span>
+            <select
+              className="w-48 rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={imgConnectionId}
+              onChange={(e) => setImgConnectionId(e.target.value)}
+            >
+              <option value="">{t("illustrations.defaultConnection", "výchozí") ?? "výchozí"}</option>
+              {imageConnections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.model})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {disabledProviders.length > 0 && (
