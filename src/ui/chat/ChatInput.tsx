@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -44,6 +44,9 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const [diceFlash, setDiceFlash] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const historyRef = useRef<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const draftBeforeHistoryRef = useRef("");
 
   // Expose insertText via a global callback — InventoryPanel calls this
   // to insert item names into the input without a complex prop chain.
@@ -54,7 +57,7 @@ export function ChatInput({
     };
   }
 
-  const submit = () => {
+  const submit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
 
@@ -62,8 +65,10 @@ export function ChatInput({
       const expression = extractDiceExpression(trimmed);
       if (expression) {
         onDiceRoll(expression);
+        // Save to history
+        historyRef.current = [trimmed, ...historyRef.current.slice(0, 50)];
+        setHistoryIndex(-1);
         setValue("");
-        // Brief flash animation to acknowledge the dice roll
         setDiceFlash(true);
         setTimeout(() => setDiceFlash(false), 300);
         return;
@@ -71,13 +76,44 @@ export function ChatInput({
     }
 
     onSend(trimmed);
+    // Save to history (max 50 entries)
+    historyRef.current = [trimmed, ...historyRef.current.slice(0, 49)];
+    setHistoryIndex(-1);
     setValue("");
-  };
+  }, [value, disabled, onSend, onDiceRoll]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter or Ctrl+Enter sends
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit();
+    }
+
+    // PageUp: previous message from history
+    if (e.key === "PageUp") {
+      e.preventDefault();
+      const history = historyRef.current;
+      if (history.length === 0) return;
+      if (historyIndex === -1) {
+        draftBeforeHistoryRef.current = value;
+      }
+      const nextIdx = Math.min(historyIndex + 1, history.length - 1);
+      setHistoryIndex(nextIdx);
+      setValue(history[nextIdx]);
+    }
+
+    // PageDown: next message from history
+    if (e.key === "PageDown") {
+      e.preventDefault();
+      const history = historyRef.current;
+      if (historyIndex <= 0) {
+        setHistoryIndex(-1);
+        setValue(draftBeforeHistoryRef.current);
+        return;
+      }
+      const nextIdx = historyIndex - 1;
+      setHistoryIndex(nextIdx);
+      setValue(history[nextIdx]);
     }
   };
 
