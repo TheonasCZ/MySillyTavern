@@ -5,6 +5,7 @@ import { getSetting, setSetting } from "../../db/repositories/settingsRepo";
 import {
   DEFAULT_MEMORY_MIN_SCORE,
   DEFAULT_MEMORY_TOP_K,
+  getDisabledEmbeddingProviders,
 } from "../../memory/embeddingsEngine";
 import { DEFAULT_EXTRACTION_INTERVAL } from "../../memory/memoryEngine";
 import { DEFAULT_VERBATIM_WINDOW } from "../../prompt/promptBuilder";
@@ -29,21 +30,24 @@ export function MemorySettingsPanel() {
   const [topK, setTopK] = useState(String(DEFAULT_MEMORY_TOP_K));
   const [minScore, setMinScore] = useState(String(DEFAULT_MEMORY_MIN_SCORE));
   const [saved, setSaved] = useState(false);
+  const [disabledProviders, setDisabledProviders] = useState<string[]>([]);
 
   useEffect(() => {
     void (async () => {
-      const [interval, window, model, k, score] = await Promise.all([
+      const [interval, window, model, k, score, disabled] = await Promise.all([
         getSetting("extraction_interval"),
         getSetting("verbatim_window"),
         getSetting("embedding_model"),
         getSetting("memory_top_k"),
         getSetting("memory_min_score"),
+        getDisabledEmbeddingProviders(),
       ]);
       if (interval) setExtractionInterval(interval);
       if (window) setVerbatimWindow(window);
       if (model) setEmbeddingModel(model);
       if (k) setTopK(k);
       if (score) setMinScore(score);
+      if (disabled.length > 0) setDisabledProviders(disabled);
     })();
   }, []);
 
@@ -161,6 +165,22 @@ export function MemorySettingsPanel() {
           />
         </label>
       </div>
+
+      {disabledProviders.length > 0 && (
+        <div
+          className="mt-4 rounded-[var(--radius-sm)] border p-3 text-xs"
+          style={{
+            borderColor: "var(--color-warning-border, var(--color-border-strong))",
+            backgroundColor: "var(--color-warning-bg, var(--color-surface-2))",
+            color: "var(--color-warning-text, var(--color-text))",
+          }}
+        >
+          {t("memory.embedding.disabledProviders", {
+            providers: disabledProviders.join(", "),
+            defaultValue: `Embedding auto-disabled for: ${disabledProviders.join(", ")}. The provider does not support embeddings or returned an error.`,
+          })}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center gap-3">
         <button

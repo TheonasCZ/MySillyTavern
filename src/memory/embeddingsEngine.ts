@@ -13,15 +13,16 @@ import {
 } from "../db/repositories/embeddingsRepo";
 import { listActiveFacts, type LedgerFact } from "../db/repositories/ledgerRepo";
 import { listMessages } from "../db/repositories/messagesRepo";
-import { getSetting } from "../db/repositories/settingsRepo";
+import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { DEFAULT_VERBATIM_WINDOW } from "../prompt/promptBuilder";
 import { embedTexts } from "../providers/embeddings";
 import type { ConnectionConfig } from "../providers/types";
 import { cosineSimilarity, decodeVector, encodeVector } from "./vector";
 
-/** Claude has no embedding API — chats wired to it just skip the semantic
- * layer (facts keep their default trim order, no memory retrieval). */
-const EMBEDDABLE_PROVIDERS = new Set(["gemini", "openai"]);
+/** Providers that have been auto-detected as non-embeddable (e.g. the API
+ * returned 404/405). Stored as a comma-separated list under the
+ * `embedding_disabled_providers` setting. */
+const EMBEDDING_DISABLED_KEY = "embedding_disabled_providers";
 
 /** Mirrors the per-provider defaults in src-tauri/src/providers/embeddings.rs
  * — used to detect rows embedded by a different model than the current one. */
@@ -43,8 +44,35 @@ const QUERY_TAIL_CHARS = 2000;
 const CHUNK_MAX_MESSAGES = 6;
 const CHUNK_MAX_CHARS = 1500;
 
+/** Returns true when there is *any* connection — provider auto-detection has
+ * moved to runtime (first `embedTexts` failure disables the provider). */
 export function canEmbed(connection: ConnectionConfig | null): connection is ConnectionConfig {
-  return !!connection && EMBEDDABLE_PROVIDERS.has(connection.provider);
+  return !!connection;
+}
+
+/** Returns false when the provider has been auto-disabled after a failed
+ * embedding call (404/405 etc.). */
+export async function isEmbeddingAvailable(providerId: string): Promise<boolean> {
+  const disabled = await getSetting(EMBEDDING_DISABLED_KEY).catch(() => null);
+  if (!disabled) return true;
+  return !disabled.split(",").map((s) => s.trim()).includes(providerId);
+}
+
+/** Returns the list of provider ids that have been auto-disabled. */
+export async function getDisabledEmbeddingProviders(): Promise<string[]> {
+  const disabled = await getSetting(EMBEDDING_DISABLED_KEY).catch(() => null);
+  if (!disabled) return [];
+  return disabled.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/** Persists `providerId` into the disabled set so future embedding calls are
+ * skipped without hitting the API again. */
+export async function markEmbeddingUnavailable(providerId: string): Promise<void> {
+  const disabled = await getSetting(EMBEDDING_DISABLED_KEY).catch(() => null);
+  const set = new Set(disabled ? disabled.split(",").map((s) => s.trim()) : []);
+  if (set.has(providerId)) return;
+  set.add(providerId);
+  await setSetting(EMBEDDING_DISABLED_KEY, [...set].join(",")).catch(() => {});
 }
 
 export interface EmbeddingSettings {
@@ -94,29 +122,32 @@ export interface MessageChunk {
 }
 
 /** Splits a run of folded messages into embeddable "scenes". Pure —
- * unit-tested without the DB. */
-export function chunkMessagesForEmbedding(messages: ChunkSource[]): MessageChunk[] {
+ * unit-tested without the DB. When `overlap` > 0 the last `overlap`
+ * messages are kept after a flush to seed the next chunk, producing a
+ * sliding-window effect that keeps scene boundaries connected. */
+export function chunkMessagesForEmbedding(messages: ChunkSource[], overlap = 0): MessageChunk[] {
   const chunks: MessageChunk[] = [];
   let current: ChunkSource[] = [];
   let currentChars = 0;
 
-  const flush = () => {
+  const flush = (keep: number) => {
     if (current.length === 0) return;
     const text = current
       .map((m) => `${m.role === "user" ? "Hráč" : "Vypravěč"}: ${m.content}`)
       .join("\n")
       .slice(0, CHUNK_MAX_CHARS * 2);
     chunks.push({ refId: current[0].id, text });
-    current = [];
-    currentChars = 0;
+    const kept = keep > 0 && current.length > keep ? current.slice(-keep) : [];
+    current = kept;
+    currentChars = kept.reduce((sum, m) => sum + m.content.length, 0);
   };
 
   for (const message of messages) {
     current.push(message);
     currentChars += message.content.length;
-    if (current.length >= CHUNK_MAX_MESSAGES || currentChars >= CHUNK_MAX_CHARS) flush();
+    if (current.length >= CHUNK_MAX_MESSAGES || currentChars >= CHUNK_MAX_CHARS) flush(overlap);
   }
-  flush();
+  flush(0);
   return chunks;
 }
 
@@ -141,6 +172,7 @@ export async function syncFactEmbeddings(
   connection: ConnectionConfig | null,
 ): Promise<void> {
   if (!canEmbed(connection)) return;
+  if (!(await isEmbeddingAvailable(connection.provider))) return;
   const settings = await getEmbeddingSettings();
   const model = expectedModel(connection, settings);
 
@@ -155,22 +187,27 @@ export async function syncFactEmbeddings(
     return !row || row.text !== factEmbeddingText(f) || row.model !== model;
   });
   if (dirty.length > 0) {
-    const { model: usedModel, vectors } = await embedTexts(
-      connection,
-      dirty.map(factEmbeddingText),
-      settings.model,
-    );
-    for (let i = 0; i < dirty.length; i++) {
-      const vec = Float32Array.from(vectors[i]);
-      await upsertEmbedding(
-        chatId,
-        "fact",
-        dirty[i].id,
-        factEmbeddingText(dirty[i]),
-        usedModel,
-        vec.length,
-        encodeVector(vec),
+    try {
+      const { model: usedModel, vectors } = await embedTexts(
+        connection,
+        dirty.map(factEmbeddingText),
+        settings.model,
       );
+      for (let i = 0; i < dirty.length; i++) {
+        const vec = Float32Array.from(vectors[i]);
+        await upsertEmbedding(
+          chatId,
+          "fact",
+          dirty[i].id,
+          factEmbeddingText(dirty[i]),
+          usedModel,
+          vec.length,
+          encodeVector(vec),
+        );
+      }
+    } catch (err) {
+      await markEmbeddingUnavailable(connection.provider);
+      console.warn("fact embedding failed for provider", connection.provider, err);
     }
   }
 
@@ -190,27 +227,33 @@ export async function syncMessageChunkEmbeddings(
   foldedMessages: ChunkSource[],
 ): Promise<void> {
   if (!canEmbed(connection) || foldedMessages.length === 0) return;
+  if (!(await isEmbeddingAvailable(connection.provider))) return;
   const settings = await getEmbeddingSettings();
 
-  const chunks = chunkMessagesForEmbedding(foldedMessages);
+  const chunks = chunkMessagesForEmbedding(foldedMessages, 3);
   if (chunks.length === 0) return;
 
-  const { model, vectors } = await embedTexts(
-    connection,
-    chunks.map((c) => c.text),
-    settings.model,
-  );
-  for (let i = 0; i < chunks.length; i++) {
-    const vec = Float32Array.from(vectors[i]);
-    await upsertEmbedding(
-      chatId,
-      "message",
-      chunks[i].refId,
-      chunks[i].text,
-      model,
-      vec.length,
-      encodeVector(vec),
+  try {
+    const { model, vectors } = await embedTexts(
+      connection,
+      chunks.map((c) => c.text),
+      settings.model,
     );
+    for (let i = 0; i < chunks.length; i++) {
+      const vec = Float32Array.from(vectors[i]);
+      await upsertEmbedding(
+        chatId,
+        "message",
+        chunks[i].refId,
+        chunks[i].text,
+        model,
+        vec.length,
+        encodeVector(vec),
+      );
+    }
+  } catch (err) {
+    await markEmbeddingUnavailable(connection.provider);
+    console.warn("message chunk embedding failed for provider", connection.provider, err);
   }
 }
 
@@ -239,16 +282,22 @@ export async function backfillSceneEmbeddings(
   if (missing.length === 0) return 0;
 
   const settings = await getEmbeddingSettings();
-  const { model, vectors } = await embedTexts(
-    connection,
-    missing.map((c) => c.text),
-    settings.model,
-  );
-  for (let i = 0; i < missing.length; i++) {
-    const vec = Float32Array.from(vectors[i]);
-    await upsertEmbedding(chatId, "message", missing[i].refId, missing[i].text, model, vec.length, encodeVector(vec));
+  try {
+    const { model, vectors } = await embedTexts(
+      connection,
+      missing.map((c) => c.text),
+      settings.model,
+    );
+    for (let i = 0; i < missing.length; i++) {
+      const vec = Float32Array.from(vectors[i]);
+      await upsertEmbedding(chatId, "message", missing[i].refId, missing[i].text, model, vec.length, encodeVector(vec));
+    }
+    return missing.length;
+  } catch (err) {
+    await markEmbeddingUnavailable(connection.provider);
+    console.warn("backfill embedding failed for provider", connection.provider, err);
+    return 0;
   }
-  return missing.length;
 }
 
 export interface LoreSource {
@@ -262,6 +311,7 @@ export async function syncLoreEmbeddings(
   entries: LoreSource[],
 ): Promise<void> {
   if (!canEmbed(connection)) return;
+  if (!(await isEmbeddingAvailable(connection.provider))) return;
   const candidates = entries
     .map((e) => ({ id: e.id, text: e.content.trim() }))
     .filter((e) => e.text.length > 0);
@@ -281,14 +331,19 @@ export async function syncLoreEmbeddings(
   });
   if (dirty.length === 0) return;
 
-  const { model: usedModel, vectors } = await embedTexts(
-    connection,
-    dirty.map((e) => e.text),
-    settings.model,
-  );
-  for (let i = 0; i < dirty.length; i++) {
-    const vec = Float32Array.from(vectors[i]);
-    await upsertEmbedding(null, "lore", dirty[i].id, dirty[i].text, usedModel, vec.length, encodeVector(vec));
+  try {
+    const { model: usedModel, vectors } = await embedTexts(
+      connection,
+      dirty.map((e) => e.text),
+      settings.model,
+    );
+    for (let i = 0; i < dirty.length; i++) {
+      const vec = Float32Array.from(vectors[i]);
+      await upsertEmbedding(null, "lore", dirty[i].id, dirty[i].text, usedModel, vec.length, encodeVector(vec));
+    }
+  } catch (err) {
+    await markEmbeddingUnavailable(connection.provider);
+    console.warn("lore embedding failed for provider", connection.provider, err);
   }
 }
 
@@ -302,22 +357,27 @@ export async function reindexChatEmbeddings(
   const settings = await getEmbeddingSettings();
   const rows = await listAllChatEmbeddings(chatId);
   if (rows.length > 0) {
-    const { model, vectors } = await embedTexts(
-      connection,
-      rows.map((r) => r.text),
-      settings.model,
-    );
-    for (let i = 0; i < rows.length; i++) {
-      const vec = Float32Array.from(vectors[i]);
-      await upsertEmbedding(
-        rows[i].chatId,
-        rows[i].kind,
-        rows[i].refId,
-        rows[i].text,
-        model,
-        vec.length,
-        encodeVector(vec),
+    try {
+      const { model, vectors } = await embedTexts(
+        connection,
+        rows.map((r) => r.text),
+        settings.model,
       );
+      for (let i = 0; i < rows.length; i++) {
+        const vec = Float32Array.from(vectors[i]);
+        await upsertEmbedding(
+          rows[i].chatId,
+          rows[i].kind,
+          rows[i].refId,
+          rows[i].text,
+          model,
+          vec.length,
+          encodeVector(vec),
+        );
+      }
+    } catch (err) {
+      await markEmbeddingUnavailable(connection.provider);
+      console.warn("reindex embedding failed for provider", connection.provider, err);
     }
   }
   // Also picks up facts that were never embedded (e.g. Claude-only history).
@@ -379,17 +439,47 @@ export async function retrieveSemanticContext(args: {
   if (factRows.length + messageRows.length + loreRows.length === 0) return empty;
 
   const settings = await getEmbeddingSettings();
-  const { vectors } = await embedTexts(args.connection, [queryText], settings.model);
-  const queryVec = Float32Array.from(vectors[0]);
+  let queryVec: Float32Array;
+  try {
+    const { vectors } = await embedTexts(args.connection, [queryText], settings.model);
+    queryVec = Float32Array.from(vectors[0]);
+  } catch (err) {
+    await markEmbeddingUnavailable(args.connection.provider);
+    console.warn("semantic retrieval embedding failed for provider", args.connection.provider, err);
+    return empty;
+  }
 
   const factScores = scoreRows(factRows, queryVec);
   const messageScores = scoreRows(messageRows, queryVec);
   const loreScores = scoreRows(loreRows, queryVec);
 
   const messagesByRef = new Map(messageRows.map((e) => [e.refId, e]));
-  const memories = topRefIds(messageScores, settings.minScore, settings.topK).map(
-    (refId) => messagesByRef.get(refId)!.text,
+  const topMessageRefIds = topRefIds(messageScores, settings.minScore, settings.topK);
+  const memories = topMessageRefIds.map((refId) => messagesByRef.get(refId)!.text);
+
+  // Include adjacent chunks (k-1, k+1) so scene boundaries aren't lost.
+  const sortedMessageRows = [...messageRows].sort((a, b) =>
+    a.refId < b.refId ? -1 : a.refId > b.refId ? 1 : 0,
   );
+  const refIdIndex = new Map(sortedMessageRows.map((r, i) => [r.refId, i]));
+  const topRefIdSet = new Set(topMessageRefIds);
+  const adjacentTexts: string[] = [];
+  for (const refId of topMessageRefIds) {
+    const idx = refIdIndex.get(refId);
+    if (idx === undefined) continue;
+    for (const offset of [-1, 1]) {
+      const neighborIdx = idx + offset;
+      if (neighborIdx < 0 || neighborIdx >= sortedMessageRows.length) continue;
+      const neighbor = sortedMessageRows[neighborIdx];
+      if (!topRefIdSet.has(neighbor.refId) && !adjacentTexts.includes(neighbor.text)) {
+        adjacentTexts.push(neighbor.text);
+      }
+    }
+  }
+  // Prepend "(sousední scéna) " so the model knows this is context, not a direct match.
+  for (const text of adjacentTexts) {
+    memories.push(`(sousední scéna) ${text}`);
+  }
 
   return {
     factRelevance: factScores.size > 0 ? Object.fromEntries(factScores) : undefined,
@@ -421,16 +511,55 @@ export async function semanticSearch(
   if (rows.length === 0 || !queryText.trim()) return [];
 
   const settings = await getEmbeddingSettings();
-  const { vectors } = await embedTexts(connection, [queryText], settings.model);
-  const queryVec = Float32Array.from(vectors[0]);
+  let queryVec: Float32Array;
+  try {
+    const { vectors } = await embedTexts(connection, [queryText], settings.model);
+    queryVec = Float32Array.from(vectors[0]);
+  } catch (err) {
+    await markEmbeddingUnavailable(connection.provider);
+    console.warn("semantic search embedding failed for provider", connection.provider, err);
+    return [];
+  }
 
-  return rows
+  const results = rows
     .map((e) => ({
       kind: e.kind as "fact" | "message",
       refId: e.refId,
       text: e.text,
       score: cosineSimilarity(queryVec, decodeVector(e.vector)),
     }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .sort((a, b) => b.score - a.score);
+
+  // Include adjacent message chunks (k-1, k+1) so scene boundaries aren't lost.
+  const topMessageRefIds = results
+    .filter((r) => r.kind === "message")
+    .slice(0, limit)
+    .map((r) => r.refId);
+  const sortedMessageRows = [...messageRows].sort((a, b) =>
+    a.refId < b.refId ? -1 : a.refId > b.refId ? 1 : 0,
+  );
+  const refIdIndex = new Map(sortedMessageRows.map((r, i) => [r.refId, i]));
+  const topRefIdSet = new Set(topMessageRefIds);
+  const resultRefIds = new Set(results.map((r) => r.refId));
+  const adjacent: SearchResult[] = [];
+  for (const refId of topMessageRefIds) {
+    const idx = refIdIndex.get(refId);
+    if (idx === undefined) continue;
+    for (const offset of [-1, 1]) {
+      const neighborIdx = idx + offset;
+      if (neighborIdx < 0 || neighborIdx >= sortedMessageRows.length) continue;
+      const neighbor = sortedMessageRows[neighborIdx];
+      if (!topRefIdSet.has(neighbor.refId) && !resultRefIds.has(neighbor.refId)) {
+        adjacent.push({
+          kind: "message",
+          refId: neighbor.refId,
+          text: `(sousední scéna) ${neighbor.text}`,
+          score: 0,
+        });
+        resultRefIds.add(neighbor.refId);
+      }
+    }
+  }
+
+  return [...results.slice(0, limit), ...adjacent];
 }
