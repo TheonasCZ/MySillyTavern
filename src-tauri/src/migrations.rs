@@ -72,8 +72,20 @@ pub fn all_migrations() -> Vec<Migration> {
             kind: MigrationKind::Up,
         },
         Migration {
+            version: 12,
+            description: "quest journal: AI-managed quest tracking table",
+            sql: MIGRATION_012,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 13,
+            description: "personas: conditions column",
+            sql: MIGRATION_013,
+            kind: MigrationKind::Up,
+        },
+        Migration {
             version: 14,
-            description: "faction_reputations: reputation tracking for factions per persona",
+            description: "factions: faction_reputations table",
             sql: MIGRATION_014,
             kind: MigrationKind::Up,
         },
@@ -318,18 +330,21 @@ ALTER TABLE personas ADD COLUMN xp INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE personas ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 "#;
 
-/// Faction reputation tracking (M21). Each persona can accumulate standing
-/// with named factions (-100 to +100), affecting NPC behaviour, prices, and
-/// quest availability. The AI manages this through [FACTION:…] tags.
-const MIGRATION_014: &str = r#"
-CREATE TABLE faction_reputations (
+/// Quest journal (M17): AI-managed quest tracking through game tags.
+/// Quests are chat-scoped and managed via `[QUEST:…]` tags in AI responses.
+const MIGRATION_012: &str = r#"
+CREATE TABLE quests (
   id TEXT PRIMARY KEY,
-  persona_id TEXT NOT NULL,
-  faction_name TEXT NOT NULL,
-  reputation INTEGER NOT NULL DEFAULT 0,
+  chat_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (persona_id) REFERENCES personas(id)
+  FOREIGN KEY (chat_id) REFERENCES chats(id)
 );
-CREATE INDEX idx_faction_reps_persona ON faction_reputations(persona_id);
+CREATE INDEX idx_quests_chat ON quests(chat_id, status);
 "#;
+
+const MIGRATION_013: &str = r#"ALTER TABLE personas ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]';"#;
+const MIGRATION_014: &str = r#"CREATE TABLE IF NOT EXISTS faction_reputations (id TEXT PRIMARY KEY, persona_id TEXT NOT NULL, faction_name TEXT NOT NULL, reputation INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY (persona_id) REFERENCES personas(id));"#;

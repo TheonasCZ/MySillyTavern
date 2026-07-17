@@ -44,6 +44,8 @@ export interface LevelMutation {
 
 export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }
 
+export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }
+
 export interface FactionMutation {
   /** Faction name (lowercased for matching). */
   name: string;
