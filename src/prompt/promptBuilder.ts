@@ -504,11 +504,11 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
     }
-    // Game tag instructions — tells the model to annotate item + skill/level changes
+    // Game tag instructions — tells the model to annotate item + skill/level/quest changes
     const progression = persona?.progression ?? "skill";
     const hasInv = persona?.inventory?.length;
     const hasSkills = persona?.skills?.length;
-    if (progression !== "none" && (hasInv || (progression === "skill" && hasSkills))) {
+    if (progression !== "none" && (hasInv || hasSkills || progression === "skill" || progression === "level")) {
       let tagInstructions = "[HERNÍ TAGY]\n";
       // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
@@ -527,6 +527,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += `Aktuálně: úroveň ${lvl}, ${xp} XP.\n`;
         tagInstructions += "Změny: [LEVEL:+částka] přidá XP.\n";
       }
+      // Quest tags — always available when progression is enabled
+      tagInstructions += "Úkoly: [QUEST:+název] nový úkol, [QUEST:+název:popis] s popisem, [QUEST:✓název] splněno, [QUEST:✗název] neúspěch, [QUEST:název:poznámka] průběžná poznámka.\n";
       tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
     }

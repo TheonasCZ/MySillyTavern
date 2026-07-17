@@ -71,6 +71,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_011,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "quest journal: AI-managed quest tracking table",
+            sql: MIGRATION_012,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -310,4 +316,20 @@ const MIGRATION_011: &str = r#"
 ALTER TABLE personas ADD COLUMN progression TEXT NOT NULL DEFAULT 'skill';
 ALTER TABLE personas ADD COLUMN xp INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE personas ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
+"#;
+
+/// Quest journal (M17): AI-managed quest tracking through game tags.
+/// Quests are chat-scoped and managed via `[QUEST:…]` tags in AI responses.
+const MIGRATION_012: &str = r#"
+CREATE TABLE quests (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (chat_id) REFERENCES chats(id)
+);
+CREATE INDEX idx_quests_chat ON quests(chat_id, status);
 "#;

@@ -19,7 +19,10 @@ export function extractDiceExpression(text: string): string {
   return match ? match[1].trim() : "";
 }
 
-/** Formats a dice roll result for the chat as a system message content. */
-export function formatDiceSystemMessage(expression: string, result: string): string {
-  return `[HOD KOSTKOU] ${expression} = ${result}`;
+/** Formats a dice roll result for the chat as a system message content.
+ * The Rust `eval_dice` command already returns a fully formatted string
+ * (e.g. `"2d6+3 = 8 (3+2+3) = 8"`), so we just prefix it with the dice
+ * emoji. */
+export function formatDiceSystemMessage(_expression: string, result: string): string {
+  return `🎲 ${result}`;
 }

@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 
 import { branchChat } from "../../db/repositories/chatsRepo";
-import { createMessage, searchMessagesInChat } from "../../db/repositories/messagesRepo";
-import { searchSnippet } from "../../chat/searchSnippet";
+import { createMessage } from "../../db/repositories/messagesRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { InventoryPanel } from "./InventoryPanel";
+import { QuestPanel } from "./QuestPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
@@ -79,15 +79,9 @@ export function ChatScreen() {
   const { setPersona } = useChatListStore();
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [questsOpen, setQuestsOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
-  // Search state
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ messageId: string; content: string; createdAt: string }[]>([]);
-  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const handleDiceRoll = useCallback(
     async (expression: string) => {
@@ -129,59 +123,6 @@ export function ChatScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  // Debounced search: wait 300ms after the user stops typing before hitting
-  // the database.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Execute search when debounced query changes or chat changes.
-  useEffect(() => {
-    if (!debouncedQuery || !id) {
-      setSearchResults([]);
-      return;
-    }
-    let cancelled = false;
-    void searchMessagesInChat(id, debouncedQuery, 20).then((hits) => {
-      if (cancelled) return;
-      setSearchResults(hits.map((h) => ({ messageId: h.messageId, content: h.content, createdAt: h.createdAt })));
-    });
-    return () => { cancelled = true; };
-  }, [debouncedQuery, id]);
-
-  // Ctrl+F opens search
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-        e.preventDefault();
-        setSearchOpen(true);
-        // Focus the input on the next tick so it's mounted
-        requestAnimationFrame(() => searchInputRef.current?.focus());
-      }
-      // Escape closes search
-      if (e.key === "Escape" && searchOpen) {
-        setSearchOpen(false);
-        setSearchQuery("");
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [searchOpen]);
-
-  // Focus search input when bar opens
-  useEffect(() => {
-    if (searchOpen) {
-      requestAnimationFrame(() => searchInputRef.current?.focus());
-    } else {
-      setSearchQuery("");
-      setDebouncedQuery("");
-      setSearchResults([]);
-    }
-  }, [searchOpen]);
 
   if (!id) return null;
 
@@ -361,6 +302,19 @@ export function ChatScreen() {
           </button>
           <button
             type="button"
+            onClick={() => setQuestsOpen((v) => !v)}
+            aria-pressed={questsOpen}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: questsOpen ? "var(--color-accent)" : "transparent",
+              color: questsOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            📜
+          </button>
+          <button
+            type="button"
             onClick={() => setMemoryOpen((v) => !v)}
             aria-pressed={memoryOpen}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
@@ -372,74 +326,8 @@ export function ChatScreen() {
           >
             {t("title", { ns: "memory" })}
           </button>
-          <button
-            type="button"
-            onClick={() => setSearchOpen((v) => !v)}
-            aria-pressed={searchOpen}
-            title={t("room.search") ?? "Search messages"}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: searchOpen ? "var(--color-accent)" : "transparent",
-              color: searchOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            🔍
-          </button>
         </div>
       </header>
-
-      {/* Search bar */}
-      {searchOpen && (
-        <div
-          className="border-b px-4 py-2 sm:px-8"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface-1)" }}
-        >
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("room.searchPlaceholder") ?? "Search in conversation…"}
-            className="w-full rounded-[var(--radius-sm)] border px-3 py-1.5 text-sm outline-none"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: "var(--color-surface-2)",
-              color: "var(--color-text)",
-            }}
-          />
-          {searchResults.length > 0 && (
-            <div className="mt-2 max-h-64 overflow-y-auto rounded-[var(--radius-sm)] border" style={{ borderColor: "var(--color-border)" }}>
-              {searchResults.map((hit) => (
-                <button
-                  key={hit.messageId}
-                  type="button"
-                  onClick={() => {
-                    setScrollToMessageId(hit.messageId);
-                    // Re-trigger if same id clicked twice
-                    setScrollToMessageId(null);
-                    requestAnimationFrame(() => setScrollToMessageId(hit.messageId));
-                  }}
-                  className="w-full border-b px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--color-surface-3)] last:border-b-0"
-                  style={{ borderColor: "var(--color-border)" }}
-                >
-                  <div className="truncate" style={{ color: "var(--color-text)" }}>
-                    {searchSnippet(hit.content, debouncedQuery, 50)}
-                  </div>
-                  <div className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                    {new Date(hit.createdAt).toLocaleString()}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-          {debouncedQuery && searchResults.length === 0 && (
-            <p className="mt-2 text-xs" style={{ color: "var(--color-text-faint)" }}>
-              {t("room.searchNoResults") ?? "No matches found."}
-            </p>
-          )}
-        </div>
-      )}
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -495,7 +383,6 @@ export function ChatScreen() {
               personaName={persona?.name}
               streamingSpeakerId={streamingSpeakerId}
               isGroup={isGroup}
-              scrollToMessageId={scrollToMessageId}
               onBranch={(messageId) => void handleBranch(messageId)}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
@@ -564,6 +451,21 @@ export function ChatScreen() {
               style={{ borderColor: "var(--color-border)" }}
             >
               <InventoryPanel persona={persona} onClose={() => setInventoryOpen(false)} />
+            </aside>
+          </>
+        )}
+        {questsOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => setQuestsOpen(false)}
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <QuestPanel chatId={id} onClose={() => setQuestsOpen(false)} />
             </aside>
           </>
         )}

@@ -301,7 +301,7 @@ function startStream(
       const chat = get().chat;
       void (async () => {
         const persona = chat ? await resolveChatPersona(chat) : null;
-        const finalText = await processGameResponse(persona, text);
+        const finalText = await processGameResponse(persona, text, chat?.id);
         void finalize(finalText, false);
       })();
     },

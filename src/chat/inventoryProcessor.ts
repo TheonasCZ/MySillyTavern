@@ -1,16 +1,23 @@
 import type { Persona } from "../db/repositories/personasRepo";
 import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
+import {
+  addQuestNote,
+  createQuest,
+  getQuestByName,
+  updateQuestStatus,
+} from "../db/repositories/questsRepo";
 import { parseGameTags } from "./inventoryTags";
 
-/** Parses game tags (inventory + skill + level) from the AI response,
- *  updates the persona in DB, and returns the cleaned text. */
+/** Parses game tags (inventory + skill + level + quest) from the AI response,
+ *  updates the persona and quests in DB, and returns the cleaned text. */
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
+  chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges, questMutations } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && questMutations.length === 0) return text;
 
   // Apply inventory mutations
   const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
@@ -82,6 +89,36 @@ export async function processGameResponse(
     }
   } catch {
     // Non-critical
+  }
+
+  // Apply quest mutations (chat-scoped)
+  if (chatId && questMutations.length > 0) {
+    try {
+      for (const qm of questMutations) {
+        if (qm.action === "start") {
+          const existing = await getQuestByName(chatId, qm.name);
+          if (!existing) {
+            await createQuest({ chatId, name: qm.name, description: qm.note });
+          } else if (qm.note) {
+            // Re-starting an existing quest — optionally update description
+            await addQuestNote(existing.id, qm.note);
+          }
+        } else {
+          const existing = await getQuestByName(chatId, qm.name);
+          if (existing) {
+            if (qm.action === "complete") {
+              await updateQuestStatus(existing.id, "completed");
+            } else if (qm.action === "fail") {
+              await updateQuestStatus(existing.id, "failed");
+            } else if (qm.action === "note" && qm.note) {
+              await addQuestNote(existing.id, qm.note);
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-critical
+    }
   }
 
   return cleanText;
