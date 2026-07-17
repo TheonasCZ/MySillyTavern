@@ -20,8 +20,9 @@ import {
   appendSwipe,
   countMessages,
   createMessage,
-  listOlderMessages,
+  hasMoreMessages,
   listRecentMessages,
+  loadOlderMessages as loadOlderMessagesFromRepo,
   MESSAGE_PAGE_SIZE,
   shiftActiveSwipe,
   updateMessageContent,
@@ -558,11 +559,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ loadingOlderMessages: true });
     try {
       const oldest = messages[0];
-      const older = await listOlderMessages(chatId, oldest.createdAt, MESSAGE_PAGE_SIZE);
+      const older = await loadOlderMessagesFromRepo(chatId, oldest.id, MESSAGE_PAGE_SIZE);
+      if (get().chatId !== chatId) return;
+      // Check whether even older messages remain after this page.
+      const more = older.length > 0 ? await hasMoreMessages(chatId, older[0].id) : false;
       if (get().chatId !== chatId) return;
       set((s) => ({
         messages: [...older, ...s.messages],
-        hasOlderMessages: older.length === MESSAGE_PAGE_SIZE,
+        hasOlderMessages: more,
       }));
     } finally {
       set({ loadingOlderMessages: false });

@@ -103,6 +103,35 @@ export function MessageList({
   const spacerRef = useRef<HTMLDivElement>(null);
   const anchoredUserMsgIdRef = useRef<string | null>(null);
 
+  // --- Infinite-scroll sentinel + debounce ----------------------------------
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !onLoadOlder || !hasOlder || loadingOlder) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => {
+            const el = scrollRef.current;
+            if (el) prevScrollHeightRef.current = el.scrollHeight;
+            onLoadOlder();
+          }, 500);
+        }
+      },
+      { threshold: 0 },
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [onLoadOlder, hasOlder, loadingOlder]);
+
   // --- M11 §2: history virtualization bookkeeping -------------------------
   // Measured heights (offsetHeight, px) keyed by message id — persists for
   // the component's lifetime so a message never needs remeasuring after it
@@ -282,11 +311,6 @@ export function MessageList({
       scrollTopRef.current = el.scrollTop;
       if (messages.length > VIRTUALIZE_THRESHOLD) scheduleWindowRecompute();
     }
-    if (!el || !onLoadOlder || !hasOlder || loadingOlder) return;
-    if (el.scrollTop < 80) {
-      prevScrollHeightRef.current = el.scrollHeight;
-      onLoadOlder();
-    }
   };
 
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
@@ -361,6 +385,9 @@ export function MessageList({
       data-total-messages={messages.length}
       className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-8"
     >
+      {/* Sentinel: when this 1px div enters the viewport the
+       * IntersectionObserver triggers a load-older-messages fetch. */}
+      <div ref={sentinelRef} className="shrink-0" style={{ height: 1 }} />
       {hasOlder && (
         <div className="flex justify-center pb-1">
           <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>

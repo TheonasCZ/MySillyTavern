@@ -31,7 +31,6 @@ import type { ConnectionConfig } from "../providers/types";
 import { cosineSimilarity } from "../memory/vector";
 import { estimateTokens } from "./tokenEstimate";
 import { syncCountTokens } from "./tokenCounter";
-import { getLastTagErrors, clearTagErrors } from "../chat/inventoryProcessor";
 
 export interface CharacterLike {
   name: string;
@@ -590,11 +589,6 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += "Změny: [LEVEL:+částka] přidá XP.\n";
       }
       tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
-      const errors = getLastTagErrors();
-      if (errors.length > 0) {
-        tagInstructions += `\n\n⚠️ CHYBY V PŘEDCHOZÍ ODPOVĚDI:\n${errors.map((e: string) => `- ${e}`).join("\n")}\nOprav se.`;
-        clearTagErrors();
-      }
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
     }
 

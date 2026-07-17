@@ -99,6 +99,37 @@ export async function listOlderMessages(
   return rows.map(toMessage).reverse();
 }
 
+/** Returns true when at least one message exists in `chatId` older than
+ * `beforeMessageId` — used by the UI to decide whether to show the
+ * "scroll for older" hint and keep the sentinel active. */
+export async function hasMoreMessages(chatId: string, beforeMessageId: string): Promise<boolean> {
+  const rows = await query<{ exists: number }>(
+    `SELECT 1 as exists FROM messages
+     WHERE chat_id = $1
+       AND created_at < (SELECT created_at FROM messages WHERE id = $2)
+     LIMIT 1`,
+    [chatId, beforeMessageId],
+  );
+  return rows.length > 0;
+}
+
+/** Loads up to `limit` messages older than `beforeMessageId`, oldest →
+ * newest. Resolves the cursor message's `created_at` and delegates to
+ * `listOlderMessages` so the underlying pagination stays timestamp-based
+ * (safe across message insertions / reorders). */
+export async function loadOlderMessages(
+  chatId: string,
+  beforeMessageId: string,
+  limit: number = MESSAGE_PAGE_SIZE,
+): Promise<Message[]> {
+  const cursor = await query<{ created_at: string }>(
+    "SELECT created_at FROM messages WHERE id = $1",
+    [beforeMessageId],
+  );
+  if (cursor.length === 0) return [];
+  return listOlderMessages(chatId, cursor[0].created_at, limit);
+}
+
 /** Creates a message with a single swipe variant equal to its content.
  * `characterId` records the authoring member for group chats (M10) — omit
  * for user/system messages or legacy solo chats. */

@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 
+import type { ChronicleTheme, ChronicleFormat, ExportStatus } from "../../chat/chronicleTypes";
+import { THEMES } from "../../chat/chronicleThemes";
 import { branchChat } from "../../db/repositories/chatsRepo";
 import { createMessage } from "../../db/repositories/messagesRepo";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
@@ -91,6 +93,13 @@ export function ChatScreen() {
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportConnectionId, setExportConnectionId] = useState("");
+  const [exportTheme, setExportTheme] = useState<ChronicleTheme>("fantasy");
+  const [exportFormat, setExportFormat] = useState<ChronicleFormat>("html");
+  const [exportIllustrations, setExportIllustrations] = useState(true);
+  const [exportJobId, setExportJobId] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
 
   const handleDiceRoll = useCallback(
     async (expression: string) => {
@@ -111,6 +120,63 @@ export function ChatScreen() {
     },
     [chatId],
   );
+
+  // Poll export status every second while a job is running
+  useEffect(() => {
+    if (!exportJobId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const status: ExportStatus = await invoke("get_export_status", { jobId: exportJobId });
+        if (cancelled) return;
+        setExportStatus(status);
+        if (status.status === "done" || status.status === "error") {
+          setExportJobId(null);
+        }
+      } catch {
+        // polling error – ignore
+      }
+    };
+    // poll immediately, then every 1s
+    void poll();
+    const iv = setInterval(() => { void poll(); }, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [exportJobId]);
+
+  // Resume running export on mount
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        // Check if there's a known running job stored (we store it in localStorage)
+        const stored = localStorage.getItem(`export_job_${id}`);
+        if (!stored) return;
+        const { jobId } = JSON.parse(stored) as { jobId: string };
+        const status: ExportStatus = await invoke("get_export_status", { jobId });
+        if (cancelled) return;
+        if (status.status === "running") {
+          setExportJobId(jobId);
+          setExportStatus(status);
+        } else {
+          // Clean up stale storage
+          localStorage.removeItem(`export_job_${id}`);
+        }
+      } catch {
+        // No running job or error – ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // Persist job id so resume works across remounts
+  useEffect(() => {
+    if (!id || !exportJobId) return;
+    localStorage.setItem(`export_job_${id}`, JSON.stringify({ jobId: exportJobId }));
+  }, [id, exportJobId]);
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
@@ -148,6 +214,12 @@ export function ChatScreen() {
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  // Filter connections for the export dropdown: gemini provider OR purpose=chat
+  const exportConnections = connections.filter(
+    (c) =>
+      c.provider === "gemini" || c.purposes.includes("chat"),
+  );
 
   if (!id) return null;
 
@@ -391,6 +463,19 @@ export function ChatScreen() {
           >
             {t("title", { ns: "memory" })}
           </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen((v) => !v)}
+            aria-pressed={exportOpen}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: exportOpen ? "var(--color-accent)" : "transparent",
+              color: exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            📖
+          </button>
         </div>
       </header>
 
@@ -532,6 +617,154 @@ export function ChatScreen() {
             >
               <QuestPanel chatId={id} onClose={() => setQuestsOpen(false)} />
             </aside>
+          </>
+        )}
+
+        {/* ---- Chronicle Export Dialog ---- */}
+        {exportOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-50"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => setExportOpen(false)}
+            />
+            <div
+              className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border p-6 shadow-xl"
+              style={{
+                borderColor: "var(--color-border-strong)",
+                backgroundColor: "var(--color-bg-elevated)",
+                color: "var(--color-text)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {exportJobId ? (
+                /* ---- Progress ---- */
+                <div className="space-y-3">
+                  <h3 className="font-[var(--font-display)] text-lg">📖 Export kroniky</h3>
+                  {exportStatus ? (
+                    <>
+                      <div
+                        className="h-2 w-full rounded-full overflow-hidden"
+                        style={{ backgroundColor: "var(--color-surface-2)" }}
+                      >
+                        <div
+                          className="h-full transition-all duration-300"
+                          style={{
+                            width: `${exportStatus.progress}%`,
+                            backgroundColor: "var(--color-accent)",
+                          }}
+                        />
+                      </div>
+                      <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+                        Exportuji {exportStatus.progress}% ({exportStatus.currentChunk}/{exportStatus.totalChunks} kapitol)
+                      </p>
+                      {exportStatus.status === "done" && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium" style={{ color: "var(--color-success, #22c55e)" }}>
+                            ✅ Hotovo!
+                          </p>
+                          {exportStatus.outputPath && (
+                            <button
+                              type="button"
+                              className="rounded-[var(--radius-sm)] border px-3 py-1 text-xs transition-colors"
+                              style={{
+                                borderColor: "var(--color-border-strong)",
+                                color: "var(--color-text)",
+                              }}
+                              onClick={() => {
+                                void invoke("open_path", { path: exportStatus.outputPath });
+                              }}
+                            >
+                              Otevřít složku
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>Spouštím export…</p>
+                  )}
+                </div>
+              ) : (
+                /* ---- Export form ---- */
+                <div className="space-y-4">
+                  <h3 className="font-[var(--font-display)] text-lg">📖 Export kroniky</h3>
+
+                  <label className="block text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    Připojení
+                    <select
+                      className="mt-1 block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-sm"
+                      style={selectStyle}
+                      value={exportConnectionId}
+                      onChange={(e) => setExportConnectionId(e.target.value)}
+                    >
+                      <option value="">-- vyberte --</option>
+                      {exportConnections.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    Téma
+                    <select
+                      className="mt-1 block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-sm"
+                      style={selectStyle}
+                      value={exportTheme}
+                      onChange={(e) => setExportTheme(e.target.value as ChronicleTheme)}
+                    >
+                      {THEMES.map((t) => (
+                        <option key={t.key} value={t.key}>{t.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <fieldset className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    <legend className="mb-1">Formát</legend>
+                    <label className="mr-4 inline-flex items-center gap-1">
+                      <input type="radio" name="exportFormat" value="html" checked={exportFormat === "html"} onChange={() => setExportFormat("html")} />
+                      HTML
+                    </label>
+                    <label className="inline-flex items-center gap-1">
+                      <input type="radio" name="exportFormat" value="pdf" checked={exportFormat === "pdf"} onChange={() => setExportFormat("pdf")} />
+                      PDF
+                    </label>
+                  </fieldset>
+
+                  <label className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    <input type="checkbox" checked={exportIllustrations} onChange={(e) => setExportIllustrations(e.target.checked)} />
+                    Ilustrace
+                  </label>
+
+                  <button
+                    className="w-full rounded-[var(--radius-sm)] px-3 py-2 text-sm font-medium transition-colors"
+                    onClick={async () => {
+                      try {
+                        const result: { jobId: string } = await invoke("start_export", {
+                          chatId: id,
+                          personaId: chat?.personaId ?? undefined,
+                          connectionId: exportConnectionId,
+                          theme: exportTheme,
+                          format: exportFormat,
+                          includeIllustrations: exportIllustrations,
+                        });
+                        setExportJobId(result.jobId);
+                        setExportStatus(null);
+                      } catch (err) {
+                        console.warn("export start failed", err);
+                      }
+                    }}
+                    disabled={!exportConnectionId}
+                    style={{
+                      backgroundColor: exportConnectionId ? "var(--color-accent)" : "var(--color-surface-2)",
+                      color: exportConnectionId ? "var(--color-accent-contrast)" : "var(--color-text-faint)",
+                    }}
+                  >
+                    Spustit export
+                  </button>
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
