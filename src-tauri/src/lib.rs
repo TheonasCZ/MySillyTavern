@@ -5,7 +5,7 @@ mod providers;
 
 use commands::backup::{
     apply_pending_import, cancel_pending_import, export_backup, has_pending_import,
-    request_import_backup,
+    list_backups, request_import_backup, run_auto_backup, run_auto_backup_at_startup,
 };
 use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
 use commands::chat::{
@@ -36,6 +36,7 @@ pub fn run() {
         .setup(|app| {
             init_store(app.handle())?;
             apply_pending_import(app.handle());
+            run_auto_backup_at_startup(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -57,6 +58,8 @@ pub fn run() {
             request_import_backup,
             has_pending_import,
             cancel_pending_import,
+            run_auto_backup,
+            list_backups,
             append_log,
             get_log_path,
             eval_dice,
