@@ -469,12 +469,24 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
    (`getVersion()`); při release zvednout `version` v
    `tauri.conf.json` + `package.json` a tagnout `v<verze>`.
 
-**Zbývá ručně:**
-- `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mysillytavern.key`
-  (soukromý klíč je jen lokálně, NEZTRATIT — bez něj nejdou podepsat
-  další updaty; heslo prázdné)
-- první release: zvednout verzi, `git tag v0.1.0 && git push --tags`,
-  stáhnout AppImage z Release a přepnout na něj lokální `.desktop`
+**Stav 2026-07-18 v noci:**
+- ✅ Secret `TAURI_SIGNING_PRIVATE_KEY` nahrán (soukromý klíč je
+  POUZE v `~/.tauri/mysillytavern.key` — NEZTRATIT, bez něj nejdou
+  podepsat další updaty; heslo prázdné)
+- ✅ GitHub token rozšířen (Actions + Secrets read/write) — CI běhy
+  lze sledovat a mazat přes `gh`
+- ✅ Verze 0.1.0 (MSI nesnese `-alpha` — pre-release identifikátor
+  musí být číselný), tag `v0.1.0` pushnut → Release CI běží
+- ✅ `build-windows.yml` jen `workflow_dispatch` (distribuce =
+  release.yml); `build-android.yml` zůstává na push jako jediná
+  průběžná kontrola Androidu
+- ⬜ ČEKÁ SE: výsledek Release v0.1.0 + Build Android běhů
+- ⬜ Po úspěšném Release: stáhnout AppImage, přepnout lokální
+  `~/.local/share/applications/mysillytavern.desktop` z binárky
+  `~/.local/bin/mysillytavern` na AppImage (updater umí na Linuxu
+  aktualizovat jen AppImage)
+- ⬜ Výhledově: Android do release.yml (podepsané APK přes keystore
+  v secrets)
 
 ---
 
@@ -508,7 +520,7 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
 | M31 TTS fáze B | ⬜ odloženo | offline backend — až po průzkumu |
 | M28 fáze B | ⬜ odloženo | EN pivot pro paměť |
 | M14 konfliktní UI | ⬜ odloženo | banner pro ruční merge konfliktů |
-| M32 distribuce+update | 🔶 kód hotov | zbývá: GitHub secret s klíčem + první tag v0.1.0 |
+| M32 distribuce+update | 🔶 čeká na CI | kód hotov, tag v0.1.0 pushnut, čeká se na Release build |
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.
