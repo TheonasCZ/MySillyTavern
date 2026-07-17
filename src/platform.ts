@@ -1,11 +1,11 @@
 /**
  * Android-safe wrappers for Tauri desktop-only plugins.
  *
- * On Android, `tauri-plugin-dialog` and `tauri-plugin-process` are excluded
- * (behind the `desktop-plugins` Cargo feature, disabled with
- * `--no-default-features`). The JS-side imports will fail at runtime.
+ * On Android, `tauri-plugin-dialog`, `tauri-plugin-process` and
+ * `tauri-plugin-updater` are excluded via target-conditional dependencies
+ * in Cargo.toml, so the JS-side plugin calls fail at runtime.
  *
- * These wrappers catch import failures and return a "not available"
+ * These wrappers catch those failures and return a "not available"
  * indication so callers can show an appropriate message.
  */
 
@@ -59,6 +59,33 @@ export async function relaunchApp(): Promise<void> {
     await relaunch();
   } catch {
     // Android: process plugin not available — simply do nothing
+  }
+}
+
+export interface AvailableUpdate {
+  version: string;
+  /** Downloads and installs the update; caller then calls relaunchApp(). */
+  downloadAndInstall: () => Promise<void>;
+}
+
+/**
+ * Check GitHub Releases for a newer version. Returns null when there is no
+ * update, when the updater is unavailable (Android, dev build) or when the
+ * check fails (offline) — callers can treat null as "nothing to do".
+ */
+export async function checkForUpdate(): Promise<AvailableUpdate | null> {
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const update = await check();
+    if (!update) return null;
+    return {
+      version: update.version,
+      downloadAndInstall: async () => {
+        await update.downloadAndInstall();
+      },
+    };
+  } catch {
+    return null;
   }
 }
 

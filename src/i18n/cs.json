@@ -27,7 +27,14 @@
       "empty": "Zatím tu nic není."
     },
     "comingSoon": "Tato obrazovka bude hotová v dalším milníku.",
-    "offline": "Jsi offline. Zprávy se odešlou, jakmile se připojení obnoví."
+    "offline": "Jsi offline. Zprávy se odešlou, jakmile se připojení obnoví.",
+    "update": {
+      "available": "Nová verze {{version}} je k dispozici",
+      "installNow": "Aktualizovat",
+      "downloading": "Stahuji aktualizaci… apka se pak sama restartuje",
+      "error": "Aktualizace se nezdařila — zkus to později",
+      "dismiss": "Zavřít"
+    }
   },
   "chat": {
     "title": "Chaty",
@@ -466,7 +473,8 @@
       "subtitle": "Chyby aplikace se automaticky zapisují do souboru — přilož ho k hlášení chyby.",
       "logPathLabel": "Cesta k logu",
       "openLogs": "Otevřít složku logů",
-      "openLogFile": "Otevřít log"
+      "openLogFile": "Otevřít log",
+      "versionLabel": "Verze aplikace"
     },
     "memory": {
       "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",

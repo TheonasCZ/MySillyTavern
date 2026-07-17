@@ -455,18 +455,26 @@ auto-update níže.
 **Cíl:** stáhnu → nainstaluju → mám ikonu → hraju; aktualizace řeší apka
 sama („je nová verze" notifikace + tlačítko aktualizovat).
 
-1. ⬜ **GitHub Releases CI** — workflow na tag `v*`: Linux (deb/rpm/
-   AppImage — AppImage vyžaduje `linuxdeploy`, lokálně na Archu padá),
-   Windows (build-windows.yml už existuje), Android APK. Artefakty
-   připnout k Release.
-2. ⬜ **In-app updater** — `tauri-plugin-updater` (v2): podepsané update
-   manifesty, endpoint = GitHub Releases (`latest.json`). Pozor: na
-   Linuxu plugin umí aktualizovat jen AppImage (ne holou binárku/deb) —
-   tj. buď přejít na AppImage distribuci, nebo vlastní lehký check
-   (GitHub API `releases/latest` → porovnat verzi → notifikace v UI
-   + odkaz/stažení).
-3. ⬜ **Verzování** — `version` v `tauri.conf.json` + `package.json`
-   zvedat při release; zobrazit verzi v Nastavení → Diagnostika.
+1. ✅ **GitHub Releases CI** — `release.yml`: na tag `v*` staví
+   `tauri-action` Linux (deb/rpm/AppImage) + Windows (MSI/NSIS),
+   vytvoří Release a podepsaný `latest.json` pro updater.
+2. ✅ **In-app updater** — `tauri-plugin-updater` (desktop-only přes
+   target deps), pubkey + endpoint v `tauri.conf.json`,
+   `createUpdaterArtifacts`, capability `desktop.json` (Android má
+   vlastní `default.json` bez desktop pluginů). UI: `UpdateBanner.tsx`
+   — check při startu, toast „Nová verze X – Aktualizovat", stažení
+   + ověření podpisu + restart. Na Linuxu updater aktualizuje jen
+   AppImage → distribuce = AppImage.
+3. ✅ **Verzování** — verze zobrazená v Nastavení → Diagnostika
+   (`getVersion()`); při release zvednout `version` v
+   `tauri.conf.json` + `package.json` a tagnout `v<verze>`.
+
+**Zbývá ručně:**
+- `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mysillytavern.key`
+  (soukromý klíč je jen lokálně, NEZTRATIT — bez něj nejdou podepsat
+  další updaty; heslo prázdné)
+- první release: zvednout verzi, `git tag v0.1.0 && git push --tags`,
+  stáhnout AppImage z Release a přepnout na něj lokální `.desktop`
 
 ---
 
@@ -500,7 +508,7 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
 | M31 TTS fáze B | ⬜ odloženo | offline backend — až po průzkumu |
 | M28 fáze B | ⬜ odloženo | EN pivot pro paměť |
 | M14 konfliktní UI | ⬜ odloženo | banner pro ruční merge konfliktů |
-| M32 distribuce+update | ⬜ NOVÝ | GitHub Releases CI, in-app updater, verzování |
+| M32 distribuce+update | 🔶 kód hotov | zbývá: GitHub secret s klíčem + první tag v0.1.0 |
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.

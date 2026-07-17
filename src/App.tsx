@@ -13,6 +13,7 @@ import { LorebookEditor } from "./ui/lorebooks/LorebookEditor";
 import { LorebooksListScreen } from "./ui/lorebooks/LorebooksListScreen";
 import { PersonasScreen } from "./ui/personas/PersonasScreen";
 import { SettingsScreen } from "./ui/settings/SettingsScreen";
+import { UpdateBanner } from "./ui/UpdateBanner";
 
 function App() {
   const { hydrated, hydrate } = useSettingsStore();
@@ -65,6 +66,7 @@ function App() {
           <Route path="/settings" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <UpdateBanner />
       </AppShell>
     </HashRouter>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { openPath, revealItemInDir } from "../../platform";
 
 // Diagnostics section (roadmap M11 §3): surfaces the error log path
@@ -11,12 +12,16 @@ import { openPath, revealItemInDir } from "../../platform";
 export function DiagnosticsPanel() {
   const { t } = useTranslation("settings");
   const [logPath, setLogPath] = useState<string | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     void invoke<string>("get_log_path")
       .then(setLogPath)
       .catch((err) => setError(String(err)));
+    void getVersion()
+      .then(setVersion)
+      .catch(() => {});
   }, []);
 
   const handleOpenFolder = async () => {
@@ -53,6 +58,12 @@ export function DiagnosticsPanel() {
       <p className="mb-4 text-sm" style={{ color: "var(--color-text-muted)" }}>
         {t("diagnostics.subtitle")}
       </p>
+
+      {version && (
+        <p className="mb-1 text-xs" style={{ color: "var(--color-text-faint)" }}>
+          {t("diagnostics.versionLabel")}: {version}
+        </p>
+      )}
 
       {logPath && (
         <p className="mb-3 break-all text-xs" style={{ color: "var(--color-text-faint)" }}>

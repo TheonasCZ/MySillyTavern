@@ -27,7 +27,14 @@
       "empty": "Nothing here yet."
     },
     "comingSoon": "This screen ships in a later milestone.",
-    "offline": "You're offline. Messages will send once the connection is back."
+    "offline": "You're offline. Messages will send once the connection is back.",
+    "update": {
+      "available": "New version {{version}} is available",
+      "installNow": "Update now",
+      "downloading": "Downloading update… the app will restart itself",
+      "error": "Update failed — try again later",
+      "dismiss": "Dismiss"
+    }
   },
   "chat": {
     "title": "Chats",
@@ -466,7 +473,8 @@
       "subtitle": "App errors are automatically written to a file — attach it when reporting a bug.",
       "logPathLabel": "Log path",
       "openLogs": "Open log folder",
-      "openLogFile": "Open log"
+      "openLogFile": "Open log",
+      "versionLabel": "App version"
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",
