@@ -31,6 +31,10 @@ import {
   type GameTimeState,
 } from "./gameTime";
 
+// Side-effect import: loads the auto-illustration background queue so it is
+// ready to accept items as soon as facts are locked or inventory is updated.
+import "./imageGenQueue";
+
 export const DEFAULT_EXTRACTION_INTERVAL = 10;
 /** How many messages must have scrolled past the verbatim window,
  * unsummarized, before a summarization pass is queued. Fixed per plan

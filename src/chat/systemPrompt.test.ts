@@ -43,6 +43,7 @@ function makePersona(partial: Partial<Persona> = {}): Persona {
     age: null,
     race: "",
     appearance: "",
+    progression: "skill",
     skills: [],
     inventory: [],
     avatarPath: null,

@@ -1,5 +1,6 @@
 /**
- * Parses game tags from AI responses — inventory mutations and skill changes.
+ * Parses game tags from AI responses — inventory mutations, skill changes,
+ * and level progression tags.
  * 
  * Inventory tags:
  *   [INV:+item_name]              — add item (qty 1)
@@ -12,6 +13,10 @@
  *   [SKILL:+name:level]           — learn skill at given level
  *   [SKILL:name+n]                — increase skill by n levels
  *   [SKILL:name-n]                — decrease skill by n levels
+ * 
+ * Level tags:
+ *   [LEVEL:+xp]                   — add XP (e.g. [LEVEL:+50])
+ *   [LEVEL:+level]                — increase level by 1 (e.g. [LEVEL:+1])
  * 
  * Returns the cleaned text (all tags removed) and parsed mutations.
  */
@@ -28,15 +33,22 @@ export interface SkillMutation {
   absolute: number | null; // used for [SKILL:+name:level]
 }
 
+export interface LevelMutation {
+  xpDelta: number;
+  levelDelta: number;
+}
+
 interface ParsedTags {
   cleanText: string;
   mutations: InvMutation[];
   skillChanges: SkillMutation[];
+  levelChanges: LevelMutation[];
 }
 
 export function parseGameTags(text: string): ParsedTags {
   const mutations: InvMutation[] = [];
   const skillChanges: SkillMutation[] = [];
+  const levelChanges: LevelMutation[] = [];
 
   let cleanText = text;
 
@@ -74,5 +86,14 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges };
+  // Parse level tags: [LEVEL:+xp]
+  cleanText = cleanText.replace(/\[LEVEL:\+(\d+)\]/gi, (_m, nStr: string) => {
+    const n = parseInt(nStr, 10);
+    if (!isNaN(n) && n > 0) {
+      levelChanges.push({ xpDelta: n, levelDelta: 0 });
+    }
+    return "";
+  });
+
+  return { cleanText, mutations, skillChanges, levelChanges };
 }

@@ -186,6 +186,10 @@
         "racePlaceholder": "human",
         "appearance": "Appearance",
         "appearancePlaceholder": "What the persona looks like — hair, eyes, build, clothing…",
+        "progression": "Progression system",
+        "progressionSkill": "Skills (skill-based)",
+        "progressionLevel": "Levels (level-based)",
+        "progressionNone": "No progression",
         "skills": "Skills",
         "skillName": "Name",
         "inventory": "Inventory",
@@ -197,6 +201,7 @@
       "pickAvatar": "Choose avatar",
       "isDefaultBadge": "This is the default persona for new chats.",
       "makeDefault": "Set as default",
+      "saved": "Saved.",
       "deleteConfirm": "Delete this persona? Chats pointing to it will keep working but lose the reference.",
       "generateAvatar": "Generate"
     },

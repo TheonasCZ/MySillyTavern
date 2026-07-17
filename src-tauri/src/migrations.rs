@@ -65,6 +65,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_010,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "personas: progression column (skill, level, none) plus xp/level tracking",
+            sql: MIGRATION_011,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -295,4 +301,13 @@ ALTER TABLE connections ADD COLUMN purpose TEXT NOT NULL DEFAULT 'chat';
 const MIGRATION_010: &str = r#"
 ALTER TABLE connections ADD COLUMN purposes TEXT NOT NULL DEFAULT '["chat","image","embedding"]';
 UPDATE connections SET purposes = json_array(purpose);
+"#;
+
+/// Adds progression system: `progression` picks the tag-based game mechanic
+/// (`skill`, `level`, or `none`), while `xp` and `level` track numeric
+/// level-based progression separately from the JSON `skills` array.
+const MIGRATION_011: &str = r#"
+ALTER TABLE personas ADD COLUMN progression TEXT NOT NULL DEFAULT 'skill';
+ALTER TABLE personas ADD COLUMN xp INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE personas ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 "#;

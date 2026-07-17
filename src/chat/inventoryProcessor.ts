@@ -1,16 +1,16 @@
 import type { Persona } from "../db/repositories/personasRepo";
-import { updatePersona } from "../db/repositories/personasRepo";
+import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
 import { parseGameTags } from "./inventoryTags";
 
-/** Parses game tags (inventory + skill) from the AI response,
+/** Parses game tags (inventory + skill + level) from the AI response,
  *  updates the persona in DB, and returns the cleaned text. */
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0) return text;
 
   // Apply inventory mutations
   const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
@@ -57,6 +57,15 @@ export async function processGameResponse(
     }
   }
 
+  // Apply level mutations
+  let xp = persona.xp ?? 0;
+  let level = persona.level ?? 1;
+  let hasLevelChanges = false;
+  for (const lc of levelChanges) {
+    if (lc.xpDelta > 0) { xp += lc.xpDelta; hasLevelChanges = true; }
+    if (lc.levelDelta > 0) { level += lc.levelDelta; hasLevelChanges = true; }
+  }
+
   try {
     await updatePersona(persona.id, {
       name: persona.name,
@@ -64,9 +73,13 @@ export async function processGameResponse(
       age: persona.age,
       race: persona.race,
       appearance: persona.appearance,
+      progression: persona.progression,
       skills,
       inventory: inv,
     });
+    if (hasLevelChanges) {
+      await updatePersonaXpLevel(persona.id, xp, level);
+    }
   } catch {
     // Non-critical
   }

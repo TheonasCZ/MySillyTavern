@@ -49,6 +49,9 @@ export interface PersonaLike {
   age?: number | null;
   race?: string;
   appearance?: string;
+  progression?: "skill" | "level" | "none";
+  xp?: number;
+  level?: number;
   skills?: Array<{ name: string; level: number }>;
   inventory?: Array<{ item: string; qty: number; note?: string }>;
 }
@@ -501,20 +504,28 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
     }
-    // Game tag instructions — tells the model to annotate item + skill changes
+    // Game tag instructions — tells the model to annotate item + skill/level changes
+    const progression = persona?.progression ?? "skill";
     const hasInv = persona?.inventory?.length;
     const hasSkills = persona?.skills?.length;
-    if (hasInv || hasSkills) {
+    if (progression !== "none" && (hasInv || (progression === "skill" && hasSkills))) {
       let tagInstructions = "[HERNÍ TAGY]\n";
+      // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
         const inv = persona.inventory ?? [];
         tagInstructions += `Aktuální inventář: ${inv.map((i) => i.item + (i.qty > 1 ? ` x${i.qty}` : "")).join(", ")}.\n`;
         tagInstructions += "Změny inventáře: [INV:+předmět] získání, [INV:-předmět] ztráta, [INV:+počet:předmět] množství.\n";
       }
-      if (hasSkills && persona) {
+      if (progression === "skill" && hasSkills && persona) {
         const sk = persona.skills ?? [];
         tagInstructions += `Aktuální dovednosti: ${sk.map((s) => `${s.name} ${s.level}`).join(", ")}.\n`;
         tagInstructions += "Změny dovedností: [SKILL:+nová] naučení (level 1), [SKILL:+jméno:level] nastavení úrovně, [SKILL:jméno+1] zvýšení.\n";
+      }
+      if (progression === "level") {
+        const xp = persona?.xp ?? 0;
+        const lvl = persona?.level ?? 1;
+        tagInstructions += `Aktuálně: úroveň ${lvl}, ${xp} XP.\n`;
+        tagInstructions += "Změny: [LEVEL:+částka] přidá XP.\n";
       }
       tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;

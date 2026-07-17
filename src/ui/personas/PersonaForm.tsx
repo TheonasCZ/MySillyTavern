@@ -32,6 +32,7 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
   const [age, setAge] = useState(initial?.age?.toString() ?? "");
   const [race, setRace] = useState(initial?.race ?? "");
   const [appearance, setAppearance] = useState(initial?.appearance ?? "");
+  const [progression, setProgression] = useState<"skill" | "level" | "none">(initial?.progression ?? "skill");
   const [skills, setSkills] = useState<SkillEntry[]>(initial?.skills ?? []);
   const [inventory, setInventory] = useState<InventoryEntry[]>(initial?.inventory ?? []);
   const [saving, setSaving] = useState(false);
@@ -42,6 +43,7 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
     age: age ? parseInt(age, 10) : null,
     race,
     appearance,
+    progression,
     skills: skills.filter((s) => s.name.trim()),
     inventory: inventory.filter((inv) => inv.item.trim()),
   });
@@ -239,6 +241,25 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
           onChange={(e) => setAppearance(e.target.value)}
         />
       </label>
+
+      {/* Progression */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">{t("form.fields.progression")}</span>
+        <div className="flex flex-wrap gap-3">
+          {(["skill", "level", "none"] as const).map((v) => (
+            <label key={v} className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input
+                type="radio"
+                name="progression"
+                value={v}
+                checked={progression === v}
+                onChange={() => setProgression(v)}
+              />
+              <span>{t(`form.fields.progression${v.charAt(0).toUpperCase() + v.slice(1)}` as any)}</span>
+            </label>
+          ))}
+        </div>
+      </div>
 
       {/* Skills */}
       <div className="flex flex-col gap-2">

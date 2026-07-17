@@ -4,6 +4,7 @@ import type { LedgerCategory, LedgerFactLike } from "../../prompt/promptBuilder"
 export type { LedgerCategory };
 
 export interface LedgerFact extends LedgerFactLike {
+  imagePath: string | null;
   chatId: string;
   createdAt: string;
   updatedAt: string;
@@ -18,6 +19,7 @@ interface LedgerFactRow {
   fact: string;
   status: "active" | "archived";
   locked: number;
+  image_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +34,7 @@ function toFact(row: LedgerFactRow): LedgerFact {
     fact: row.fact,
     status: row.status,
     locked: row.locked === 1,
+    imagePath: row.image_path,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -84,6 +87,7 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
     fact: draft.fact,
     status: "active",
     locked: !!draft.locked,
+    imagePath: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -105,12 +109,36 @@ export async function updateFact(id: string, patch: LedgerFactUpdate): Promise<v
   );
 }
 
+export async function getFact(id: string): Promise<LedgerFact | null> {
+  const rows = await query<LedgerFactRow>(
+    "SELECT * FROM ledger_facts WHERE id = $1",
+    [id],
+  );
+  return rows[0] ? toFact(rows[0]) : null;
+}
+
+export async function setFactImage(id: string, imagePath: string): Promise<void> {
+  await execute(
+    "UPDATE ledger_facts SET image_path = $2, updated_at = $3 WHERE id = $1",
+    [id, imagePath, nowIso()],
+  );
+}
+
 export async function setFactLocked(id: string, locked: boolean): Promise<void> {
   await execute("UPDATE ledger_facts SET locked = $2, updated_at = $3 WHERE id = $1", [
     id,
     locked ? 1 : 0,
     nowIso(),
   ]);
+
+  // Auto-illustration trigger: enqueue when locking a fact that has no image yet.
+  if (locked) {
+    const fact = await getFact(id);
+    if (fact && !fact.imagePath) {
+      const { enqueueIllustration } = await import("../../memory/imageGenQueue");
+      enqueueIllustration("fact", id, `Fantasy illustration: ${fact.fact}`);
+    }
+  }
 }
 
 export async function setFactStatus(id: string, status: "active" | "archived"): Promise<void> {

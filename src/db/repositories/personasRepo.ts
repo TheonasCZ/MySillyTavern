@@ -22,6 +22,9 @@ export interface Persona {
   age: number | null;
   race: string;
   appearance: string;
+  progression: "skill" | "level" | "none";
+  xp?: number;
+  level?: number;
   skills: SkillEntry[];
   inventory: InventoryEntry[];
   avatarPath: string | null;
@@ -36,6 +39,7 @@ export interface PersonaDraft {
   age: number | null;
   race: string;
   appearance: string;
+  progression?: "skill" | "level" | "none";
   skills: SkillEntry[];
   inventory: InventoryEntry[];
   avatarPath: string | null;
@@ -51,6 +55,9 @@ interface PersonaRow {
   age: number | null;
   race: string;
   appearance: string;
+  progression: string;
+  xp: number;
+  level: number;
   skills: string; // JSON
   inventory: string; // JSON
   avatar_path: string | null;
@@ -76,6 +83,9 @@ function toPersona(row: PersonaRow): Persona {
     age: row.age,
     race: row.race,
     appearance: row.appearance,
+    progression: (row.progression as "skill" | "level" | "none") || "skill",
+    xp: row.xp ?? 0,
+    level: row.level ?? 1,
     skills: parseJsonArray<SkillEntry[]>(row.skills, []),
     inventory: parseJsonArray<InventoryEntry[]>(row.inventory, []),
     avatarPath: row.avatar_path,
@@ -143,11 +153,12 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
   const isDefault = (existing[0]?.n ?? 0) === 0;
   const description = buildPersonaDescription(draft);
   await execute(
-    `INSERT INTO personas (id, name, description, gender, age, race, appearance, skills, inventory, avatar_path, is_default, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+    `INSERT INTO personas (id, name, description, gender, age, race, appearance, progression, skills, inventory, avatar_path, is_default, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
     [
       id, draft.name, description,
       draft.gender, draft.age, draft.race, draft.appearance,
+      draft.progression || "skill",
       JSON.stringify(draft.skills), JSON.stringify(draft.inventory),
       draft.avatarPath, isDefault ? 1 : 0, now,
     ],
@@ -156,6 +167,9 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
     id, name: draft.name, description,
     gender: draft.gender, age: draft.age, race: draft.race,
     appearance: draft.appearance,
+    progression: (draft.progression as "skill" | "level" | "none") || "skill",
+    xp: 0,
+    level: 1,
     skills: draft.skills, inventory: draft.inventory,
     avatarPath: draft.avatarPath, isDefault,
     createdAt: now, updatedAt: now,
@@ -165,13 +179,24 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
 export async function updatePersona(id: string, patch: PersonaUpdate): Promise<void> {
   const description = buildPersonaDescription(patch);
   await execute(
-    `UPDATE personas SET name = $2, description = $3, gender = $4, age = $5, race = $6, appearance = $7, skills = $8, inventory = $9, updated_at = $10 WHERE id = $1`,
+    `UPDATE personas SET name = $2, description = $3, gender = $4, age = $5, race = $6, appearance = $7, progression = $8, skills = $9, inventory = $10, updated_at = $11 WHERE id = $1`,
     [
       id, patch.name, description,
-      patch.gender, patch.age, patch.race, patch.appearance,
+      patch.gender, patch.age, patch.race, patch.appearance, patch.progression || "skill",
       JSON.stringify(patch.skills), JSON.stringify(patch.inventory),
       nowIso(),
     ],
+  );
+}
+
+export async function updatePersonaXpLevel(
+  id: string,
+  xp: number,
+  level: number,
+): Promise<void> {
+  await execute(
+    "UPDATE personas SET xp = $2, level = $3, updated_at = $4 WHERE id = $1",
+    [id, xp, level, nowIso()],
   );
 }
 
@@ -191,4 +216,28 @@ export async function setDefaultPersona(id: string): Promise<void> {
 
 export async function deletePersona(id: string): Promise<void> {
   await execute("DELETE FROM personas WHERE id = $1", [id]);
+}
+
+/** Sets image_path on a specific inventory item by name within a persona's inventory JSON. */
+export async function setInventoryItemImage(
+  personaId: string,
+  itemName: string,
+  imagePath: string,
+): Promise<void> {
+  const rows = await query<{ inventory: string }>(
+    "SELECT inventory FROM personas WHERE id = $1",
+    [personaId],
+  );
+  if (!rows[0]) return;
+  const inventory: InventoryEntry[] = JSON.parse(rows[0].inventory || "[]");
+  const item = inventory.find(
+    (i) => i.item.toLowerCase() === itemName.toLowerCase(),
+  );
+  if (!item) return;
+  item.image_path = imagePath;
+  await execute("UPDATE personas SET inventory = $2, updated_at = $3 WHERE id = $1", [
+    personaId,
+    JSON.stringify(inventory),
+    nowIso(),
+  ]);
 }
