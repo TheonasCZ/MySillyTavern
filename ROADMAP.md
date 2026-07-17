@@ -498,6 +498,36 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
   v secrets); Gemma fallback pro system prompt (Gemma nepodporuje
   system_instruction — nutný prefix do první zprávy)
 
+**Repo zveřejněno (2026-07-18 v noci):** in-app updater potřeboval
+veřejné URL k Release assetům (`releases/latest/download/...`) —
+private repo je vracelo neautentizovaným požadavkům jako 404, takže
+apka aktualizaci nikdy nenašla. Ověřeno před přepnutím: žádné API
+klíče/secrety v historii (jen v `secrets.json` mimo repo, negitované).
+
+## M33 — Přizpůsobit repo veřejnému světu (housekeeping)
+
+Repo je teď public — chybí mu základní věci, co veřejný repozitář má mít:
+
+- ⬜ **LICENSE** — zatím žádná; rozhodnout jakou (MIT/GPL/proprietární
+  "source-available"?) a přidat soubor
+- ⬜ **README.md aktualizovat** — pořád radí ručně nastavovat
+  `GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1` (workaround je
+  už zapečený v `main.rs`, viz M15), chybí přímý odkaz na stažení
+  hotové aplikace z Releases (ne každý bude chtít buildit ze zdrojáku)
+- ⬜ **`.codewhale/state/subagent-transcripts/*.jsonl`** — commitované
+  transkripty agentních session v repu; zvážit `.gitignore` (jsou to
+  provozní artefakty ladění, ne zdrojový kód — i když v nich zatím nic
+  citlivého nebylo, netřeba je táhnout ve veřejné historii)
+- ⬜ **CI status badge** v README (build-android/release passing/failing)
+- ⬜ **CONTRIBUTING.md** — jen pokud/až bude chtít uživatel přijímat
+  externí přispěvatele; zatím není jasné, jestli to je záměr projektu
+- ⬜ Zkontrolovat `package.json`/`Cargo.toml` metadata (author, repository
+  URL, description) — teď je vidí kdokoli
+
+**Hotovo když:** nový návštěvník repa na GitHubu za minutu pochopí co
+projekt je, jak si stáhnout hotovou apku (bez buildění), a jakou má
+licenci.
+
 ---
 
 ## Průběžně (mimo milníky)
@@ -530,7 +560,8 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
 | M31 TTS fáze B | ⬜ odloženo | offline backend — až po průzkumu |
 | M28 fáze B | ⬜ odloženo | EN pivot pro paměť |
 | M14 konfliktní UI | ⬜ odloženo | banner pro ruční merge konfliktů |
-| M32 distribuce+update | 🔶 čeká na CI | kód hotov, tag v0.1.0 pushnut, čeká se na Release build |
+| M32 distribuce+update | ✅ HOTOVO | repo public, updater ověřen v0.1.2→v0.1.3 |
+| M33 repo housekeeping | ⬜ NOVÝ | LICENSE, README, .codewhale gitignore, CI badge |
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.
