@@ -480,13 +480,23 @@ sama („je nová verze" notifikace + tlačítko aktualizovat).
 - ✅ `build-windows.yml` jen `workflow_dispatch` (distribuce =
   release.yml); `build-android.yml` zůstává na push jako jediná
   průběžná kontrola Androidu
-- ⬜ ČEKÁ SE: výsledek Release v0.1.0 + Build Android běhů
-- ⬜ Po úspěšném Release: stáhnout AppImage, přepnout lokální
-  `~/.local/share/applications/mysillytavern.desktop` z binárky
-  `~/.local/bin/mysillytavern` na AppImage (updater umí na Linuxu
-  aktualizovat jen AppImage)
+- ✅ Release v0.1.0 VYDÁN — AppImage/deb/rpm + Windows NSIS/MSI,
+  vše podepsané, latest.json funguje
+- ✅ Lokální instalace přepnuta na `~/Applications/MySillyTavern.AppImage`
+  (menu ikona na něj ukazuje; stará binárka z ~/.local/bin odstraněna)
+  → samoaktualizace od další verze funguje
+- ✅ CI: Rust cache (Swatinem/rust-cache) ve všech workflow; Android
+  build omezen na aarch64+armv7 (x86 emulátorové buildy zaplnily disk
+  runneru — „No space left on device"); debug APK jen aarch64
+- ✅ UX: lidské hlášky chyb providerů (humanizeError.ts) — rate limit
+  s odpočtem, špatný klíč, přetížení, neznámý model
+- ✅ Paměť: gemini-embedding-001 → gemini-embedding-2 (768 dims
+  ověřeno přes API); bez migrace — herní data smazána na přání
+  uživatele (nový start kampaně), postavy/persony/připojení zachovány,
+  záloha DB v ~/Dokumenty/mysillytavern-pred-wipe-2026-07-18.db
 - ⬜ Výhledově: Android do release.yml (podepsané APK přes keystore
-  v secrets)
+  v secrets); Gemma fallback pro system prompt (Gemma nepodporuje
+  system_instruction — nutný prefix do první zprávy)
 
 ---
 

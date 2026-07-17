@@ -22,7 +22,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Setup Android SDK
         id: setup-android
@@ -50,11 +55,13 @@ jobs:
           fi
           grep windowSoftInputMode "$manifest"
 
+      # Jen reálné telefony (aarch64 + armv7) — x86/i686 emulátorové buildy
+      # zdvojnásobovaly kompilaci a CI runneru došlo místo na disku.
       - name: Build Tauri Android (release APK + AAB)
-        run: npm run tauri android build
+        run: npm run tauri android build -- --target aarch64 --target armv7
 
       - name: Build Tauri Android (debug APK, installable)
-        run: npm run tauri android build -- --debug --apk
+        run: npm run tauri android build -- --debug --apk --target aarch64
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
