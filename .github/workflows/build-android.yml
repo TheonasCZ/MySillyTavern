@@ -3,6 +3,9 @@ name: Build Android
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - "**.md"
+      - ".codewhale/**"
   workflow_dispatch:
 
 jobs:
