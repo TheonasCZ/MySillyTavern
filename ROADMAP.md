@@ -438,6 +438,38 @@ Speech funguje.
 
 ---
 
+## M32 — Distribuce a aktualizace (z projektu produkt)
+
+**Stav (2026-07-17):** Wayland workaround zapečen do `main.rs` (Linux:
+`GDK_BACKEND=x11` + `WEBKIT_DISABLE_DMABUF_RENDERER=1`, jen pokud nejsou
+nastavené). Lokálně „nainstalováno": release binárka v `~/.local/bin/
+mysillytavern` + ikona v menu (`~/.local/share/applications/
+mysillytavern.desktop`), vedle toho dev ikona „MySillyTavern (dev)"
+spouštějící `spustit.sh` (kompiluje aktuální repo).
+
+⚠️ **Nainstalovaná binárka je zmrazená k datu buildu** — po každé vlně
+změn je potřeba ji přebuildit (`npm run tauri build`) a překopírovat,
+jinak uživatel hraje na staré verzi. Tohle je hlavní motivace pro
+auto-update níže.
+
+**Cíl:** stáhnu → nainstaluju → mám ikonu → hraju; aktualizace řeší apka
+sama („je nová verze" notifikace + tlačítko aktualizovat).
+
+1. ⬜ **GitHub Releases CI** — workflow na tag `v*`: Linux (deb/rpm/
+   AppImage — AppImage vyžaduje `linuxdeploy`, lokálně na Archu padá),
+   Windows (build-windows.yml už existuje), Android APK. Artefakty
+   připnout k Release.
+2. ⬜ **In-app updater** — `tauri-plugin-updater` (v2): podepsané update
+   manifesty, endpoint = GitHub Releases (`latest.json`). Pozor: na
+   Linuxu plugin umí aktualizovat jen AppImage (ne holou binárku/deb) —
+   tj. buď přejít na AppImage distribuci, nebo vlastní lehký check
+   (GitHub API `releases/latest` → porovnat verzi → notifikace v UI
+   + odkaz/stažení).
+3. ⬜ **Verzování** — `version` v `tauri.conf.json` + `package.json`
+   zvedat při release; zobrazit verzi v Nastavení → Diagnostika.
+
+---
+
 ## Průběžně (mimo milníky)
 
 - **UI kvalita jako DoD** — každý nový feature musí přijít s FieldHelp
@@ -468,6 +500,7 @@ Speech funguje.
 | M31 TTS fáze B | ⬜ odloženo | offline backend — až po průzkumu |
 | M28 fáze B | ⬜ odloženo | EN pivot pro paměť |
 | M14 konfliktní UI | ⬜ odloženo | banner pro ruční merge konfliktů |
+| M32 distribuce+update | ⬜ NOVÝ | GitHub Releases CI, in-app updater, verzování |
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.
