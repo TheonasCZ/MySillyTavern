@@ -84,6 +84,16 @@ export interface LedgerFactLike {
   fact: string;
   status: "active" | "archived";
   locked: boolean;
+  /** Soft canon (M25.5): auto-promoted by stability tracking. Treated like
+   * `locked` everywhere in the prompt (canon block, never trimmed, canon
+   * reminder) — the difference only matters to the extractor, which may
+   * still correct a soft-canon fact after a repeated contradiction. */
+  canon?: boolean;
+}
+
+/** Canon = user-locked (hard) or auto-promoted (soft). */
+export function isCanonFact(f: LedgerFactLike): boolean {
+  return f.locked || !!f.canon;
 }
 
 export interface PromptMessage {
@@ -391,8 +401,8 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
   if (facts.length === 0) return "";
   const byCategory = (list: LedgerFactLike[]) =>
     FACT_CATEGORY_ORDER.flatMap((cat) => list.filter((f) => f.category === cat));
-  const canon = byCategory(facts.filter((f) => f.locked));
-  const rest = byCategory(facts.filter((f) => !f.locked));
+  const canon = byCategory(facts.filter(isCanonFact));
+  const rest = byCategory(facts.filter((f) => !isCanonFact(f)));
 
   const blocks: string[] = [];
   if (canon.length > 0) {
@@ -421,11 +431,11 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
  * silently lose the reminder. Returns "" when there are no world/player
  * facts to remind the model of. */
 function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, userName: string): string {
-  // Locked facts of ANY category are canon (M25.1) — include them alongside
-  // the always-reinforced world/player categories.
+  // Canon facts (locked or soft) of ANY category are included alongside the
+  // always-reinforced world/player categories; hard locks sort first.
   const relevant = facts
-    .filter((f) => f.locked || CANON_REMINDER_CATEGORIES.includes(f.category))
-    .sort((a, b) => Number(b.locked) - Number(a.locked));
+    .filter((f) => isCanonFact(f) || CANON_REMINDER_CATEGORIES.includes(f.category))
+    .sort((a, b) => Number(isCanonFact(b)) - Number(isCanonFact(a)));
   if (relevant.length === 0) return "";
 
   const header = "[Připomínka kánonu — tato pravidla platí závazně a nesmí se driftem hry změnit]";
@@ -812,8 +822,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   const mmrRanked = new Map<LedgerCategory, LedgerFactLike[]>();
   if (input.factVectors) {
     for (const cat of TRIMMABLE_FACT_CATEGORIES) {
-      // Locked facts are canon (M25.1) — never candidates for trimming.
-      const catFacts = facts.filter((f) => f.category === cat && !f.locked);
+      // Canon facts (locked or soft) — never candidates for trimming.
+      const catFacts = facts.filter((f) => f.category === cat && !isCanonFact(f));
       if (catFacts.length > 0) {
         mmrRanked.set(
           cat,
@@ -839,7 +849,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     let best = -1;
     let bestScore = Number.POSITIVE_INFINITY;
     facts.forEach((f, i) => {
-      if (f.category !== cat || f.locked) return;
+      if (f.category !== cat || isCanonFact(f)) return;
       const score = input.factRelevance
         ? (input.factRelevance[f.id] ?? Number.NEGATIVE_INFINITY)
         : 0;
@@ -851,7 +861,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     return best;
   };
   for (const cat of TRIMMABLE_FACT_CATEGORIES) {
-    while (current.totalTokens > budget && facts.some((f) => f.category === cat && !f.locked)) {
+    while (current.totalTokens > budget && facts.some((f) => f.category === cat && !isCanonFact(f))) {
       const idx = factCutIndex(cat);
       if (idx === -1) break;
       const [removed] = facts.splice(idx, 1);
@@ -897,7 +907,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       systemText: current.systemText,
       historyText: current.historyText,
       phiText: current.phiText,
-      canonFactsIncluded: facts.filter((f) => f.locked).length,
+      canonFactsIncluded: facts.filter(isCanonFact).length,
       driftCorrections,
       // Direct hits sit at the head of the memories list and trimming pops
       // from the tail, so the surviving prefix maps 1:1 onto the detail.

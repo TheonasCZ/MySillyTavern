@@ -8,7 +8,11 @@ import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import {
   applyLedgerRemove,
   applyLedgerUpsert,
+  applySoftCanonCorrection,
+  incrementContradictionStreak,
+  incrementStability,
   listAllFacts,
+  setFactCanon,
   type LedgerCategory,
 } from "../db/repositories/ledgerRepo";
 import { logUsage } from "../db/repositories/usageRepo";
@@ -90,9 +94,14 @@ export interface LedgerSnapshotFact {
   fact: string;
   status: "active" | "archived";
   locked: boolean;
+  /** Soft canon (M25.5) — auto-promoted; extractor may still correct it
+   * after `SOFT_CANON_CORRECTION_STREAK` consecutive contradictions. */
+  canon: boolean;
+  contradictionStreak: number;
+  stability: number;
 }
 
-export type MergeOpKind = "insert" | "update" | "archive" | "skip";
+export type MergeOpKind = "insert" | "update" | "archive" | "skip" | "streak";
 
 export interface MergeOp {
   kind: MergeOpKind;
@@ -100,10 +109,53 @@ export interface MergeOp {
   subject: string;
   sub_key: string;
   fact: string;
-  /** Present for update/archive/skip — the existing row it targets. */
+  /** Present for update/archive/skip/streak — the existing row it targets. */
   factId?: string;
   /** Why an op was skipped (locked, or remove of a nonexistent fact). */
   reason?: string;
+  /** Set on update/archive of a soft-canon fact whose contradiction streak
+   * ran out — the fact loses its canon status along with the change. */
+  demote?: boolean;
+}
+
+/** How many *consecutive* extraction passes must contradict a soft-canon
+ * fact before the correction is applied (a single outlier never wins). */
+export const SOFT_CANON_CORRECTION_STREAK = 2;
+
+// ---- Auto-promotion to soft canon (M25.5) ------------------------------
+
+/** Confirmed-unchanged passes needed before a fact becomes soft canon. */
+export const SOFT_CANON_STABILITY_THRESHOLD = 3;
+/** Genre/limit-guarding categories promote faster — these are exactly the
+ * facts whose drift ruins long campaigns. */
+export const PRIORITY_CANON_CATEGORIES: LedgerCategory[] = ["world", "player"];
+export const PRIORITY_CANON_STABILITY_THRESHOLD = 2;
+
+export function stabilityThresholdFor(category: LedgerCategory): number {
+  return PRIORITY_CANON_CATEGORIES.includes(category)
+    ? PRIORITY_CANON_STABILITY_THRESHOLD
+    : SOFT_CANON_STABILITY_THRESHOLD;
+}
+
+/** Given the facts an extraction pass looked at and the ops it produced,
+ * decides (purely) which facts were *confirmed* — relevant to the scene yet
+ * left unchanged — and which of those cross their stability threshold and
+ * get promoted to soft canon. Locked and already-canon facts don't need
+ * promotion; archived ones can't earn it. */
+export function selectStabilityUpdates(
+  consideredFacts: LedgerSnapshotFact[],
+  ops: MergeOp[],
+): { confirmedIds: string[]; promoteIds: string[] } {
+  const touched = new Set(ops.map((op) => op.factId).filter(Boolean) as string[]);
+  const confirmed = consideredFacts.filter(
+    (f) => f.status === "active" && !f.locked && !touched.has(f.id),
+  );
+  return {
+    confirmedIds: confirmed.map((f) => f.id),
+    promoteIds: confirmed
+      .filter((f) => !f.canon && f.stability + 1 >= stabilityThresholdFor(f.category))
+      .map((f) => f.id),
+  };
 }
 
 /** Decides, for each extracted fact, what should happen to the ledger —
@@ -139,6 +191,14 @@ export function mergeExtractedFacts(
       if (match.locked) {
         return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "locked" };
       }
+      if (match.canon) {
+        // Soft canon: a single contradicting pass only bumps the streak; the
+        // change goes through (with demotion) once the streak runs out.
+        if (match.contradictionStreak + 1 < SOFT_CANON_CORRECTION_STREAK) {
+          return { kind: "streak", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "soft-canon" };
+        }
+        return { kind: "archive", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, demote: true };
+      }
       return { kind: "archive", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id };
     }
 
@@ -148,6 +208,16 @@ export function mergeExtractedFacts(
     }
     if (match.locked) {
       return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "locked" };
+    }
+    if (match.canon && match.fact !== item.fact) {
+      if (match.contradictionStreak + 1 < SOFT_CANON_CORRECTION_STREAK) {
+        return { kind: "streak", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "soft-canon" };
+      }
+      return { kind: "update", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, demote: true };
+    }
+    if (match.canon) {
+      // Same text re-extracted — a confirmation, not a contradiction.
+      return { kind: "skip", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id, reason: "unchanged" };
     }
     return { kind: "update", category: item.category, subject: item.subject, sub_key, fact: item.fact, factId: match.id };
   });
@@ -180,7 +250,9 @@ const EXTRACTION_SYSTEM_PROMPT =
   "neomezenou moc.\n" +
   "V případě rozporu mezi tím, co se v poslední zprávě odehrálo, a dřívějším zamčeným " +
   "([ZAMČENO]) faktem, dřívější zamčený fakt nikdy nepřepisuj (nepoužívej na něj upsert ani " +
-  "remove) — konverzace se s ním musí srovnat, ne naopak.\n\n" +
+  "remove) — konverzace se s ním musí srovnat, ne naopak. Fakta označená [KÁNON] jsou ověřená " +
+  "pravidla příběhu: navrhni jejich změnu jen při jasném a nepochybném rozporu, ne kvůli " +
+  "drobné odchylce formulace.\n\n" +
   "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.\n\n" +
   "Detekuj emoční stav postav (sub_key: 'mood', fact: popis nálady, např. 'vyděšená a nedůvěřivá').";
 
@@ -189,7 +261,7 @@ function formatSnapshot(facts: LedgerSnapshotFact[], summary?: string): string {
   const active = facts.filter((f) => f.status === "active");
   const lines = active.map((f) => {
     const key = f.sub_key ? `${f.category}/${f.subject}/${f.sub_key}` : `${f.category}/${f.subject}`;
-    return `- (${key}) ${f.fact}${f.locked ? " [ZAMČENO]" : ""}`;
+    return `- (${key}) ${f.fact}${f.locked ? " [ZAMČENO]" : f.canon ? " [KÁNON]" : ""}`;
   });
   if (summary) lines.push(summary);
   return lines.join("\n");
@@ -236,7 +308,7 @@ async function selectRelevantFactsForExtraction(
     const skippedLabels: string[] = [];
 
     for (const fact of snapshot) {
-      if (fact.locked) {
+      if (fact.locked || fact.canon) {
         relevant.push(fact);
         continue;
       }
@@ -290,6 +362,9 @@ export async function runExtraction(
       fact: f.fact,
       status: f.status,
       locked: f.locked,
+      canon: f.canon,
+      contradictionStreak: f.contradictionStreak,
+      stability: f.stability,
     }));
 
     // A6: differential extraction — only send relevant facts to the LLM
@@ -310,16 +385,31 @@ export async function runExtraction(
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
     void logUsage("memory", connection.id, inputTokens, estimateTokens(raw)).catch(() => {});
     const extracted = parseExtractorOutput(raw);
-    if (extracted.length === 0) return;
 
     const ops = mergeExtractedFacts(snapshot, extracted);
     for (const op of ops) {
-      if (op.kind === "insert" || op.kind === "update") {
+      if (op.kind === "update" && op.demote && op.factId) {
+        // Repeated contradiction won against a soft-canon fact — correct it
+        // and demote it back to a normal fact (must re-earn canon).
+        await applySoftCanonCorrection(op.factId, op.fact);
+      } else if (op.kind === "insert" || op.kind === "update") {
         await applyLedgerUpsert(chatId, op.category, op.subject, op.sub_key, op.fact);
       } else if (op.kind === "archive") {
+        if (op.demote && op.factId) await setFactCanon(op.factId, false);
         await applyLedgerRemove(chatId, op.category, op.subject, op.sub_key);
+      } else if (op.kind === "streak" && op.factId) {
+        await incrementContradictionStreak(op.factId);
       }
       // "skip" ops are no-ops by definition (locked, or nothing to remove).
+    }
+
+    // Auto-promotion (M25.5): facts the pass looked at and left unchanged
+    // gain stability; crossing the per-category threshold makes them soft
+    // canon — fully automatic, the user can demote/unlock in the panel.
+    const { confirmedIds, promoteIds } = selectStabilityUpdates(filtered, ops);
+    if (confirmedIds.length > 0) await incrementStability(confirmedIds);
+    for (const id of promoteIds) {
+      await setFactCanon(id, true);
     }
   } catch (err) {
     console.warn("ledger extraction failed", err);

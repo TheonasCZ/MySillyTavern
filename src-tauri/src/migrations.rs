@@ -113,6 +113,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_018,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "auto-canon: soft canon flag + stability tracking on ledger facts",
+            sql: MIGRATION_019,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -427,4 +433,10 @@ CREATE TABLE presets (
 );
 
 ALTER TABLE chats ADD COLUMN preset_id TEXT;
+"#;
+
+const MIGRATION_019: &str = r#"
+ALTER TABLE ledger_facts ADD COLUMN canon INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ledger_facts ADD COLUMN stability INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ledger_facts ADD COLUMN contradiction_streak INTEGER NOT NULL DEFAULT 0;
 "#;

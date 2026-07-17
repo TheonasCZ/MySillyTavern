@@ -336,7 +336,13 @@
         "fact": "Fact"
       },
       "deleteConfirm": "Permanently delete this fact?",
-      "canonHeader": "Story canon — locked rules"
+      "canonHeader": "Story canon — locked rules",
+      "canonHardBadge": "Canon (locked by you)",
+      "canonAutoBadge": "Canon (verified by play)",
+      "canonDemote": "Revoke canon",
+      "canonUnlockWarn": "Tut-tut… you locked this rule as unbreakable. Unlocking lets the extractor change it and the story may drift away from it. Really unlock?",
+      "canonDemoteWarn": "Tut-tut… the game verified this rule through repeated play. Revoking canon stops guarding it against drift. Really revoke?",
+      "canonDeleteWarn": "Tut-tut… you are deleting a canon rule of the story. Without it the world may quietly drift. Really delete?"
     },
     "summary": {
       "empty": "No summary yet.",

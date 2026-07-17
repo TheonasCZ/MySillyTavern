@@ -5,6 +5,9 @@ import {
   parseExtractorOutput,
   type ExtractedFact,
   type LedgerSnapshotFact,
+  PRIORITY_CANON_STABILITY_THRESHOLD,
+  selectStabilityUpdates,
+  SOFT_CANON_STABILITY_THRESHOLD,
 } from "./extractor";
 
 describe("parseExtractorOutput", () => {
@@ -72,6 +75,9 @@ function fact(partial: Partial<LedgerSnapshotFact> = {}): LedgerSnapshotFact {
     fact: "The capital.",
     status: "active",
     locked: false,
+    canon: false,
+    contradictionStreak: 0,
+    stability: 0,
     ...partial,
   };
 }
@@ -238,5 +244,81 @@ describe("mergeExtractedFacts", () => {
     expect(ops.map((o) => o.kind)).toEqual(["update", "update"]);
     expect(ops[0].factId).toBe("a");
     expect(ops[1].factId).toBe("b");
+  });
+});
+
+describe("soft canon merge rules (M25.5)", () => {
+  it("first contradiction of a soft-canon fact only bumps the streak", () => {
+    const ops = mergeExtractedFacts(
+      [fact({ canon: true, contradictionStreak: 0 })],
+      [extracted({ fact: "Completely different." })],
+    );
+    expect(ops[0].kind).toBe("streak");
+    expect(ops[0].reason).toBe("soft-canon");
+  });
+
+  it("repeated contradiction applies the update with demotion", () => {
+    const ops = mergeExtractedFacts(
+      [fact({ canon: true, contradictionStreak: 1 })],
+      [extracted({ fact: "Completely different." })],
+    );
+    expect(ops[0].kind).toBe("update");
+    expect(ops[0].demote).toBe(true);
+  });
+
+  it("re-extracting the identical text is a confirmation, not a contradiction", () => {
+    const ops = mergeExtractedFacts(
+      [fact({ canon: true, fact: "The capital city." })],
+      [extracted({ fact: "The capital city." })],
+    );
+    expect(ops[0].kind).toBe("skip");
+    expect(ops[0].reason).toBe("unchanged");
+  });
+
+  it("remove follows the same streak rule and hard locks still always win", () => {
+    const first = mergeExtractedFacts(
+      [fact({ canon: true, contradictionStreak: 0 })],
+      [extracted({ action: "remove" })],
+    );
+    expect(first[0].kind).toBe("streak");
+    const second = mergeExtractedFacts(
+      [fact({ canon: true, contradictionStreak: 1 })],
+      [extracted({ action: "remove" })],
+    );
+    expect(second[0].kind).toBe("archive");
+    expect(second[0].demote).toBe(true);
+    const locked = mergeExtractedFacts(
+      [fact({ locked: true, canon: true, contradictionStreak: 5 })],
+      [extracted({ fact: "Drift." })],
+    );
+    expect(locked[0].kind).toBe("skip");
+    expect(locked[0].reason).toBe("locked");
+  });
+});
+
+describe("selectStabilityUpdates (auto-promotion, M25.5)", () => {
+  it("confirms untouched relevant facts and promotes those crossing the threshold", () => {
+    const stable = fact({ id: "s", category: "npc", stability: SOFT_CANON_STABILITY_THRESHOLD - 1 });
+    const young = fact({ id: "y", subject: "Young", category: "npc", stability: 0 });
+    const touched = fact({ id: "t", subject: "Touched", category: "npc", stability: 9 });
+    const ops = mergeExtractedFacts([touched], [extracted({ category: "npc", subject: "Touched", fact: "New." })]);
+    const { confirmedIds, promoteIds } = selectStabilityUpdates([stable, young, touched], ops);
+    expect(confirmedIds).toEqual(["s", "y"]);
+    expect(promoteIds).toEqual(["s"]);
+  });
+
+  it("world/player facts promote at the lower priority threshold", () => {
+    const genre = fact({ id: "g", subject: "Žánr a tón světa", category: "world", stability: PRIORITY_CANON_STABILITY_THRESHOLD - 1 });
+    const { promoteIds } = selectStabilityUpdates([genre], []);
+    expect(promoteIds).toEqual(["g"]);
+  });
+
+  it("locked, archived and already-canon facts never enter promotion", () => {
+    const lockedFact = fact({ id: "l", locked: true, stability: 99 });
+    const archived = fact({ id: "a", status: "archived", stability: 99 });
+    const alreadyCanon = fact({ id: "c", canon: true, stability: 99 });
+    const { confirmedIds, promoteIds } = selectStabilityUpdates([lockedFact, archived, alreadyCanon], []);
+    expect(confirmedIds).toEqual(["c"]);
+    expect(promoteIds).toEqual([]);
   });
 });

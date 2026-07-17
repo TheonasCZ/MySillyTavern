@@ -219,10 +219,11 @@ async function runDueWork(chatId: string): Promise<void> {
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
 
       // Drift check (M25.2) — same cadence and connection as extraction.
-      // Only locked facts are canon; without any there is nothing to guard.
+      // Canon = hard-locked or auto-promoted (M25.5); with auto-canon the
+      // guard kicks in by itself, no user action needed.
       try {
         const canon = (await listAllFacts(chatId)).filter(
-          (f) => f.locked && f.status === "active",
+          (f) => (f.locked || f.canon) && f.status === "active",
         );
         await runDriftCheck(chatId, connection, canon, transcript);
       } catch (err) {

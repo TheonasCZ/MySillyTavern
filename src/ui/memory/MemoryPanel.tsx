@@ -6,6 +6,7 @@ import {
   createFact,
   deleteFact,
   listAllFacts,
+  setFactCanon,
   setFactLocked,
   setFactStatus,
   updateFact,
@@ -45,12 +46,15 @@ function FactRow({
   fact,
   onSave,
   onToggleLock,
+  onToggleCanon,
   onToggleStatus,
   onDelete,
 }: {
   fact: LedgerFact;
   onSave: (patch: { category: LedgerCategory; subject: string; fact: string }) => Promise<void>;
   onToggleLock: () => Promise<void>;
+  /** Demotes/promotes the soft-canon flag (M25.5). */
+  onToggleCanon: () => Promise<void>;
   onToggleStatus: () => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -61,6 +65,7 @@ function FactRow({
   const [saving, setSaving] = useState(false);
 
   const dirty = category !== fact.category || subject !== fact.subject || factText !== fact.fact;
+  const isCanon = fact.locked || fact.canon;
 
   const handleSave = async () => {
     setSaving(true);
@@ -71,15 +76,35 @@ function FactRow({
     }
   };
 
+  // The user is the admin (M25.5): everything stays possible, but touching
+  // canon gets a gentle "are you sure" nudge first.
+  const handleToggleLock = () => {
+    if (fact.locked && !confirm(t("facts.canonUnlockWarn") ?? "")) return;
+    void onToggleLock();
+  };
+  const handleToggleCanon = () => {
+    if (fact.canon && !confirm(t("facts.canonDemoteWarn") ?? "")) return;
+    void onToggleCanon();
+  };
+  const handleDelete = () => {
+    const msg = isCanon ? t("facts.canonDeleteWarn") : t("facts.deleteConfirm");
+    if (confirm(msg ?? "")) void onDelete();
+  };
+
   return (
     <div
       className="flex flex-col gap-2 rounded-[var(--radius-sm)] border p-3 text-sm"
       style={{
-        borderColor: fact.locked ? "var(--color-brass)" : "var(--color-border)",
+        borderColor: isCanon ? "var(--color-brass)" : "var(--color-border)",
         backgroundColor: "var(--color-bg-elevated)",
         opacity: fact.status === "archived" ? 0.6 : 1,
       }}
     >
+      {isCanon && (
+        <span className="text-[0.65rem] font-medium uppercase tracking-wide" style={{ color: "var(--color-brass)" }}>
+          {fact.locked ? `🔒 ${t("facts.canonHardBadge")}` : `✨ ${t("facts.canonAutoBadge")}`}
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <select
           className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
@@ -119,7 +144,7 @@ function FactRow({
         </button>
         <button
           type="button"
-          onClick={() => void onToggleLock()}
+          onClick={handleToggleLock}
           className="rounded-[var(--radius-sm)] px-2 py-1 text-xs"
           style={{
             backgroundColor: fact.locked ? "var(--color-brass)" : "var(--color-surface-2)",
@@ -128,6 +153,16 @@ function FactRow({
         >
           {fact.locked ? t("facts.unlock") : t("facts.lock")}
         </button>
+        {fact.canon && !fact.locked && (
+          <button
+            type="button"
+            onClick={handleToggleCanon}
+            className="rounded-[var(--radius-sm)] px-2 py-1 text-xs"
+            style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
+          >
+            {t("facts.canonDemote")}
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void onToggleStatus()}
@@ -138,9 +173,7 @@ function FactRow({
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (confirm(t("facts.deleteConfirm") ?? "")) void onDelete();
-          }}
+          onClick={handleDelete}
           className="ml-auto text-xs"
           style={{ color: "var(--color-danger)" }}
         >
@@ -203,17 +236,18 @@ function FactsTab({ chatId }: { chatId: string }) {
         </p>
       )}
 
-      {/* Canon (locked) facts first, visually separated (M25.1) — the lock
-          toggle IS the promote/demote action, so no extra buttons. */}
-      {visible.some((f) => f.locked) && (
+      {/* Canon facts first (M25.1/M25.5): hard-locked and auto-promoted,
+          visually separated. The user stays the admin — everything can be
+          unlocked/demoted/deleted, just with a warning. */}
+      {visible.some((f) => f.locked || f.canon) && (
         <div
           className="flex flex-col gap-2 rounded-[var(--radius-sm)] border p-2"
           style={{ borderColor: "var(--color-accent)" }}
         >
           <span className="text-xs font-medium" style={{ color: "var(--color-accent)" }}>
-            🔒 {t("facts.canonHeader")} ({visible.filter((f) => f.locked).length})
+            🔒 {t("facts.canonHeader")} ({visible.filter((f) => f.locked || f.canon).length})
           </span>
-          {visible.filter((f) => f.locked).map((f) => (
+          {visible.filter((f) => f.locked || f.canon).map((f) => (
             <FactRow
               key={f.id}
               fact={f}
@@ -223,6 +257,10 @@ function FactsTab({ chatId }: { chatId: string }) {
               }}
               onToggleLock={async () => {
                 await setFactLocked(f.id, !f.locked);
+                await reload();
+              }}
+              onToggleCanon={async () => {
+                await setFactCanon(f.id, !f.canon);
                 await reload();
               }}
               onToggleStatus={async () => {
@@ -239,7 +277,7 @@ function FactsTab({ chatId }: { chatId: string }) {
       )}
 
       <div className="flex flex-col gap-2">
-        {visible.filter((f) => !f.locked).map((f) => (
+        {visible.filter((f) => !f.locked && !f.canon).map((f) => (
           <FactRow
             key={f.id}
             fact={f}
@@ -249,6 +287,10 @@ function FactsTab({ chatId }: { chatId: string }) {
             }}
             onToggleLock={async () => {
               await setFactLocked(f.id, !f.locked);
+              await reload();
+            }}
+            onToggleCanon={async () => {
+              await setFactCanon(f.id, !f.canon);
               await reload();
             }}
             onToggleStatus={async () => {

@@ -336,7 +336,13 @@
         "fact": "Fakt"
       },
       "deleteConfirm": "Opravdu trvale smazat tento fakt?",
-      "canonHeader": "Kánon příběhu — zamčená pravidla"
+      "canonHeader": "Kánon příběhu — zamčená pravidla",
+      "canonHardBadge": "Kánon (zamčeno tebou)",
+      "canonAutoBadge": "Kánon (ověřeno hrou)",
+      "canonDemote": "Zrušit kánon",
+      "canonUnlockWarn": "Tytyty… tohle pravidlo jsi zamkl(a) jako neporušitelné. Když ho odemkneš, extraktor ho může začít měnit a příběh se od něj může odchýlit. Opravdu odemknout?",
+      "canonDemoteWarn": "Tytyty… tohle pravidlo si hra sama ověřila opakovaným hraním. Když kánon zrušíš, přestane se hlídat proti driftu. Opravdu zrušit?",
+      "canonDeleteWarn": "Tytyty… mažeš kánonové pravidlo příběhu. Bez něj se svět může nepozorovaně rozjet jinam. Opravdu smazat?"
     },
     "summary": {
       "empty": "Zatím žádné shrnutí.",

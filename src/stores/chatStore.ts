@@ -41,6 +41,7 @@ import {
 import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { buildDirectorNote, getDirectorSettings } from "../chat/director";
 import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
+import { runCanonSeed } from "../memory/canonSeed";
 import { consumeDriftCorrections } from "../memory/driftDetector";
 import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
 import { processGameResponse } from "../chat/inventoryProcessor";
@@ -585,6 +586,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       autoReply: chat?.autoReply ?? false,
       selectedSpeakerId,
     });
+
+    // Canon seeding (M25.5) — first open of a fresh chat distills 3–5 story
+    // rules from the card into soft canon. Fire-and-forget; one-shot via a
+    // settings marker inside runCanonSeed.
+    if (chat) {
+      const primary = memberCharacters.find((c) => c.id === chat.characterId) ?? memberCharacters[0];
+      const seedConnection =
+        resolveConnection(chat.extractionConnectionId) ?? resolveConnection(chat.connectionId);
+      if (primary && seedConnection) {
+        void runCanonSeed(chat.id, seedConnection, primary);
+      }
+    }
   },
 
   closeChat: async () => {
