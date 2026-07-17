@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { mergeConsecutiveRoles, pickNextSpeaker, stripSpeakerPrefix, type SpeakerCandidate } from "./groupSpeaker";
+import {
+  findAddressedMember,
+  mergeConsecutiveRoles,
+  pickNextSpeaker,
+  stripSpeakerPrefix,
+  type SpeakerCandidate,
+} from "./groupSpeaker";
 import type { PromptMessage } from "../prompt/promptBuilder";
 
 const MEMBERS: SpeakerCandidate[] = [
@@ -46,6 +52,66 @@ describe("pickNextSpeaker", () => {
 
   it("handles empty text by falling back to round-robin", () => {
     expect(pickNextSpeaker(MEMBERS, "", [])).toBe("a");
+  });
+
+  it("picks the member addressed by name in the last assistant text when user text has no mention", () => {
+    // Assistant said "Kai se na tebe podívá" — Kai is mentioned.
+    expect(pickNextSpeaker(MEMBERS, "co bude dál?", ["a", "b"], "Kai se na tebe podívá")).toBe("c");
+  });
+
+  it("ignores assistant text when user already mentioned a name (user priority)", () => {
+    // Even though assistant mentioned Kai, user mentioned Anna last.
+    // Use bare nominative so foldForSearch("Anna") = "anna" is a substring.
+    expect(
+      pickNextSpeaker(MEMBERS, "řekni to Anna", ["a", "c"], "Kai přikývl."),
+    ).toBe("a");
+  });
+
+  it("falls back to LRS when assistant text has no member name", () => {
+    expect(
+      pickNextSpeaker(MEMBERS, "nic", ["a", "b"], "Jen ticho."),
+    ).toBe("c"); // c never spoke
+  });
+
+  it("is backward-compatible when lastAssistantText is omitted", () => {
+    expect(pickNextSpeaker(MEMBERS, "no names here", ["a", "b", "a"])).toBe("c");
+  });
+});
+
+describe("findAddressedMember", () => {
+  it("returns null for empty text", () => {
+    expect(findAddressedMember("", MEMBERS)).toBeNull();
+  });
+
+  it("returns null for empty member list", () => {
+    expect(findAddressedMember("Anna se směje.", [])).toBeNull();
+  });
+
+  it("returns the last-mentioned member in the assistant text", () => {
+    // "Anna" appears first, "Kai" appears last.
+    expect(findAddressedMember("Anna se podívala na Kaie.", MEMBERS)).toBe("c");
+  });
+
+  it("is fold/diacritics insensitive", () => {
+    expect(findAddressedMember("vez se usmála.", MEMBERS)).toBe("b");
+  });
+
+  it("returns null when no member is mentioned", () => {
+    expect(findAddressedMember("Nikdo tu není.", MEMBERS)).toBeNull();
+  });
+
+  it("finds a name near a Czech addressing pronoun (coreference)", () => {
+    // "mu" is the pronoun, "Kai" appears before it (inside "Kaie").
+    expect(
+      findAddressedMember("Podíval se na Kaie a řekl mu tajemství.", MEMBERS),
+    ).toBe("c");
+  });
+
+  it("picks the closest name before the pronoun when several appear", () => {
+    // "Kai" appears closer to "ti" than "Anna".
+    expect(
+      findAddressedMember("Anna vešla. Kai ti něco pošeptal.", MEMBERS),
+    ).toBe("c");
   });
 });
 

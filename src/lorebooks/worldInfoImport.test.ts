@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import worldInfoSampleFixture from "./__fixtures__/worldInfoSample.json";
+import { expandKeys } from "./stemming";
 import {
   entriesToWorldInfo,
   parseWorldInfoJson,
@@ -54,7 +55,11 @@ describe("worldInfoToEntries", () => {
 
     const ashford = entries.find((e) => e.comment === "Setting: Ashford Keep")!;
     expect(ashford.keys).toEqual(["Ashford", "the keep"]);
-    expect(ashford.secondaryKeys).toEqual(["siege"]);
+    // Original secondary key is preserved; expanded primary-key forms are merged in.
+    expect(ashford.secondaryKeys).toContain("siege");
+    for (const k of expandKeys(["Ashford", "the keep"])) {
+      expect(ashford.secondaryKeys).toContain(k);
+    }
     expect(ashford.content).toBe(
       "Ashford Keep has stood for three centuries and never fallen to siege.",
     );

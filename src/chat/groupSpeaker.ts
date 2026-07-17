@@ -10,18 +10,87 @@ export interface SpeakerCandidate {
   position: number;
 }
 
+/** Scans `lastAssistantText` for member names (fold-insensitive). When a
+ * Czech addressing pronoun ("ty"/"tobě"/"ti"/"tebe"/"tě"/"tebou"/"jí"/"mu")
+ * is present, it disambiguates which of several mentioned members is being
+ * addressed: the name closest to (and before) the pronoun wins.  Without a
+ * pronoun, the last-mentioned member name wins.  Returns null when no
+ * member is found or input is empty. */
+export function findAddressedMember(
+  lastAssistantText: string,
+  members: SpeakerCandidate[],
+): string | null {
+  if (!lastAssistantText || members.length === 0) return null;
+
+  const folded = foldForSearch(lastAssistantText);
+
+  // Collect every occurrence of every member name with its position.
+  const hits: { id: string; idx: number }[] = [];
+  for (const member of members) {
+    const name = foldForSearch(member.name).trim();
+    if (!name) continue;
+    let pos = 0;
+    while (true) {
+      const idx = folded.indexOf(name, pos);
+      if (idx === -1) break;
+      hits.push({ id: member.id, idx });
+      pos = idx + name.length;
+    }
+  }
+
+  if (hits.length === 0) return null;
+
+  // Czech addressing pronouns can disambiguate *which* name is addressed.
+  const pronouns = ["ty", "tobě", "ti", "tebe", "tě", "tebou", "jí", "mu"];
+  let pronounIdx = -1;
+  for (const pronoun of pronouns) {
+    const idx = folded.lastIndexOf(foldForSearch(pronoun));
+    if (idx > pronounIdx) pronounIdx = idx;
+  }
+
+  if (pronounIdx >= 0) {
+    // Name closest to (and before) the pronoun is the addressed member.
+    let closestId: string | null = null;
+    let closestDist = Number.POSITIVE_INFINITY;
+    for (const h of hits) {
+      if (h.idx < pronounIdx) {
+        const dist = pronounIdx - h.idx;
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestId = h.id;
+        }
+      }
+    }
+    if (closestId) return closestId;
+  }
+
+  // No pronoun (or no name before it): last-mentioned name wins.
+  let lastId: string | null = null;
+  let lastIdx = -1;
+  for (const h of hits) {
+    if (h.idx > lastIdx) {
+      lastIdx = h.idx;
+      lastId = h.id;
+    }
+  }
+  return lastId;
+}
+
 /** Picks the next auto-mode speaker (plan §1/§3):
- * 1. If exactly one or more members are mentioned by name (fold-insensitive
- *    substring) in `lastUserText`, the one mentioned *last* in the text wins.
- * 2. Otherwise least-recently-spoken: members absent from `recentSpeakerIds`
- *    entirely go first (by `position`); among the rest, the one whose last
- *    occurrence in `recentSpeakerIds` has the smallest index (spoke longest
- *    ago) wins.
+ * 1. If one or more members are mentioned by name (fold-insensitive
+ *    substring) in `lastUserText`, the one mentioned *last* wins.
+ * 2. Otherwise, if `lastAssistantText` is provided, check whether the
+ *    assistant addressed a specific member (same name-matching logic).
+ * 3. Otherwise least-recently-spoken: members absent from
+ *    `recentSpeakerIds` entirely go first (by `position`); among the
+ *    rest, the one whose last occurrence in `recentSpeakerIds` has the
+ *    smallest index (spoke longest ago) wins.
  * Returns null for an empty member list. */
 export function pickNextSpeaker(
   members: SpeakerCandidate[],
   lastUserText: string,
   recentSpeakerIds: string[],
+  lastAssistantText?: string,
 ): string | null {
   if (members.length === 0) return null;
   if (members.length === 1) return members[0].id;
@@ -39,6 +108,12 @@ export function pickNextSpeaker(
     }
   }
   if (mentionedId) return mentionedId;
+
+  // New: assistant-addressed member before falling back to LRS.
+  if (lastAssistantText) {
+    const addressed = findAddressedMember(lastAssistantText, members);
+    if (addressed) return addressed;
+  }
 
   const neverSpoken = members.filter((m) => !recentSpeakerIds.includes(m.id));
   if (neverSpoken.length > 0) {

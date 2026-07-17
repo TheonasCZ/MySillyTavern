@@ -3,6 +3,8 @@
  * the Tauri runtime — file picking/reading and DB writes are wired up in
  * `db/repositories/lorebooksRepo.ts` and the lorebooks UI. */
 
+import { expandKeys } from "./stemming";
+
 /** One entry inside a SillyTavern World Info JSON file's `entries` map
  * (keyed by uid, an arbitrary string/number). Only the fields this app
  * models are typed here; unknown extra fields are ignored on import and
@@ -46,16 +48,22 @@ export function parseWorldInfoJson(text: string): LoreEntryFields[] {
 }
 
 export function worldInfoToEntries(wi: WorldInfoFile): LoreEntryFields[] {
-  return Object.values(wi.entries ?? {}).map((e) => ({
-    keys: Array.isArray(e.key) ? e.key : [],
-    secondaryKeys: Array.isArray(e.keysecondary) ? e.keysecondary : [],
-    content: e.content ?? "",
-    comment: e.comment ?? "",
-    priority: e.order ?? 100,
-    alwaysOn: e.constant === true,
-    caseSensitive: e.case_sensitive === true,
-    enabled: e.disable !== true,
-  }));
+  return Object.values(wi.entries ?? {}).map((e) => {
+    const keys = Array.isArray(e.key) ? e.key : [];
+    const secondaryKeys = Array.isArray(e.keysecondary) ? e.keysecondary : [];
+    // Merge user-supplied secondary keys with auto-expanded primary keys.
+    const mergedSecondary = [...new Set([...secondaryKeys, ...expandKeys(keys)])];
+    return {
+      keys,
+      secondaryKeys: mergedSecondary,
+      content: e.content ?? "",
+      comment: e.comment ?? "",
+      priority: e.order ?? 100,
+      alwaysOn: e.constant === true,
+      caseSensitive: e.case_sensitive === true,
+      enabled: e.disable !== true,
+    };
+  });
 }
 
 /** Mirrors `worldInfoToEntries`: builds a World Info JSON object from a
