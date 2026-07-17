@@ -310,7 +310,12 @@
       "trimmedTitle": "Co bylo ořezáno",
       "noneTrimmed": "Nic nebylo ořezáno — všechno se vešlo do rozpočtu.",
       "memories": "Vzpomínky",
-      "canonReminder": "Připomínka kánonu"
+      "canonReminder": "Připomínka kánonu",
+      "systemText": "Systémová zpráva",
+      "historyText": "Historie",
+      "phiText": "Post-historie instrukce",
+      "copyAsText": "Kopírovat jako text",
+      "copied": "Zkopírováno!"
     },
     "search": {
       "placeholder": "Hledej ve vzpomínkách a faktech…",

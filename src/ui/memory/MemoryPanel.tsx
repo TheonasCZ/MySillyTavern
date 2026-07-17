@@ -25,6 +25,7 @@ import type { ConnectionConfig } from "../../providers/types";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
+import { PromptInspector } from "./PromptInspector";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -520,113 +521,7 @@ function PromptTab() {
     );
   }
 
-  const rows: [string, string | number][] = [
-    [t("prompt.system"), report.sections.systemTokens],
-    [t("prompt.facts"), `${report.sections.factsIncluded}/${report.sections.factsTotal} (${report.sections.factsTokens} tok)`],
-    [t("prompt.lore"), `${report.sections.loreIncluded}/${report.sections.loreTotal} (${report.sections.loreTokens} tok)`],
-    [
-      t("prompt.summarySection"),
-      report.sections.summaryIncluded
-        ? `${report.sections.summaryTokens} tok${report.sections.summaryTruncated ? ` (${t("prompt.truncated")})` : ""}`
-        : t("prompt.none"),
-    ],
-    [
-      t("prompt.memories"),
-      report.sections.memoriesTotal > 0
-        ? `${report.sections.memoriesIncluded}/${report.sections.memoriesTotal} (${report.sections.memoriesTokens} tok)`
-        : t("prompt.none"),
-    ],
-    [
-      t("prompt.history"),
-      `${report.sections.historyMessagesIncluded}/${report.sections.historyMessagesTotal} (${report.sections.historyTokens} tok)`,
-    ],
-    [t("prompt.mesExample"), report.sections.mesExampleIncluded ? t("prompt.included") : t("prompt.none")],
-    [
-      t("prompt.canonReminder"),
-      report.sections.canonReminderTokens > 0
-        ? `${report.sections.canonReminderTokens} tok`
-        : t("prompt.none"),
-    ],
-  ];
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div
-        className="rounded-[var(--radius-sm)] border p-3 text-sm"
-        style={{
-          borderColor: report.overBudget ? "var(--color-danger)" : "var(--color-border)",
-          backgroundColor: "var(--color-bg-elevated)",
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <span>{t("prompt.tokensLabel")}</span>
-          <strong>
-            {report.estimatedTokens} / {report.budget}
-            <span className="ml-1 font-normal" style={{ color: "var(--color-text-faint)" }}>
-              ({Math.round((report.estimatedTokens / Math.max(report.budget, 1)) * 100)}%)
-            </span>
-          </strong>
-        </div>
-        <div
-          className="mt-2 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ backgroundColor: "var(--color-surface-2)" }}
-          role="progressbar"
-          aria-valuenow={Math.min(100, Math.round((report.estimatedTokens / Math.max(report.budget, 1)) * 100))}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div
-            className="h-full rounded-full transition-[width]"
-            style={{
-              width: `${Math.min(100, (report.estimatedTokens / Math.max(report.budget, 1)) * 100)}%`,
-              backgroundColor: report.overBudget ? "var(--color-danger)" : "var(--color-accent)",
-            }}
-          />
-        </div>
-        <span
-          className="mt-1 inline-block text-xs"
-          style={{ color: report.overBudget ? "var(--color-danger)" : "var(--color-success)" }}
-        >
-          {report.overBudget ? t("prompt.overBudget") : t("prompt.underBudget")}
-        </span>
-        {report.overBudget && (
-          <p className="mt-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {t("prompt.overBudgetHint")}
-          </p>
-        )}
-      </div>
-
-      <table className="w-full text-xs">
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label} className="border-t" style={{ borderColor: "var(--color-border)" }}>
-              <td className="py-1.5 pr-2" style={{ color: "var(--color-text-muted)" }}>
-                {label}
-              </td>
-              <td className="py-1.5 text-right">{value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
-          {t("prompt.trimmedTitle")}
-        </h3>
-        {report.trimmedNotes.length === 0 ? (
-          <p className="text-xs" style={{ color: "var(--color-text-faint)" }}>
-            {t("prompt.noneTrimmed")}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {report.trimmedNotes.map((note, i) => (
-              <li key={i}>• {note}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
+  return <PromptInspector report={report} />;
 }
 
 function ExtractionConnectionPicker({ chatId }: { chatId: string }) {

@@ -146,6 +146,12 @@ export interface PromptReport {
     /** Number of other group members rendered in `[Další postavy ve scéně]`.
      * Only present for group-chat builds (`input.groupMembers` given). */
     groupMembersIncluded?: number;
+    /** The full assembled system prompt text (system core + sections). */
+    systemText: string;
+    /** The verbatim history messages concatenated as "role: content\n". */
+    historyText: string;
+    /** The trailing system message (post_history_instructions + canon reminder + group speaker instruction). */
+    phiText: string;
   };
   /** Human/UI-readable list of what got cut, in the order it was cut —
    * shown verbatim in the memory panel's "Prompt" tab. */
@@ -482,6 +488,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const totalTokens = sectionsTok.systemTokens + sectionsTok.factsTokens + sectionsTok.loreTokens +
       sectionsTok.summaryTokens + sectionsTok.memoriesTokens + sectionsTok.historyTokens;
 
+    const historyText = historyIncluded.map((m) => `${m.role}: ${m.content}`).join("\n");
+    const phiText = phi ? substitutePlaceholders(phi, charName, userName) : "";
     return { messages, totalTokens, sectionsTokens: sectionsTok, canonReminderTokens: estimateTokens(canonSection) };
   }
 
@@ -511,8 +519,8 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       summaryTokens: estimateTokens(summarySection),
       memoriesTokens: estimateTokens(memoriesSection),
       historyTokens: count(
-        history.map((m) => m.content).join("\n"),
-      ),
+        history.map((m) => `${m.role}: ${m.content}`).join("\n"),
+      ) + estimateTokens(phi),
     };
   }
 
@@ -641,6 +649,9 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       mesExampleIncluded,
       canonReminderTokens: current.canonReminderTokens,
       ...(input.groupMembers ? { groupMembersIncluded: groupMembers.length } : {}),
+      systemText: current.systemText,
+      historyText: current.historyText,
+      phiText: current.phiText,
     },
     trimmedNotes,
   };
