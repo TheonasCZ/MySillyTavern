@@ -183,5 +183,52 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
+  // Parse quest tags — the prompt documents [QUEST:+name] (start) and
+  // [QUEST:✓name] (complete), but models often emit loose variants like
+  // [QUEST: Name (aktivní)] or [QUEST:name: note], so parse tolerantly:
+  //   [QUEST:+name]            — start
+  //   [QUEST:✓name] [QUEST:xname] — complete
+  //   [QUEST:-name]            — fail
+  //   [QUEST:name: note]       — progress note
+  //   [QUEST:name (aktivní)]   — start (status suffix)
+  cleanText = cleanText.replace(/\[QUEST:\s*([+✓x-]?)\s*([^\]]+)\]/gi, (_m, op: string, rest: string) => {
+    let name = rest.trim();
+    let note: string | undefined;
+    const colonIdx = name.indexOf(":");
+    if (colonIdx !== -1) {
+      note = name.slice(colonIdx + 1).trim() || undefined;
+      name = name.slice(0, colonIdx).trim();
+    }
+    // Status suffix like "(aktivní)" / "(splněno)" / "(failed)" wins over
+    // a missing op prefix.
+    let suffixOp: QuestMutation["op"] | null = null;
+    const suffix = name.match(/\(([^)]+)\)\s*$/);
+    if (suffix) {
+      const s = suffix[1].toLowerCase();
+      if (/akt|start|new|nov/.test(s)) suffixOp = "start";
+      else if (/spln|dokon|complet|done|hotov/.test(s)) suffixOp = "complete";
+      else if (/selh|fail|neúsp|neusp/.test(s)) suffixOp = "fail";
+      if (suffixOp) name = name.slice(0, suffix.index).trim();
+    }
+    if (!name) return "";
+    const mappedOp: QuestMutation["op"] =
+      op === "+" ? "start"
+      : op === "✓" || op.toLowerCase() === "x" ? "complete"
+      : op === "-" ? "fail"
+      : suffixOp ?? (note ? "note" : "start");
+    questMutations.push({ op: mappedOp, name, note });
+    return "";
+  });
+
+  // Parse condition tags: [COND:+name], [COND:+name:duration], [COND:-name]
+  cleanText = cleanText.replace(/\[COND:\s*([+-])\s*([^:\]]+)(?::([^\]]+))?\]/gi, (_m, op: string, name: string, duration?: string) => {
+    conditionMutations.push({
+      op: op === "+" ? "add" : "remove",
+      name: name.trim(),
+      duration: duration?.trim() || undefined,
+    });
+    return "";
+  });
+
   return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations };
 }

@@ -35,6 +35,13 @@ fn build_body(connection: &ConnectionDto, messages: &[ChatMessage]) -> Value {
     if let Some(tk) = connection.top_k {
         body["generationConfig"]["topK"] = json!(tk);
     }
+    // Gemini 2.5+/3.x models default to dynamic "thinking", which adds long
+    // pauses before each reply — useless for roleplay streaming. Budget 0
+    // disables it; older models (2.0 and below) reject the field.
+    let m = connection.model.as_str();
+    if m.contains("-2.5") || m.contains("-3") {
+        body["generationConfig"]["thinkingConfig"] = json!({ "thinkingBudget": 0 });
+    }
     if let Some(sys) = system_instruction {
         body["systemInstruction"] = sys;
     }

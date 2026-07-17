@@ -1,6 +1,7 @@
 import type { Persona } from "../db/repositories/personasRepo";
 import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
+import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
 import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
 
@@ -15,11 +16,49 @@ export function clearTagErrors(): void { lastTagErrors = []; }
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
-  _chatId?: string,
+  chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
   const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0) return text;
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && questMutations.length === 0) return text;
+
+  // Apply quest mutations: [QUEST:+name] / [QUEST:✓name] / [QUEST:-name] / [QUEST:name: note]
+  if (chatId) {
+    for (const qm of questMutations) {
+      try {
+        const existing = await getQuestByName(chatId, qm.name);
+        if (qm.op === "start") {
+          if (!existing) await createQuest({ chatId, name: qm.name, description: qm.note });
+        } else if (qm.op === "complete" || qm.op === "fail") {
+          const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
+          await updateQuestStatus(quest.id, qm.op === "complete" ? "completed" : "failed");
+          if (qm.note) await addQuestNote(quest.id, qm.note);
+        } else if (qm.op === "note") {
+          const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
+          if (qm.note) await addQuestNote(quest.id, qm.note);
+        }
+      } catch {
+        // Non-critical
+      }
+    }
+  }
+
+  // Apply condition mutations: [COND:+name] / [COND:+name:duration] / [COND:-name]
+  const conditions = persona.conditions ? [...persona.conditions.map((c) => ({ ...c }))] : [];
+  for (const cm of conditionMutations) {
+    const idx = conditions.findIndex((c) => c.name.toLowerCase() === cm.name.toLowerCase());
+    if (cm.op === "add") {
+      if (idx === -1) {
+        conditions.push({
+          name: cm.name,
+          description: [cm.description, cm.duration].filter(Boolean).join(" — "),
+          expiresAt: null,
+        });
+      }
+    } else if (idx !== -1) {
+      conditions.splice(idx, 1);
+    }
+  }
 
   // Apply inventory mutations
   const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
@@ -163,6 +202,7 @@ export async function processGameResponse(
       progression: persona.progression,
       skills,
       inventory: inv,
+      conditions,
     });
     if (hasLevelChanges) {
       await updatePersonaXpLevel(persona.id, xp, level);
