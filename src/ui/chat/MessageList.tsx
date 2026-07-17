@@ -1,8 +1,25 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { Message } from "../../db/repositories/messagesRepo";
+import { buildRenderSegments, computeVisibleWindow, DEFAULT_ESTIMATED_HEIGHT } from "../../chat/virtualWindow";
 import { MessageBubble } from "./MessageBubble";
+
+// M11 §2 — history virtualization. Only chats bigger than this render a
+// windowed history; small chats keep the exact old code path (no window
+// math at all) to minimize regression risk. The most recent ACTIVE_ZONE
+// messages are *always* fully rendered and go through the untouched
+// pin/stream/anchor logic below — virtualization only ever touches older
+// history above that zone, so 3830e33/e5c6520's anchoring can't regress.
+const VIRTUALIZE_THRESHOLD = 60;
+const ACTIVE_ZONE = 30;
+const OVERSCAN = 10;
+// The scroller is a flex column with `gap-3` (0.75rem = 12px) between every
+// child. A collapsed spacer segment replaces N sibling bubbles with a
+// single div, which loses the (N-1) gaps that used to sit *between* them —
+// without compensating for that, the spacer undercounts real layout height
+// by 12px per collapsed message, and that error grows with history size.
+const GAP_PX = 12;
 
 /** Minimal member info needed to render an avatar/name — keyed by
  * `characterId` so a message's author can be looked up without a live
@@ -82,6 +99,47 @@ export function MessageList({
   const spacerRef = useRef<HTMLDivElement>(null);
   const anchoredUserMsgIdRef = useRef<string | null>(null);
 
+  // --- M11 §2: history virtualization bookkeeping -------------------------
+  // Measured heights (offsetHeight, px) keyed by message id — persists for
+  // the component's lifetime so a message never needs remeasuring after it
+  // scrolls out of the window once. Read directly (not React state) so a
+  // measurement never itself forces a render; `scheduleWindowRecompute`
+  // below is the only thing that does that, and it's throttled to rAF.
+  const heightsRef = useRef<Map<string, number>>(new Map());
+  const scrollTopRef = useRef(0);
+  const rafPendingRef = useRef(false);
+  const [, setWindowTick] = useState(0);
+
+  const scheduleWindowRecompute = useCallback(() => {
+    if (rafPendingRef.current) return;
+    rafPendingRef.current = true;
+    requestAnimationFrame(() => {
+      rafPendingRef.current = false;
+      setWindowTick((v) => v + 1);
+    });
+  }, []);
+
+  // Attached to every fully-rendered *history* bubble wrapper (never the
+  // active-zone ones — those keep using `data-msg-id` for the pin/anchor
+  // logic above, and reusing that attribute here would make the e2e
+  // harness's `[data-msg-id]` lookup match the wrong, off-screen node).
+  // Mirrors `pinUserMessage`'s pattern of reading geometry synchronously
+  // from the callback ref rather than an effect.
+  const measureHistoryRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node) return;
+      const id = node.dataset.vid;
+      if (!id) return;
+      const h = node.getBoundingClientRect().height;
+      const prev = heightsRef.current.get(id);
+      if (prev === undefined || Math.abs(prev - h) > 0.5) {
+        heightsRef.current.set(id, h);
+        scheduleWindowRecompute();
+      }
+    },
+    [scheduleWindowRecompute],
+  );
+
   useEffect(() => {
     // Initial scroll-to-bottom when a chat opens; also resets the anchor
     // bookkeeping when the list empties (chat switch).
@@ -95,6 +153,7 @@ export function MessageList({
     if (!didInitialScrollRef.current) {
       bottomRef.current?.scrollIntoView({ block: "end" });
       didInitialScrollRef.current = true;
+      if (scrollRef.current) scrollTopRef.current = scrollRef.current.scrollTop;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
@@ -170,12 +229,17 @@ export function MessageList({
     const el = scrollRef.current;
     if (el) {
       el.scrollTop = el.scrollHeight - prevScrollHeightRef.current;
+      scrollTopRef.current = el.scrollTop;
     }
     prevScrollHeightRef.current = null;
   }, [messages]);
 
   const handleScroll = () => {
     const el = scrollRef.current;
+    if (el) {
+      scrollTopRef.current = el.scrollTop;
+      if (messages.length > VIRTUALIZE_THRESHOLD) scheduleWindowRecompute();
+    }
     if (!el || !onLoadOlder || !hasOlder || loadingOlder) return;
     if (el.scrollTop < 80) {
       prevScrollHeightRef.current = el.scrollHeight;
@@ -184,6 +248,59 @@ export function MessageList({
   };
 
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
+
+  // Plain bubble render, no pin/stream wrapper — used for every history
+  // message (virtualized region) and for active-zone messages that aren't
+  // the regenerate target or the just-sent user message.
+  const renderMessage = (message: Message) => {
+    const isRegeneratingThis = streaming && streamingMessageId === message.id;
+    const content = isRegeneratingThis ? streamingText : message.content;
+    const author = message.characterId ? membersById.get(message.characterId) : undefined;
+    const resolvedAuthor = author ?? fallbackCharacter;
+    return (
+      <MessageBubble
+        key={message.id}
+        message={message}
+        content={content}
+        isStreaming={isRegeneratingThis}
+        isUser={message.role === "user"}
+        canEdit
+        canRegenerate={message.role === "assistant" && message.id === lastAssistantId}
+        actionsDisabled={streaming}
+        isInterrupted={interruptedMessageIds.has(message.id)}
+        avatarUrl={message.role === "user" ? personaAvatarUrl : resolvedAuthor.avatarUrl}
+        authorName={message.role === "user" ? personaName : resolvedAuthor.name}
+        showAuthorCaption={isGroup && message.role === "assistant"}
+        onBranch={onBranch ? () => onBranch(message.id) : undefined}
+        onEdit={(text) => onEdit(message.id, text)}
+        onRegenerate={() => onRegenerate(message.id)}
+        onContinue={() => onContinue(message.id)}
+        onSwipe={(offset) => onSwipe(message.id, offset)}
+      />
+    );
+  };
+
+  // History virtualization: only above this size, and only the messages
+  // older than the last ACTIVE_ZONE — those always render through the
+  // untouched pin/stream logic below.
+  const virtualizationActive = messages.length > VIRTUALIZE_THRESHOLD;
+  const historyCount = virtualizationActive ? messages.length - ACTIVE_ZONE : 0;
+  const history = virtualizationActive ? messages.slice(0, historyCount) : [];
+  const activeZone = virtualizationActive ? messages.slice(historyCount) : messages;
+
+  let historySegments: ReturnType<typeof buildRenderSegments> = [];
+  if (virtualizationActive) {
+    const heights = history.map((m) => heightsRef.current.get(m.id));
+    const viewportHeight = scrollRef.current?.clientHeight || 800;
+    const windowRange = computeVisibleWindow(
+      heights,
+      scrollTopRef.current,
+      viewportHeight,
+      OVERSCAN,
+      DEFAULT_ESTIMATED_HEIGHT,
+    );
+    historySegments = buildRenderSegments(heights, windowRange);
+  }
 
   if (messages.length === 0 && !streaming) {
     return (
@@ -199,6 +316,7 @@ export function MessageList({
     <div
       ref={scrollRef}
       onScroll={handleScroll}
+      data-total-messages={messages.length}
       className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4 sm:px-8"
     >
       {hasOlder && (
@@ -208,34 +326,26 @@ export function MessageList({
           </span>
         </div>
       )}
-      {messages.map((message) => {
+      {virtualizationActive &&
+        historySegments.map((seg) => {
+          if (seg.kind === "spacer") {
+            const itemCount = seg.end - seg.start;
+            const height = (seg.height ?? 0) + Math.max(0, itemCount - 1) * GAP_PX;
+            return (
+              <div key={`v-spacer-${seg.start}`} aria-hidden className="shrink-0" style={{ height }} />
+            );
+          }
+          return history.slice(seg.start, seg.end).map((message) => (
+            <div key={message.id} data-vid={message.id} ref={measureHistoryRef}>
+              {renderMessage(message)}
+            </div>
+          ));
+        })}
+      {activeZone.map((message) => {
         const isRegeneratingThis = streaming && streamingMessageId === message.id;
         const isLastUserMessage =
           message.role === "user" && message.id === messages[messages.length - 1]?.id;
-        const content = isRegeneratingThis ? streamingText : message.content;
-        const author = message.characterId ? membersById.get(message.characterId) : undefined;
-        const resolvedAuthor = author ?? fallbackCharacter;
-        const bubble = (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            content={content}
-            isStreaming={isRegeneratingThis}
-            isUser={message.role === "user"}
-            canEdit
-            canRegenerate={message.role === "assistant" && message.id === lastAssistantId}
-            actionsDisabled={streaming}
-            isInterrupted={interruptedMessageIds.has(message.id)}
-            avatarUrl={message.role === "user" ? personaAvatarUrl : resolvedAuthor.avatarUrl}
-            authorName={message.role === "user" ? personaName : resolvedAuthor.name}
-            showAuthorCaption={isGroup && message.role === "assistant"}
-            onBranch={onBranch ? () => onBranch(message.id) : undefined}
-            onEdit={(text) => onEdit(message.id, text)}
-            onRegenerate={() => onRegenerate(message.id)}
-            onContinue={() => onContinue(message.id)}
-            onSwipe={(offset) => onSwipe(message.id, offset)}
-          />
-        );
+        const bubble = renderMessage(message);
         if (isRegeneratingThis) {
           return (
             <div key={message.id} ref={setStreamAnchor}>

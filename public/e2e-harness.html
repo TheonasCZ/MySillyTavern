@@ -12,6 +12,8 @@
       //           "Co uděláš? 1..3" options block (drives the inline chips).
       //   group — 3 characters in chat_members, assistant messages authored
       //           by them in rotation, auto_reply=0 (manual speaker picking).
+      //   huge  — 1 character, 2000 messages, for the M11 §2 virtualization
+      //           perf scenario (repeated "load older" + send+anchor).
       (() => {
         const params = new URLSearchParams(location.search);
         const scenario = params.get("scenario") || "solo";
@@ -94,6 +96,22 @@
             } else {
               pushMessage("c1", "user", `Zpráva hráče ${i}.`, null, total - i);
             }
+          }
+        } else if (scenario === "huge") {
+          // M11 §2 perf fixture: a long-running campaign whose full history
+          // (2000+ messages) can't reasonably be kept in the DOM at once —
+          // this is what history virtualization exists for. Pagination
+          // (LIMIT 100 per listRecentMessages/listOlderMessages call) means
+          // only the newest 100 land in memory on open; scripts/e2e.mjs's
+          // "huge" scenario then drives several "load older" round trips to
+          // grow the in-memory `messages` array well past that.
+          addCharacter("ch1", "Vypravec");
+          addChat("c1", "ch1", false);
+          chatMembers.push({ id: "mem1", chat_id: "c1", character_id: "ch1", position: 0, created_at: now });
+          const total = 2000;
+          for (let i = 0; i < total; i++) {
+            const isAssistant = i % 2 === 0;
+            pushMessage("c1", isAssistant ? "assistant" : "user", `Zpráva ${i}: ${LONG}`, isAssistant ? "ch1" : null, total - i);
           }
         } else {
           addCharacter("ch1", "Vypravec");
