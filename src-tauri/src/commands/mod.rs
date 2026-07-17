@@ -2,6 +2,7 @@ pub mod backup;
 pub mod cards;
 pub mod chat;
 pub mod dice;
+pub mod export_chronicle;
 pub mod files;
 pub mod image_gen;
 pub mod logging;

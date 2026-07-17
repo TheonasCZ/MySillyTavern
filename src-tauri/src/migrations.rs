@@ -95,6 +95,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_015,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "chronicle export: export_jobs table for premium book export",
+            sql: MIGRATION_016,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -369,4 +375,24 @@ CREATE TABLE crafting_recipes (
   FOREIGN KEY (persona_id) REFERENCES personas(id)
 );
 CREATE INDEX idx_crafting_recipes_persona ON crafting_recipes(persona_id);
+"#;
+
+const MIGRATION_016: &str = r#"
+CREATE TABLE export_jobs (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  persona_id TEXT,
+  status TEXT NOT NULL DEFAULT 'running',
+  progress INTEGER NOT NULL DEFAULT 0,
+  total_chunks INTEGER NOT NULL DEFAULT 0,
+  current_chunk INTEGER NOT NULL DEFAULT 0,
+  connection_id TEXT NOT NULL,
+  theme TEXT NOT NULL DEFAULT 'fantasy',
+  format TEXT NOT NULL DEFAULT 'html',
+  include_illustrations INTEGER NOT NULL DEFAULT 1,
+  chunks_json TEXT NOT NULL DEFAULT '[]',
+  output_path TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 "#;

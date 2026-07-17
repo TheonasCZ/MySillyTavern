@@ -12,6 +12,9 @@ use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
 use commands::dice::eval_dice;
+use commands::export_chronicle::{
+    cancel_export, get_export_status, resume_export, start_export, ExportRegistry,
+};
 use commands::files::{read_text_file, write_text_file};
 use commands::image_gen::generate_illustration;
 use commands::logging::{append_log, get_log_path};
@@ -29,6 +32,7 @@ pub fn run() {
                 .build(),
         )
         .manage(StreamRegistry::default())
+        .manage(ExportRegistry::default())
         .setup(|app| {
             init_store(app.handle())?;
             apply_pending_import(app.handle());
@@ -57,6 +61,10 @@ pub fn run() {
             get_log_path,
             eval_dice,
             generate_illustration,
+            start_export,
+            resume_export,
+            get_export_status,
+            cancel_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
