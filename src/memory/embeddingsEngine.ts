@@ -27,7 +27,7 @@ const EMBEDDING_DISABLED_KEY = "embedding_disabled_providers";
 /** Mirrors the per-provider defaults in src-tauri/src/providers/embeddings.rs
  * — used to detect rows embedded by a different model than the current one. */
 const DEFAULT_EMBEDDING_MODELS: Record<string, string> = {
-  gemini: "gemini-embedding-001",
+  gemini: "gemini-embedding-2",
   openai: "text-embedding-3-small",
 };
 

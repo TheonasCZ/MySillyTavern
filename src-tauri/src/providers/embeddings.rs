@@ -7,8 +7,8 @@ use serde_json::json;
 
 use super::{check_status, ProviderError};
 
-const GEMINI_EMBEDDING_MODEL: &str = "gemini-embedding-001";
-/// gemini-embedding-001 defaults to 3072 dims; 768 keeps storage/compute
+const GEMINI_EMBEDDING_MODEL: &str = "gemini-embedding-2";
+/// gemini-embedding-2 defaults to 3072 dims; 768 keeps storage/compute
 /// small with negligible retrieval quality loss at this scale.
 const GEMINI_OUTPUT_DIMS: u32 = 768;
 const OPENAI_EMBEDDING_MODEL: &str = "text-embedding-3-small";
