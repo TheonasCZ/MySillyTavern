@@ -200,8 +200,14 @@ drží styl, regex pravidlo umlčí zvolenou frázi.
    (náš trumf — ST na tohle potřebuje extension). Práh + budget v
    nastavení, viditelné v Prompt inspectoru.
 
+5. **Generátor lorebooků z kampaně** — jeden LLM průchod přeskupí
+   existující ledger fakta + shrnutí + kroniku do lorebook záznamů
+   s klíčovými slovy (a rovnou embeddingy pro bod 4); UI: tlačítko
+   „Vygenerovat lorebook z této kampaně" v editoru lorebooků.
+
 **Hotovo když:** import ST World Info se selective/sticky poli zachová
-chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem.
+chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem;
+generátor vyrobí použitelný lorebook z uživatelovy kampaně.
 
 ---
 
@@ -266,6 +272,51 @@ dvojím překladem. Vyprávění vždy přímo v jazyce hry přes {lang} direkti
 
 ---
 
+## M29 — Zpřehlednění UI (jednoduchý vs. pokročilý režim)
+
+**Motivace:** nastavení i editory mají příliš polí bez vysvětlení; „Persony"
+vs. „Postavy" mate i autora projektu.
+
+**Rozsah:**
+1. **Přejmenování a sloučení** — „Postavy (AI)" a „Moje postava (hráč)"
+   (= persona) jako jedna sekce se dvěma záložkami; všude vysvětlující
+   podtitulky (postava = koho hraje AI; persona = kdo jsi ve hře ty).
+2. **Jednoduchý/Pokročilý režim** — editory karet, person i Nastavení
+   defaultně ukazují jen základní pole s lidskými popisky; zbytek za
+   rozbalovací „Pokročilé". FieldHelp ke KAŽDÉMU poli (co dělá, příklad).
+3. **Vizuální jazykové zóny** (návaznost na M28.4) — barevně/ikonou odlišit
+   pole „instrukce pro AI (doporučeně anglicky)" vs. „tvůj příběh (tvým
+   jazykem)".
+4. Projít Nastavení: seskupit panely do karet/tabů (Připojení | Hraní |
+   Vzhled a zvuk | Data a diagnostika), sekce s jednořádkovým „k čemu to je".
+
+**Hotovo když:** nový uživatel založí postavu a rozehraje hru bez čtení
+dokumentace; každé pole má nápovědu.
+
+---
+
+## M30 — Export/import 2.0 (ST-kompatibilní + naše data)
+
+**Motivace:** zůstat čitelní pro originální SillyTavern, ale bezeztrátově
+přenášet i naše rozšíření.
+
+**Rozsah:**
+1. **Namespace blok** `extensions.mysillytavern` v kartě V2/V3 (JSON i PNG
+   tEXt chunk) — spec s tím počítá, ST ho ignoruje, my čteme: kánon fakta
+   šablony, TTS hlas, výchozí režie, doporučený preset.
+2. **Export chatu/kampaně** — vlastní ZIP formát (chat + ledger vč.
+   canon/stability + summary + questy + inventář + kalendář + lorebooky
+   + kronika) s manifestem verze; import s migrací.
+3. **World Info export** — zachovat ST pole 1:1 (vč. selective/sticky z
+   M27), naše navíc (embeddingy ne — dopočítají se) do `extensions`.
+4. Roundtrip testy: naše→ST→naše bez ztráty ST polí; naše→naše bez ztráty
+   čehokoli.
+
+**Hotovo když:** karta exportovaná u nás jde importovat do originálního ST
+beze změny chování; reimport k nám vrátí i všechna naše data.
+
+---
+
 ## Průběžně (mimo milníky)
 
 - **Ladění paměti** — po delším hraní uživatele vyhodnotit: drží žánr?
@@ -286,6 +337,8 @@ dvojím překladem. Vyprávění vždy přímo v jazyce hry přes {lang} direkti
 | M26 prompt nástroje | malý–střední | samplery + author's note + regex |
 | M27 World Info navíc | střední | vektorová aktivace = náš trumf |
 | M28 jazyk hry | střední | centralizace promptů, EN analytické joby |
+| M29 zpřehlednění UI | střední | jednoduchý/pokročilý režim, jazykové zóny |
+| M30 export/import 2.0 | malý–střední | ST kompatibilita + extensions namespace |
 | M14 sync (body 2–3) | velký | začít žurnálem a zprávami |
 | M15 mobil fáze B | velký | po M14; 8–14 dnů dle průzkumu |
 
