@@ -263,6 +263,10 @@ async function scenarioHuge(browser) {
       probe.samples.push({
         t: performance.now() - window.__t0,
         scrollTop: el ? el.scrollTop : null,
+        // Lets the huge-scenario assert below distinguish a freshly-sent
+        // pin from a stale pre-send `[data-msg-id]` wrapper (see comment
+        // at its use site).
+        total: Number(document.querySelector("[data-total-messages]")?.getAttribute("data-total-messages")),
         pinnedTop:
           wrapper && el ? Math.round(wrapper.getBoundingClientRect().top - el.getBoundingClientRect().top) : null,
         cursor: !!document.querySelector(".animate-pulse"),
@@ -283,7 +287,17 @@ async function scenarioHuge(browser) {
   await page.waitForTimeout(2300);
 
   const { samples } = await page.evaluate(() => window.__probe);
-  const firstPinned = samples.find((s) => s.pinnedTop !== null);
+  // The "huge" fixture's most recent pre-existing message (index 1999 of
+  // 2000, odd → role "user") means `[data-msg-id]` is already present in
+  // the DOM *before* this send even lands — from the *previous* last user
+  // message, still sitting at whatever scrollTop the last "load older"
+  // left it at. Sending is async (buildApiMessages awaits lore/fact/
+  // embedding lookups before the message actually appends), so an early
+  // rAF tick can sample that stale wrapper first and report its bogus,
+  // pre-send pinnedTop. Requiring `total` to have grown past the pre-send
+  // count filters those out — the real pin only applies once the new
+  // message has actually landed.
+  const firstPinned = samples.find((s) => s.pinnedTop !== null && s.total > totalAfterLoads);
   assert(firstPinned, "pinned user-message wrapper ([data-msg-id]) never appeared");
   assert(
     firstPinned.pinnedTop >= 4 && firstPinned.pinnedTop <= 12,
@@ -590,6 +604,8 @@ async function runWebkitSendAnchor(t) {
 async function main() {
   const webkitOnly = process.argv.includes("--webkit-only");
   const withWebkit = process.argv.includes("--webkit") || webkitOnly;
+  const onlyArg = process.argv.find((a) => a.startsWith("--only="));
+  const only = onlyArg ? onlyArg.slice("--only=".length) : null;
 
   await checkViteRunning();
   const t = buildTranslator();
@@ -602,7 +618,7 @@ async function main() {
     assert(existsSync(executablePath), `Chromium executable not found at ${executablePath}`);
     const browser = await pw.chromium.launch({ executablePath, headless: true });
 
-    const scenarios = [
+    let scenarios = [
       ["open", scenarioOpen],
       ["send+anchor", scenarioSendAnchor],
       ["regenerate", scenarioRegenerate],
@@ -611,6 +627,7 @@ async function main() {
       ["chips", scenarioChips],
       ["huge", scenarioHuge],
     ];
+    if (only) scenarios = scenarios.filter(([name]) => name === only);
 
     for (const [name, fn] of scenarios) {
       try {
