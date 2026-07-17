@@ -275,6 +275,34 @@ dvojím překladem. Vyprávění vždy přímo v jazyce hry přes {lang} direkti
 
 ---
 
+## M31 — Piper TTS backend (offline, desktop + mobil)
+
+**Motivace:** Web Speech na WebKitGTK = robotický espeak; Android WebView
+`speechSynthesis` nepodporuje vůbec. Piper = lokální neuronové TTS, běží na
+CPU rychleji než real-time, české hlasy, funguje na desktopu i Androidu →
+jednotné offline řešení. PŘED implementací poslechnout ukázky
+(rhasspy.github.io/piper-samples) — rozhodnutí jít/nejít podle kvality.
+
+**Rozsah:**
+1. **Rust command `tts_synthesize(text, voice_model) -> wav path/bytes`** —
+   volá piper binárku (sidecar v Tauri bundle) se staženým .onnx modelem;
+   streamovat po větách (Piper umí stdin řádky) ať start řeči < 1 s.
+2. **Správa hlasů** — panel v Nastavení → Předčítání: seznam dostupných
+   českých (a EN) modelů, stažení do `$APPDATA/tts-voices/`, velikosti
+   ~20–60 MB/hlas; per-postava mapování už existuje (characters.tts_voice
+   — rozšířit o prefix backendu, např. "piper:cs_CZ-jirka-medium").
+3. **useTts: druhý backend** — přehrávání WAV přes HTMLAudioElement;
+   fallback řetěz piper → Web Speech → nic; rychlost = Piperův
+   length_scale parametr.
+4. **Android (váže na M15 B)** — piper se kompiluje na aarch64; alternativa
+   nativní Android TTS přes malý plugin jako fallback.
+
+**Hotovo když:** česká odpověď se přehraje Piperem do 1 s od kliknutí,
+hlasy per postava fungují, vše offline; espeak/Web Speech zůstává jen jako
+fallback bez stažených modelů.
+
+---
+
 ## M29 — Zpřehlednění UI (jednoduchý vs. pokročilý režim)
 
 **Motivace:** nastavení i editory mají příliš polí bez vysvětlení; „Persony"
@@ -342,6 +370,7 @@ beze změny chování; reimport k nám vrátí i všechna naše data.
 | M28 jazyk hry | střední | centralizace promptů, EN analytické joby |
 | M29 zpřehlednění UI | střední | jednoduchý/pokročilý režim, jazykové zóny |
 | M30 export/import 2.0 | malý–střední | ST kompatibilita + extensions namespace |
+| M31 Piper TTS | malý–střední | nejdřív poslechnout ukázky hlasů! |
 | M14 sync (body 2–3) | velký | začít žurnálem a zprávami |
 | M15 mobil fáze B | velký | po M14; 8–14 dnů dle průzkumu |
 
