@@ -236,7 +236,15 @@ v Memory panelu musí zůstat v jazyce hry).
    stejný princip, anglické instrukce + „write field contents (fact,
    contradiction, summary) in {lang}". Stávající české kampaně mají česká
    fakta — direktiva podle jazyka chatu to drží.
-4. **UI dočištění** — vymést hardcodované fallbacky (`?? "Obnovit…"`
+4. **Jazyková nápověda v editorech** — u polí karty postavy a persony
+   drobný hint (FieldHelp), co psát raději anglicky vs. v jazyce hry:
+   ANGLICKY pole čtená AI jako instrukce (system prompt, post-history
+   instructions, description/personality) — přesnější a levnější;
+   V JAZYCE HRY pole prosakující do vyprávění a určující styl (first
+   message, ukázka dialogu mes_example, scénář, jména). U importované
+   anglické karty hint „hraješ-li česky, zvaž překlad first message /
+   ukázky dialogu — táhnou jazyk a styl výstupu".
+5. **UI dočištění** — vymést hardcodované fallbacky (`?? "Obnovit…"`
    v SettingsScreen apod.) a české chybové hlášky v Rustu (backup.rs
    „Databáze zatím neexistuje…") → přes i18n / anglicky s překladem na FE.
 
