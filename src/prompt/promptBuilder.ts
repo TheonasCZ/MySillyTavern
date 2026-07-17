@@ -276,7 +276,23 @@ function buildSystemCore(
   moodFacts: Array<{ subject: string; fact: string }>,
 ): string {
   const base = character.systemPrompt.trim() || DEFAULT_RP_INSTRUCTIONS;
-  const parts = [base, character.description, character.personality, character.scenario].map((p) =>
+
+  // Role split: vypravěč vs mechanik — oddělení narativu od herních tagů
+  const roleSplit = `[TVÉ DVĚ ROLE]
+Jsi zároveň VYPRAVĚČ i MECHANIK. Tyto role nikdy nezaměňuj.
+- Jako VYPRAVĚČ: Popisuješ svět, mluvíš za NPC, vyprávíš příběh. Používáš přirozený jazyk.
+- Jako MECHANIK: Spravuješ inventář, dovednosti, questy, frakce, stavy a čas. Používáš POUZE tagy [INV:...], [SKILL:...], [QUEST:...], [FACTION:...], [COND:...], [TIME:...].
+Tagy piš jako mechanik — nikdy je nezaměňuj do vypravěčského textu. Každý tag na vlastní řádek. Maximálně 3 tagy na odpověď.`;
+
+  // Few-shot examples — AI se z příkladů učí lépe než z instrukcí
+  const examples = `[PŘÍKLAD SPRÁVNÉ ODPOVĚDI]
+Hráč: Prohledám starou truhlu.
+GM: Truhla zaskřípěla, když jsi odklopil její víko. Uvnitř leží rezavý meč a pár mincí. Vzduch je cítit plísní.
+[INV:+Rezavý meč]
+[INV:+10:Měděné mince]
+Co uděláš dál?`;
+
+  const parts = [base, roleSplit, examples, character.description, character.personality, character.scenario].map((p) =>
     p.trim(),
   );
   if (persona) {
