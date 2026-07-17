@@ -9,6 +9,8 @@ export interface Chat {
   extractionConnectionId: string | null;
   lastExtractedMessageId: string | null;
   lastSummarizedMessageId: string | null;
+  /** Prompt preset selected for this chat (M12.4). */
+  presetId: string | null;
   /** Automatic speaker selection for group chats (plan §M10). */
   autoReply: boolean;
   createdAt: string;
@@ -33,6 +35,7 @@ interface ChatRow {
   extraction_connection_id: string | null;
   last_extracted_message_id: string | null;
   last_summarized_message_id: string | null;
+  preset_id: string | null;
   auto_reply: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +51,7 @@ function toChat(row: ChatRow): Chat {
     extractionConnectionId: row.extraction_connection_id,
     lastExtractedMessageId: row.last_extracted_message_id,
     lastSummarizedMessageId: row.last_summarized_message_id,
+    presetId: row.preset_id,
     autoReply: !!row.auto_reply,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -69,8 +73,8 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   const now = nowIso();
   const primaryCharacterId = draft.characterIds[0];
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NULL, $6, $6)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $6)`,
     [id, draft.title, primaryCharacterId, draft.personaId, draft.connectionId, now],
   );
   for (let i = 0; i < draft.characterIds.length; i++) {
@@ -89,6 +93,7 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
     extractionConnectionId: null,
     lastExtractedMessageId: null,
     lastSummarizedMessageId: null,
+    presetId: null,
     autoReply: false,
     createdAt: now,
     updatedAt: now,
@@ -135,6 +140,14 @@ export async function setChatPersona(id: string, personaId: string | null): Prom
   await execute("UPDATE chats SET persona_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     personaId,
+    nowIso(),
+  ]);
+}
+
+export async function setChatPreset(id: string, presetId: string | null): Promise<void> {
+  await execute("UPDATE chats SET preset_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    presetId,
     nowIso(),
   ]);
 }
@@ -209,8 +222,8 @@ export async function branchChat(
   const now = nowIso();
   const title = `${source.title} ${titleSuffix}`.trim();
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, auto_reply, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
     [
       id,
       title,
@@ -218,6 +231,7 @@ export async function branchChat(
       source.personaId,
       source.connectionId,
       source.extractionConnectionId,
+      source.presetId,
       source.autoReply ? 1 : 0,
       now,
     ],

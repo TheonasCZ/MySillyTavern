@@ -28,6 +28,7 @@ function makeCharacter(partial: Partial<Character> = {}): Character {
     avatarPath: null,
     cardJson: null,
     specVersion: "v2",
+    ttsVoice: null,
     createdAt: "",
     updatedAt: "",
     ...partial,

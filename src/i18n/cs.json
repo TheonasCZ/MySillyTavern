@@ -91,7 +91,9 @@
       "branchHint": "Vytvoří kopii chatu končící touto zprávou — příběh se odsud může vydat jinou cestou, původní chat zůstane nedotčený.",
       "branchConfirm": "Vytvořit větev příběhu od této zprávy? Původní chat zůstane beze změny.",
       "branchSuffix": "(větev)",
-      "groupMembers": "Členové skupiny"
+      "groupMembers": "Členové skupiny",
+      "ttsPlay": "Přehrát",
+      "ttsStop": "Zastavit"
     },
     "group": {
       "title": "Členové skupiny",
@@ -131,30 +133,32 @@
       "allTags": "Všechny tagy",
       "noMatches": "Žádná postava neodpovídá hledání."
     },
-    "editor": {
-      "backToGallery": "Zpět na postavy",
-      "exportPng": "Export do PNG",
-      "exporting": "Exportuji…",
-      "exportError": "Export selhal: {{message}}",
-      "saved": "Uloženo.",
-      "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
-      "specVersion": "Formát karty: {{version}}",
-      "addGreeting": "Přidat variantu",
-      "tagsPlaceholder": "tag1, tag2, tag3",
-      "systemPromptHint": "Pokud necháš prázdné, použije se výchozí RP instrukce.",
-      "fields": {
-        "name": "Jméno",
-        "description": "Popis",
-        "personality": "Osobnost",
-        "scenario": "Scénář",
-        "firstMes": "Úvodní zpráva",
-        "alternateGreetings": "Alternativní úvodní zprávy",
-        "mesExample": "Ukázkové zprávy",
-        "systemPrompt": "Systémový prompt",
-        "postHistoryInstructions": "Instrukce za historií",
-        "creatorNotes": "Poznámky autora",
-        "tags": "Tagy (oddělené čárkou)"
-      },
+      "editor": {
+        "backToGallery": "Zpět na postavy",
+        "exportPng": "Export do PNG",
+        "exporting": "Exportuji…",
+        "exportError": "Export selhal: {{message}}",
+        "saved": "Uloženo.",
+        "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
+        "specVersion": "Formát karty: {{version}}",
+        "addGreeting": "Přidat variantu",
+        "tagsPlaceholder": "tag1, tag2, tag3",
+        "systemPromptHint": "Pokud necháš prázdné, použije se výchozí RP instrukce.",
+        "ttsVoiceDefault": "Výchozí hlas",
+        "fields": {
+          "name": "Jméno",
+          "description": "Popis",
+          "personality": "Osobnost",
+          "scenario": "Scénář",
+          "firstMes": "Úvodní zpráva",
+          "alternateGreetings": "Alternativní úvodní zprávy",
+          "mesExample": "Ukázkové zprávy",
+          "systemPrompt": "Systémový prompt",
+          "postHistoryInstructions": "Instrukce za historií",
+          "creatorNotes": "Poznámky autora",
+          "tags": "Tagy (oddělené čárkou)",
+          "ttsVoice": "TTS hlas"
+        },
       "help": {
         "name": "Jméno postavy tak, jak ho AI používá při psaní za sebe a jak se zobrazuje v chatu.",
         "description": "Základní popis postavy — vzhled, pozadí, klíčové vlastnosti. Posílá se AI v každém promptu, drž ho stručný a věcný.",
@@ -277,7 +281,8 @@
       "facts": "Fakta",
       "summary": "Shrnutí",
       "prompt": "Prompt",
-      "search": "Hledání"
+      "search": "Hledání",
+      "chronicle": "Kronika"
     },
     "extractionConnection": {
       "label": "Extrakční připojení",
@@ -354,6 +359,12 @@
       "backfilling": "Zpracovávám…",
       "backfilled": "Vytvořeno {{count}} nových scén.",
       "backfillHint": "Jednorázově zaindexuje historii starého chatu, aby šla sémanticky vyhledávat."
+    },
+    "chronicle": {
+      "empty": "Zatím žádné záznamy v kronice. Pošli pár zpráv nebo přidej fakta a časová osa se zaplní.",
+      "messagePrefix": "Zpráva",
+      "factPrefix": "Fakt",
+      "jumpToMessage": "Skočit na zprávu"
     }
   },
   "settings": {
@@ -363,6 +374,7 @@
       "memory": "Paměť",
       "illustrations": "Ilustrace",
       "appearance": "Vzhled",
+      "sound": "Zvuk",
       "backup": "Data a záloha",
       "usage": "Statistiky",
       "diagnostics": "Diagnostika"
@@ -516,8 +528,39 @@
       "connectionHelp": "Gemini připojení použité pro generování obrázků. Pokud není vybrané, použije se výchozí chatové připojení.",
       "saved": "Uloženo."
     },
+    "presets": {
+      "title": "Presety promptů",
+      "subtitle": "Pojmenované přídavky k systémovému promptu a přepisování parametrů, které lze přiřadit na jednotlivé chaty.",
+      "empty": "Zatím žádné presety. Vytvoř první.",
+      "newButton": "Nový preset",
+      "fields": {
+        "name": "Název",
+        "namePlaceholder": "Např. Vysoká kreativita",
+        "extraSystemPrompt": "Extra systémový prompt",
+        "extraSystemPromptPlaceholder": "Dodatečné instrukce připojené k systémovému promptu…",
+        "temperature": "Temperature",
+        "topP": "Top P",
+        "frequencyPenalty": "Frequency penalty",
+        "presencePenalty": "Presence penalty",
+        "maxTokens": "Max tokenů",
+        "isDefault": "Výchozí preset"
+      },
+      "deleteConfirm": "Smazat tento preset?",
+      "noPreset": "Bez presetu"
+    },
     "resetButton": "Obnovit výchozí hodnoty",
     "resetConfirm": "Opravdu obnovit všechna nastavení?",
-    "resetDone": "Obnoveno!"
+    "resetDone": "Obnoveno!",
+    "tts": {
+      "title": "Zvuk",
+      "subtitle": "Nastavení předčítání odpovědí (text-to-speech).",
+      "autoRead": "Automatické předčítání",
+      "autoReadHelp": "Když je zapnuto, nové odpovědi AI se automaticky předčítají.",
+      "voice": "Hlas",
+      "voiceDefault": "Výchozí hlas systému",
+      "speed": "Rychlost",
+      "noVoices": "Žádné hlasy nejsou k dispozici.",
+      "saved": "Uloženo."
+    }
   }
 }

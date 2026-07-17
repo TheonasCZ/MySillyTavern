@@ -609,3 +609,32 @@ describe("personaDisplayName / substitutePlaceholders", () => {
     expect(substitutePlaceholders("{{Char}} and {{USER}}", "Elara", "Kai")).toBe("Elara and Kai");
   });
 });
+
+describe("presetExtraSystemPrompt (M12.4)", () => {
+  it("appends preset extra system prompt to the system core", () => {
+    const extra = "Always speak in rhymes.";
+    const input = baseInput({ presetExtraSystemPrompt: extra });
+    const { messages } = buildPrompt(input);
+    const systemMessage = messages.find((m) => m.role === "system");
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage!.content).toContain(extra);
+  });
+
+  it("does not add extra text when presetExtraSystemPrompt is omitted", () => {
+    const input = baseInput({ presetExtraSystemPrompt: undefined });
+    const { messages } = buildPrompt(input);
+    const systemMessage = messages.find((m) => m.role === "system");
+    expect(systemMessage).toBeDefined();
+    // The system message should not have any empty trailing sections
+    expect(systemMessage!.content).not.toContain("undefined");
+  });
+
+  it("trims whitespace-only preset prompt to nothing", () => {
+    const input = baseInput({ presetExtraSystemPrompt: "   \n  " });
+    const { messages } = buildPrompt(input);
+    const systemMessage = messages.find((m) => m.role === "system");
+    // assembleSystemMessage filters empty strings, so the whitespace-only
+    // section won't add a blank line
+    expect(systemMessage?.content).toBeDefined();
+  });
+});

@@ -17,6 +17,8 @@ export interface Character {
   avatarPath: string | null;
   cardJson: string | null;
   specVersion: string;
+  /** TTS voice URI for this character (null = global default). */
+  ttsVoice: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,6 +47,7 @@ interface CharacterRow {
   avatar_path: string | null;
   card_json: string | null;
   spec_version: string;
+  tts_voice: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -75,6 +78,7 @@ function toCharacter(row: CharacterRow): Character {
     avatarPath: row.avatar_path,
     cardJson: row.card_json,
     specVersion: row.spec_version,
+    ttsVoice: row.tts_voice,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -156,6 +160,7 @@ export async function createCharacter(
     avatarPath,
     cardJson,
     specVersion: card.specVersion,
+    ttsVoice: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -173,6 +178,7 @@ export interface CharacterUpdate {
   postHistoryInstructions: string;
   creatorNotes: string;
   tags: string[];
+  ttsVoice?: string | null;
 }
 
 export async function updateCharacter(id: string, patch: CharacterUpdate): Promise<void> {
@@ -181,7 +187,7 @@ export async function updateCharacter(id: string, patch: CharacterUpdate): Promi
       name = $2, description = $3, personality = $4, scenario = $5,
       first_mes = $6, mes_example = $7, alternate_greetings = $8,
       system_prompt = $9, post_history_instructions = $10, creator_notes = $11,
-      tags = $12, updated_at = $13
+      tags = $12, tts_voice = $13, updated_at = $14
      WHERE id = $1`,
     [
       id,
@@ -196,6 +202,7 @@ export async function updateCharacter(id: string, patch: CharacterUpdate): Promi
       patch.postHistoryInstructions,
       patch.creatorNotes,
       JSON.stringify(patch.tags),
+      patch.ttsVoice ?? null,
       nowIso(),
     ],
   );

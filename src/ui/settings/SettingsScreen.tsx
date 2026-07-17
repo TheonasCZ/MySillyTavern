@@ -7,6 +7,8 @@ import { BackupPanel } from "./BackupPanel";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { MemorySettingsPanel } from "./MemorySettingsPanel";
+import { PresetsPanel } from "./PresetsPanel";
+import { TtsPanel } from "./TtsPanel";
 import { UsagePanel } from "./UsagePanel";
 
 export function SettingsScreen() {
@@ -17,8 +19,10 @@ export function SettingsScreen() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
       <h1 className="font-[var(--font-display)] text-2xl">{t("title")}</h1>
       <ConnectionsPanel />
+      <PresetsPanel />
       <MemorySettingsPanel />
       <AppearancePanel />
+      <TtsPanel />
       <BackupPanel />
       <UsagePanel />
       <DiagnosticsPanel />

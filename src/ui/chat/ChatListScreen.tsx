@@ -12,6 +12,7 @@ import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
+import { usePresetsStore } from "../../stores/presetsStore";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -30,7 +31,7 @@ function formatDate(iso: string): string {
 export function ChatListScreen() {
   const { t } = useTranslation(["chat", "common"]);
   const navigate = useNavigate();
-  const { chats, loaded, load, create, rename, setConnection, setPersona, remove } = useChatListStore();
+  const { chats, loaded, load, create, rename, setConnection, setPersona, setPreset, remove } = useChatListStore();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const {
     characters,
@@ -38,6 +39,7 @@ export function ChatListScreen() {
     load: loadCharacters,
   } = useCharactersStore();
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
+  const { presets, loaded: presetsLoaded, load: loadPresets } = usePresetsStore();
 
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -87,6 +89,10 @@ export function ChatListScreen() {
   useEffect(() => {
     if (!personasLoaded) void loadPersonas();
   }, [personasLoaded, loadPersonas]);
+
+  useEffect(() => {
+    if (!presetsLoaded) void loadPresets();
+  }, [presetsLoaded, loadPresets]);
 
   useEffect(() => {
     if (connections.length > 0 && !newConnectionId) {
@@ -486,6 +492,20 @@ export function ChatListScreen() {
               >
                 <option value="">{t("newChat.noPersona")}</option>
                 {personas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
+                style={inputStyle}
+                value={chat.presetId ?? ""}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => void setPreset(chat.id, e.target.value || null)}
+              >
+                <option value="">{t("presets.noPreset", { ns: "settings" }) ?? "No preset"}</option>
+                {presets.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

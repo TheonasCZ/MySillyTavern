@@ -146,6 +146,9 @@ export interface PromptBuilderInput {
    * When `groupMembers` are present, the mood is appended to each member's
    * description line (e.g. `- Eliška (nálada: vyděšená): ...`). */
   moodFacts?: Array<{ subject: string; fact: string }>;
+  /** Optional extra system prompt from a prompt preset (M12.4) — appended
+   * to the system core message before the lore/facts/summary sections. */
+  presetExtraSystemPrompt?: string;
 }
 
 export interface PromptReport {
@@ -534,8 +537,10 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const summarySection = buildSummarySection(summaryText);
     const memoriesSection = buildMemoriesSection(memories);
 
+    const presetSection = input.presetExtraSystemPrompt?.trim();
     const systemText = assembleSystemMessage([
       systemCore,
+      presetSection || "",
       mesExampleSection,
       factsSection,
       loreSection,

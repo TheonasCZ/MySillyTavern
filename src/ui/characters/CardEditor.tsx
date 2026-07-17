@@ -19,6 +19,47 @@ const inputStyle = {
   color: "var(--color-text)",
 } as const;
 
+function VoiceSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (voiceUri: string) => void;
+}) {
+  const { t } = useTranslation("characters");
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const populate = () => setVoices(synth.getVoices());
+    populate();
+    synth.addEventListener("voiceschanged", populate);
+    return () => synth.removeEventListener("voiceschanged", populate);
+  }, []);
+
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="flex items-center gap-1">
+        {t("editor.fields.ttsVoice")}
+      </span>
+      <select
+        className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+        style={inputStyle}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">{t("editor.ttsVoiceDefault")}</option>
+        {voices.map((v) => (
+          <option key={v.voiceURI} value={v.voiceURI}>
+            {v.name} ({v.lang})
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function toDraft(character: Character): CharacterUpdate {
   return {
     name: character.name,
@@ -32,6 +73,7 @@ function toDraft(character: Character): CharacterUpdate {
     postHistoryInstructions: character.postHistoryInstructions,
     creatorNotes: character.creatorNotes,
     tags: character.tags,
+    ttsVoice: character.ttsVoice,
   };
 }
 
@@ -400,6 +442,12 @@ export function CardEditor() {
           }
         />
       </label>
+
+      {/* TTS voice selector */}
+      <VoiceSelector
+        value={draft.ttsVoice ?? ""}
+        onChange={(v) => patch({ ttsVoice: v || null })}
+      />
     </div>
   );
 }

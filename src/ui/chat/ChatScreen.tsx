@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -20,6 +20,7 @@ import { usePersonasStore } from "../../stores/personasStore";
 import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
+import { useTts } from "../../chat/useTts";
 import {
   calendarFromJSON,
   type CalendarDate,
@@ -100,6 +101,69 @@ export function ChatScreen() {
   const [exportIllustrations, setExportIllustrations] = useState(true);
   const [exportJobId, setExportJobId] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
+
+  // TTS
+  const tts = useTts();
+  const [ttsSpeakingId, setTtsSpeakingId] = useState<string | null>(null);
+  const lastAssistantIdRef = useRef<string | null>(null);
+  const ttsInitializedRef = useRef(false);
+
+  // Auto-read: when a new assistant message arrives and autoRead is on,
+  // speak it automatically.
+  useEffect(() => {
+    if (!tts.autoRead) return;
+    // Find the last assistant message
+    const lastAsst = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!lastAsst) return;
+    // Skip the initial load — only auto-speak genuinely new messages
+    if (!ttsInitializedRef.current) {
+      lastAssistantIdRef.current = lastAsst.id;
+      ttsInitializedRef.current = true;
+      return;
+    }
+    if (lastAsst.id !== lastAssistantIdRef.current && !streaming) {
+      lastAssistantIdRef.current = lastAsst.id;
+      // Use character-specific voice if available
+      const charVoice = lastAsst.characterId
+        ? characters.find((c) => c.id === lastAsst.characterId)?.ttsVoice ?? undefined
+        : undefined;
+      setTtsSpeakingId(lastAsst.id);
+      tts.speak(lastAsst.content, charVoice);
+    }
+  }, [messages, streaming, tts.autoRead, tts]);
+
+  const handleSpeakMessage = useCallback(
+    (messageId: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      if (!msg) return;
+      if (ttsSpeakingId === messageId && tts.isSpeaking) {
+        tts.stop();
+        setTtsSpeakingId(null);
+      } else {
+        const charVoice = msg.characterId
+          ? characters.find((c) => c.id === msg.characterId)?.ttsVoice ?? undefined
+          : undefined;
+        setTtsSpeakingId(messageId);
+        tts.speak(msg.content, charVoice);
+      }
+    },
+    [messages, tts, ttsSpeakingId, characters],
+  );
+
+  // Clear speaking id when speech ends
+  useEffect(() => {
+    if (!tts.isSpeaking && ttsSpeakingId) {
+      setTtsSpeakingId(null);
+    }
+  }, [tts.isSpeaking, ttsSpeakingId]);
+
+  // A new stream replaces whatever was being read aloud
+  useEffect(() => {
+    if (streaming && ttsSpeakingId) {
+      tts.stop();
+      setTtsSpeakingId(null);
+    }
+  }, [streaming, ttsSpeakingId, tts]);
 
   const handleDiceRoll = useCallback(
     async (expression: string) => {
@@ -534,6 +598,8 @@ export function ChatScreen() {
               streamingSpeakerId={streamingSpeakerId}
               isGroup={isGroup}
               onBranch={(messageId) => void handleBranch(messageId)}
+              onSpeakMessage={handleSpeakMessage}
+              speakingMessageId={ttsSpeakingId}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
               onLoadOlder={() => void loadOlderMessages()}

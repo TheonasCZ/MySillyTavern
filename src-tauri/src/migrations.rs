@@ -101,6 +101,18 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_016,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "tts: per-character voice mapping",
+            sql: MIGRATION_017,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 18,
+            description: "presets: named prompt presets + per-chat assignment",
+            sql: MIGRATION_018,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -395,4 +407,24 @@ CREATE TABLE export_jobs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+"#;
+
+const MIGRATION_017: &str = r#"ALTER TABLE characters ADD COLUMN tts_voice TEXT;"#;
+
+const MIGRATION_018: &str = r#"
+CREATE TABLE presets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  extra_system_prompt TEXT NOT NULL DEFAULT '',
+  temperature REAL,
+  top_p REAL,
+  frequency_penalty REAL,
+  presence_penalty REAL,
+  max_tokens INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+ALTER TABLE chats ADD COLUMN preset_id TEXT;
 "#;

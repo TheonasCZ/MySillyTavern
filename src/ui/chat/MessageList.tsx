@@ -51,6 +51,10 @@ interface Props {
   /** When set, scrolls to this message and highlights it with a yellow
    * background. Cleared after the scroll completes. */
   scrollToMessageId?: string | null;
+  /** TTS: speak a message by id. */
+  onSpeakMessage?: (messageId: string) => void;
+  /** TTS: which message id is currently being spoken. */
+  speakingMessageId?: string | null;
   onEdit: (messageId: string, content: string) => void;
   onRegenerate: (messageId: string) => void;
   onContinue: (messageId: string) => void;
@@ -74,6 +78,8 @@ export function MessageList({
   streamingSpeakerId = null,
   isGroup = false,
   scrollToMessageId = null,
+  onSpeakMessage,
+  speakingMessageId = null,
   onEdit,
   onRegenerate,
   onContinue,
@@ -338,6 +344,8 @@ export function MessageList({
         authorName={message.role === "user" ? personaName : resolvedAuthor.name}
         showAuthorCaption={isGroup && message.role === "assistant"}
         onBranch={onBranch ? () => onBranch(message.id) : undefined}
+        onSpeak={onSpeakMessage ? () => onSpeakMessage(message.id) : undefined}
+        ttsSpeaking={speakingMessageId === message.id}
         onEdit={(text) => onEdit(message.id, text)}
         onRegenerate={() => onRegenerate(message.id)}
         onContinue={() => onContinue(message.id)}

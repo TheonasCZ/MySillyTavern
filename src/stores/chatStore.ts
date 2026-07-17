@@ -29,6 +29,7 @@ import {
   type Message,
 } from "../db/repositories/messagesRepo";
 import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/personasRepo";
+import { getDefaultPreset, getPreset, type Preset } from "../db/repositories/presetsRepo";
 import { getSetting } from "../db/repositories/settingsRepo";
 import { getSummary } from "../db/repositories/summariesRepo";
 import {
@@ -148,9 +149,22 @@ async function buildApiMessages(
   history: Message[],
   speaker: Character,
   memberCharacters: Character[],
-): Promise<{ messages: ChatMessage[]; report: PromptReport | null }> {
+): Promise<{ messages: ChatMessage[]; report: PromptReport | null; presetParams?: { temperature?: number; topP?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens?: number } }> {
   const isGroup = memberCharacters.length > 1;
   const persona = await resolveChatPersona(chat);
+
+  // Resolve the preset: chat's selected preset first, then the default preset
+  let activePreset: Preset | null = null;
+  try {
+    if (chat.presetId) {
+      activePreset = await getPreset(chat.presetId);
+    }
+    if (!activePreset) {
+      activePreset = await getDefaultPreset();
+    }
+  } catch {
+    // preset lookup failing should not block the prompt build
+  }
 
   let loreEntries: LoreEntryLike[] = [];
   let activatableLore: LoreEntryLike[] = [];
@@ -266,9 +280,18 @@ async function buildApiMessages(
     retrievedMemories,
     groupMembers,
     calendarDateDescription,
+    presetExtraSystemPrompt: activePreset?.extraSystemPrompt || undefined,
   });
 
-  return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report };
+  const presetParams = activePreset ? {
+    temperature: activePreset.temperature ?? undefined,
+    topP: activePreset.topP ?? undefined,
+    frequencyPenalty: activePreset.frequencyPenalty ?? undefined,
+    presencePenalty: activePreset.presencePenalty ?? undefined,
+    maxTokens: activePreset.maxTokens ?? undefined,
+  } : undefined;
+
+  return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report, presetParams };
 }
 
 type Setter = (
@@ -428,6 +451,26 @@ interface ChatState {
 function resolveConnection(connectionId: string | null): ConnectionConfig | null {
   if (!connectionId) return null;
   return useConnectionsStore.getState().connections.find((c) => c.id === connectionId) ?? null;
+}
+
+interface PresetParams {
+  temperature?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  maxTokens?: number;
+}
+
+/** Returns a new ConnectionConfig with preset params overridden where present. */
+function applyPreset(connection: ConnectionConfig, params?: PresetParams): ConnectionConfig {
+  if (!params) return connection;
+  const overridden = { ...connection };
+  if (params.temperature !== undefined) overridden.temperature = params.temperature;
+  if (params.topP !== undefined) overridden.topP = params.topP;
+  if (params.maxTokens != null) overridden.maxTokens = params.maxTokens;
+  // frequencyPenalty and presencePenalty aren't on ConnectionConfig/ConnectionDto
+  // but could be added in the future; for now just temperature/topP/maxTokens.
+  return overridden;
 }
 
 function clearInterrupted(set: Setter, messageId: string) {
@@ -598,13 +641,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMessage], suggestions: null }));
     void touchChat(chatId);
 
-    const { messages: apiMessages, report } = await buildApiMessages(
+    const { messages: apiMessages, report, presetParams } = await buildApiMessages(
       chat,
       [...messages, userMessage],
       speaker,
       memberCharacters,
     );
     set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
+
+    const effectiveConnection = applyPreset(connection, presetParams);
 
     const finalize = async (text: string, interrupted: boolean) => {
       const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
@@ -641,18 +686,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ error: "no-connection", errorRetryable: false, retry: null });
           return;
         }
-        const { messages: retryApiMessages, report: retryReport } = await buildApiMessages(
+        const { messages: retryApiMessages, report: retryReport, presetParams: retryPresetParams } = await buildApiMessages(
           freshChat,
           get().messages,
           speaker,
           get().memberCharacters,
         );
+        const retryConn = applyPreset(freshConnection, retryPresetParams);
         set({ lastPromptReport: retryReport, streamingSpeakerId: speaker.id });
-        startStream(freshConnection, retryApiMessages, set, get, finalize, retry);
+        startStream(retryConn, retryApiMessages, set, get, finalize, retry);
       })();
     };
 
-    startStream(connection, apiMessages, set, get, finalize, retry);
+    startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
   },
 
   /** "Reply now" for a group chat — the picked member reacts without a new
@@ -679,15 +725,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!speaker) return;
 
     const buildTriggerMessages = async (freshChat: Chat, history: Message[], members: Character[]) => {
-      const { messages: baseApiMessages, report } = await buildApiMessages(freshChat, history, speaker, members);
+      const { messages: baseApiMessages, report, presetParams: pp } = await buildApiMessages(freshChat, history, speaker, members);
       const apiMessages: ChatMessage[] = [
         ...baseApiMessages,
         { role: "user", content: `[Pokračuj scénou jako ${speaker.name}.]` },
       ];
-      return { apiMessages, report };
+      return { apiMessages, report, presetParams: pp };
     };
 
-    const { apiMessages, report } = await buildTriggerMessages(chat, messages, memberCharacters);
+    const { apiMessages, report, presetParams } = await buildTriggerMessages(chat, messages, memberCharacters);
+    const effectiveConnection = applyPreset(connection, presetParams);
     set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
 
     const finalize = async (text: string, interrupted: boolean) => {
@@ -713,17 +760,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ error: "no-connection", errorRetryable: false, retry: null });
           return;
         }
-        const { apiMessages: retryApiMessages, report: retryReport } = await buildTriggerMessages(
+        const { apiMessages: retryApiMessages, report: retryReport, presetParams: retryPresetParams } = await buildTriggerMessages(
           freshChat,
           get().messages,
           get().memberCharacters,
         );
+        const retryConn = applyPreset(freshConnection, retryPresetParams);
         set({ lastPromptReport: retryReport, streamingSpeakerId: speaker.id });
-        startStream(freshConnection, retryApiMessages, set, get, finalize, retry);
+        startStream(retryConn, retryApiMessages, set, get, finalize, retry);
       })();
     };
 
-    startStream(connection, apiMessages, set, get, finalize, retry);
+    startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
   },
 
   regenerate: async (messageId) => {
@@ -750,12 +798,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const speaker = await resolveSpeaker(chat, memberCharacters, target.characterId);
     if (!speaker) return;
 
-    const { messages: apiMessages, report } = await buildApiMessages(
+    const { messages: apiMessages, report, presetParams } = await buildApiMessages(
       chat,
       messages.slice(0, idx),
       speaker,
       memberCharacters,
     );
+    const effectiveConnection = applyPreset(connection, presetParams);
     set({ lastPromptReport: report, streamingMessageId: messageId, streamingSpeakerId: speaker.id });
     clearInterrupted(set, messageId);
 
@@ -778,10 +827,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const retry = () => {
       set({ streamingMessageId: messageId, streamingSpeakerId: speaker.id });
-      startStream(connection, apiMessages, set, get, finalize, retry);
+      startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
     };
 
-    startStream(connection, apiMessages, set, get, finalize, retry);
+    startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
   },
 
   /** Resumes an interrupted assistant message: sends the history up to and
@@ -809,7 +858,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const isGroup = memberCharacters.length > 1;
 
     const priorHistory = messages.slice(0, idx);
-    const { messages: baseApiMessages } = await buildApiMessages(chat, priorHistory, speaker, memberCharacters);
+    const { messages: baseApiMessages, presetParams } = await buildApiMessages(chat, priorHistory, speaker, memberCharacters);
+    const effectiveConnection = applyPreset(connection, presetParams);
     const continueInstruction = isGroup
       ? `[Pokračuj přesně tam, kde jsi přestal/a jako ${speaker.name}. Neopakuj už napsaný text, jen naváž další slova.]`
       : "[Pokračuj přesně tam, kde jsi přestal/a. Neopakuj už napsaný text, jen naváž další slova.]";
@@ -846,10 +896,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const retry = () => {
       set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
-      startStream(connection, apiMessages, set, get, finalize, retry);
+      startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
     };
 
-    startStream(connection, apiMessages, set, get, finalize, retry);
+    startStream(effectiveConnection, apiMessages, set, get, finalize, retry);
   },
 
   editMessage: async (messageId, content) => {
@@ -920,7 +970,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const speaker = await resolveSpeaker(chat, memberCharacters, selectedSpeakerId);
       if (!speaker) return;
-      const { messages: baseApiMessages } = await buildApiMessages(chat, messages, speaker, memberCharacters);
+      const { messages: baseApiMessages, presetParams } = await buildApiMessages(chat, messages, speaker, memberCharacters);
+      const effectiveConnection = applyPreset(connection, presetParams);
       const apiMessages: ChatMessage[] = [
         ...baseApiMessages,
         {
@@ -929,7 +980,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             "[Instrukce mimo příběh: Navrhni přesně 3 stručné možnosti, jak může hráčova postava v této situaci reagovat nebo co udělat dál. Každá možnost max 1–2 věty, psaná v první osobě za hráčovu postavu. Využij známá fakta a předměty z příběhu. Odpověz POUZE JSON polem tří řetězců, bez dalšího textu.]",
         },
       ];
-      const reply = await chatComplete(connection, apiMessages);
+      const reply = await chatComplete(effectiveConnection, apiMessages);
       const inputTokens = apiMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
       void logUsage("suggest", connection.id, inputTokens, estimateTokens(reply)).catch(() => {});
       const suggestions = parseSuggestions(reply);

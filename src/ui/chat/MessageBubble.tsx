@@ -40,6 +40,10 @@ interface Props {
   actionsDisabled?: boolean;
   /** Shown when set and not streaming — forks the story at this message. */
   onBranch?: () => void;
+  /** Speak this message via TTS (assistant messages only). */
+  onSpeak?: () => void;
+  /** Whether this specific message is currently being spoken. */
+  ttsSpeaking?: boolean;
   onEdit: (content: string) => void;
   onRegenerate: () => void;
   onContinue?: () => void;
@@ -85,6 +89,8 @@ export function MessageBubble({
   showAuthorCaption = false,
   actionsDisabled = false,
   onBranch,
+  onSpeak,
+  ttsSpeaking = false,
   onEdit,
   onRegenerate,
   onContinue,
@@ -181,6 +187,17 @@ export function MessageBubble({
 
         {!editing && !isStreaming && (
           <div className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-faint)" }}>
+            {!isUser && onSpeak && (
+              <button
+                type="button"
+                onClick={onSpeak}
+                disabled={actionsDisabled}
+                className="hover:opacity-80 disabled:opacity-30"
+                title={ttsSpeaking ? (t("room.ttsStop") ?? "Stop") : (t("room.ttsPlay") ?? "Read aloud")}
+              >
+                {ttsSpeaking ? "⏹" : "▶"}
+              </button>
+            )}
             {canEdit && (
               <button
                 type="button"

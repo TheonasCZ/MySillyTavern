@@ -49,6 +49,7 @@
     "list": {
       "updatedAt": "Last updated {{date}}",
       "noConnection": "No connection",
+      "saved": "Saved.",
       "deleteConfirm": "Delete this chat and all its history?",
       "searchPlaceholder": "Search across all chats…",
       "searchResults": "Search results ({{count}})",
@@ -90,7 +91,9 @@
       "branchHint": "Creates a copy of the chat ending at this message — the story can go a different way from here, the original chat stays untouched.",
       "branchConfirm": "Create a story branch from this message? The original chat stays unchanged.",
       "branchSuffix": "(branch)",
-      "groupMembers": "Group members"
+      "groupMembers": "Group members",
+      "ttsPlay": "Read aloud",
+      "ttsStop": "Stop"
     },
     "group": {
       "title": "Group members",
@@ -141,19 +144,21 @@
       "addGreeting": "Add variant",
       "tagsPlaceholder": "tag1, tag2, tag3",
       "systemPromptHint": "Leave empty to use the default RP instruction.",
-      "fields": {
-        "name": "Name",
-        "description": "Description",
-        "personality": "Personality",
-        "scenario": "Scenario",
-        "firstMes": "First message",
-        "alternateGreetings": "Alternate greetings",
-        "mesExample": "Example messages",
-        "systemPrompt": "System prompt",
-        "postHistoryInstructions": "Post-history instructions",
-        "creatorNotes": "Creator notes",
-        "tags": "Tags (comma-separated)"
-      },
+        "fields": {
+          "name": "Name",
+          "description": "Description",
+          "personality": "Personality",
+          "scenario": "Scenario",
+          "firstMes": "First message",
+          "alternateGreetings": "Alternate greetings",
+          "mesExample": "Example messages",
+          "systemPrompt": "System prompt",
+          "postHistoryInstructions": "Post-history instructions",
+          "creatorNotes": "Creator notes",
+          "tags": "Tags (comma-separated)",
+          "ttsVoice": "TTS voice"
+        },
+        "ttsVoiceDefault": "Default voice",
       "help": {
         "name": "The character's name as the AI uses it when writing their lines and as shown in the chat.",
         "description": "The character's core description — appearance, background, key traits. Sent to the AI in every prompt, so keep it concise and to the point.",
@@ -276,7 +281,8 @@
       "facts": "Facts",
       "summary": "Summary",
       "prompt": "Prompt",
-      "search": "Search"
+      "search": "Search",
+      "chronicle": "Chronicle"
     },
     "extractionConnection": {
       "label": "Extraction connection",
@@ -353,6 +359,12 @@
       "backfilling": "Processing…",
       "backfilled": "Created {{count}} new scenes.",
       "backfillHint": "One-off indexing of an old chat's history so it becomes semantically searchable."
+    },
+    "chronicle": {
+      "empty": "No chronicle entries yet. Send some messages or add facts to populate the timeline.",
+      "messagePrefix": "Message",
+      "factPrefix": "Fact",
+      "jumpToMessage": "Jump to message"
     }
   },
   "settings": {
@@ -362,6 +374,7 @@
       "memory": "Memory",
       "illustrations": "Illustrations",
       "appearance": "Appearance",
+      "sound": "Sound",
       "backup": "Data & backup",
       "usage": "Usage",
       "diagnostics": "Diagnostics"
@@ -515,8 +528,39 @@
       "connectionHelp": "Gemini connection used for image generation. If none selected, the default chat connection is used.",
       "saved": "Saved."
     },
+    "presets": {
+      "title": "Prompt presets",
+      "subtitle": "Named system-prompt additions + parameter overrides you can assign per chat.",
+      "empty": "No presets yet. Create your first one.",
+      "newButton": "New preset",
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "e.g. High creativity",
+        "extraSystemPrompt": "Extra system prompt",
+        "extraSystemPromptPlaceholder": "Additional instructions appended to the system prompt…",
+        "temperature": "Temperature",
+        "topP": "Top P",
+        "frequencyPenalty": "Frequency penalty",
+        "presencePenalty": "Presence penalty",
+        "maxTokens": "Max tokens",
+        "isDefault": "Default preset"
+      },
+      "deleteConfirm": "Delete this preset?",
+      "noPreset": "No preset"
+    },
     "resetButton": "Reset to defaults",
     "resetConfirm": "Reset all settings to defaults?",
-    "resetDone": "Settings reset!"
+    "resetDone": "Settings reset!",
+    "tts": {
+      "title": "Sound",
+      "subtitle": "Text-to-speech settings for reading replies aloud.",
+      "autoRead": "Auto-read aloud",
+      "autoReadHelp": "When enabled, new AI replies are read aloud automatically.",
+      "voice": "Voice",
+      "voiceDefault": "System default voice",
+      "speed": "Speed",
+      "noVoices": "No voices available.",
+      "saved": "Saved."
+    }
   }
 }
