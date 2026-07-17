@@ -23,7 +23,7 @@ jobs:
         run: npm install
 
       - name: Build Tauri (MSI + NSIS installer)
-        run: npm run tauri build
+        run: npm run tauri build -- --no-default-features
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
