@@ -491,9 +491,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   closeChat: async () => {
+    const closingChatId = get().chatId;
     if (get().streaming) {
       await get().stop();
     }
+    // Guard (M11 bug sweep): `stop()` awaits abort + finalize, during which
+    // ChatScreen's mount effect for a *new* chat may already have called
+    // `openChat` (its unmount cleanup and the next mount's effect run back
+    // to back, not sequentially awaited). If that happened, `chatId` here
+    // no longer belongs to us — clearing the store now would wipe out the
+    // chat that's already open instead of the one we're actually closing.
+    if (get().chatId !== closingChatId) return;
     set({
       chatId: null,
       chat: null,
@@ -567,8 +575,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       if (finalText) {
         const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
-        set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
-        if (interrupted) markInterrupted(set, assistantMessage.id);
+        // Guard (M11 bug sweep): the user may have switched/closed the chat
+        // while this stream was finalizing (abort + persist is async) — only
+        // splice the new message into `messages`/`selectedSpeakerId` if this
+        // is still the chat that's open, so a stale reply can't land in
+        // whatever chat is now showing. The DB write above is unconditional
+        // (it's addressed by `chatId`, always correct regardless of what's
+        // on screen).
+        if (get().chatId === chatId) {
+          set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
+          if (interrupted) markInterrupted(set, assistantMessage.id);
+        }
         void touchChat(chatId);
         // Fire-and-forget: decides on its own whether extraction/summary is
         // actually due, never throws, never blocks the chat (plan §6.3).
@@ -642,8 +659,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       if (finalText) {
         const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
-        set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
-        if (interrupted) markInterrupted(set, assistantMessage.id);
+        // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
+        if (get().chatId === chatId) {
+          set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
+          if (interrupted) markInterrupted(set, assistantMessage.id);
+        }
         void touchChat(chatId);
         if (!interrupted) scheduleMemoryWork(chatId);
       }
@@ -708,8 +728,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       if (finalText) {
         const updated = await appendSwipe(target, finalText);
-        set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
-        if (interrupted) markInterrupted(set, messageId);
+        // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale;
+        // `messages` here belongs to whatever chat is currently open, so
+        // mapping over it after a chat switch would touch the wrong list.
+        if (get().chatId === chatId) {
+          set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
+          if (interrupted) markInterrupted(set, messageId);
+        }
         void touchChat(chatId);
         if (!interrupted) scheduleMemoryWork(chatId);
       }
@@ -764,16 +789,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const finalize = async (text: string, interrupted: boolean) => {
       const addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       const combined = addition ? `${target.content}${/\s$/.test(target.content) ? "" : " "}${addition}` : target.content;
+      // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
+      const stillCurrentChat = get().chatId === chatId;
       if (addition) {
         const updated = await updateMessageContent(target, combined);
-        set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
+        if (stillCurrentChat) {
+          set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
+        }
       }
-      if (interrupted) {
-        markInterrupted(set, messageId);
-      } else {
-        clearInterrupted(set, messageId);
-        scheduleMemoryWork(chatId);
+      if (stillCurrentChat) {
+        if (interrupted) {
+          markInterrupted(set, messageId);
+        } else {
+          clearInterrupted(set, messageId);
+        }
       }
+      if (!interrupted) scheduleMemoryWork(chatId);
       void touchChat(chatId);
       set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
@@ -807,8 +838,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   stop: async () => {
     const { handle, pendingFinalize, streamingText } = get();
     if (!handle) return;
-    await handle.abort();
+    // Clear immediately — not after `abort()` resolves — so a concurrent
+    // `stop()` call (e.g. ChatScreen's unmount cleanup racing the next
+    // chat's mount effect, both of which check `streaming` and call `stop`)
+    // sees `handle: null` and no-ops instead of double-aborting the same
+    // handle or running `pendingFinalize` twice (M11 bug sweep).
     set({ handle: null, pendingFinalize: null });
+    await handle.abort();
     // No further channel events arrive after an abort, so finalize here —
     // it persists whatever partial text streamed in and clears `streaming`
     // once that's done (keeping the bubble visible until then). An abort
@@ -835,6 +871,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const chat = await getChat(chatId);
     if (!chat) return;
+    // Guard (M11 bug sweep): `getChat` above already yielded once — bail
+    // out if the user has since switched chats, rather than flipping
+    // `suggesting` on for whatever chat is now open.
+    if (get().chatId !== chatId) return;
     const connection = resolveConnection(chat.connectionId);
     if (!connection) {
       set({ error: "no-connection", errorRetryable: false, retry: null });
@@ -856,11 +896,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ];
       const reply = await chatComplete(connection, apiMessages);
       const suggestions = parseSuggestions(reply);
-      set({ suggestions });
+      // Guard (M11 bug sweep): this is a long-running network call — if the
+      // user switched to a different chat while it was in flight, don't
+      // drop these suggestions (or the `suggesting`/error state below) onto
+      // whatever chat is now open.
+      if (get().chatId === chatId) set({ suggestions });
     } catch (err) {
-      set({ error: String(err), errorRetryable: false, retry: null });
+      if (get().chatId === chatId) set({ error: String(err), errorRetryable: false, retry: null });
     } finally {
-      set({ suggesting: false });
+      if (get().chatId === chatId) set({ suggesting: false });
     }
   },
 
