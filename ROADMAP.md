@@ -126,6 +126,74 @@ undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 ---
 
+## M25 — Paměť k dokonalosti (kánon, konzistence, režie)
+
+Čísla M16–M24 přeskočena (kolize s historickými commit labely).
+**Hlavní priorita** — killer feature proti SillyTavern dotáhnout do konce.
+
+**Rozsah:**
+1. **Kánon editor („ústava světa")** — oddělit zamčená kánon fakta od
+   extrahovaných: vlastní záložka v Memory panelu, vizuálně odlišené,
+   extraktor se jich nesmí dotknout (zámky už fungují — jde o UX: snadno
+   povýšit fakt na kánon, hromadně zamknout, šablony typu „hráč JE
+   amatérský mág"). Kánon jde v promptu první a neořezává se nikdy.
+2. **Retrospektivní konzistence check (drift detektor)** — levný LLM job
+   po N zprávách: porovnej poslední scény proti ledgeru/kánonu → seznam
+   rozporů. UI: banner „AI protiřečí faktu X" + tlačítko „vložit korekci"
+   (OOC instrukce do dalšího promptu). Log rozporů do kroniky.
+3. **Režisérský panel** — tempo / tón / žánr / míra násilí jako volby
+   per chat, promítané do system promptu; staví na presetech (M12.4),
+   ale je to živé kolečko vedle chatu, ne statický preset.
+4. **Vyhodnocení retrievalu na reálné kampani** — časový decay skóre,
+   váhy importance × podobnost × stáří; debug pohled „proč byla vybrána
+   tato vzpomínka" v Prompt inspectoru.
+
+**Hotovo když:** drift test z PLAN.md §M5 projde i po 200+ zprávách bez
+ručního zásahu; detektor chytí uměle vloženy rozpor; kánon přežije extrakci.
+
+---
+
+## M26 — Pokročilé prompt nástroje (užitečný výběr ze ST)
+
+Jen to, co dává smysl pro API providery (Gemini/Claude/OpenAI-compat/Ollama)
+— žádné instruct šablony, CFG ani logit bias.
+
+**Rozsah:**
+1. **Plné samplery** — doplnit `top_k`, `min_p`, `frequency_penalty`,
+   `presence_penalty` do ConnectionConfig + Rust adaptérů (poslat jen
+   providerům, kteří je umí; Ollama umí vše, Gemini topK, OpenAI penalty).
+   Presety je už ukládají — `applyPreset` je zatím nepřenáší, dotáhnout.
+2. **Author's note / hloubková injekce** — instrukce vkládaná N zpráv
+   před konec historie (per chat, editovatelná v Memory panelu); klasika
+   ST, výborná na udržení stylu bez přepisování karty.
+3. **Regex transformace výstupu** — uživatelská pravidla find→replace
+   aplikovaná na odpovědi (odstranit oblíbené fráze modelu, opravit
+   formát kurzívy…); per chat i globálně, s náhledem.
+
+**Hotovo když:** preset s min_p projde do Ollamy, author's note viditelně
+drží styl, regex pravidlo umlčí zvolenou frázi.
+
+---
+
+## M27 — World Info navíc (aktivace jako ST, ale chytřejší)
+
+**Rozsah:**
+1. **Rekurzivní aktivace** — aktivovaný záznam může klíči aktivovat další
+   (limit hloubky, ochrana proti cyklu).
+2. **Selektivní logika** — sekundární klíče s AND/NOT (záznam se aktivuje
+   jen když „drak" A ZÁROVEŇ ne „sen").
+3. **Timed effects** — sticky (drží N zpráv po aktivaci), cooldown,
+   delay; stav per chat.
+4. **Vektorová aktivace** — lore záznamy bez klíčového zásahu se mohou
+   aktivovat sémantickou podobností přes existující embedding engine
+   (náš trumf — ST na tohle potřebuje extension). Práh + budget v
+   nastavení, viditelné v Prompt inspectoru.
+
+**Hotovo když:** import ST World Info se selective/sticky poli zachová
+chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem.
+
+---
+
 ## Průběžně (mimo milníky)
 
 - **Ladění paměti** — po delším hraní uživatele vyhodnotit: drží žánr?
@@ -141,8 +209,13 @@ undo/redo, draft autosave, DB query cache, jazykový dropdown).
 
 ## Doporučené pořadí a velikost (zbývající práce)
 
-| Milník | Stav | Poznámka |
-|--------|------|----------|
-| M13 TTS | ✅ hotovo | jen ručně ověřit hlasy ve WebKitGTK |
-| M14 sync | body 2–3 | velký; začít žurnálem a zprávami |
-| M15 mobil fáze B | po M14 | 8–14 dnů dle průzkumu |
+| Milník | Velikost | Poznámka |
+|--------|----------|----------|
+| M25 paměť k dokonalosti | střední | **první** — jádro projektu, staví na hotovém |
+| M26 prompt nástroje | malý–střední | samplery + author's note + regex |
+| M27 World Info navíc | střední | vektorová aktivace = náš trumf |
+| M14 sync (body 2–3) | velký | začít žurnálem a zprávami |
+| M15 mobil fáze B | velký | po M14; 8–14 dnů dle průzkumu |
+
+Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
+providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.
