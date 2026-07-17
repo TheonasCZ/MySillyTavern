@@ -36,7 +36,13 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app_data_dir(app)?.join(DB_FILE_NAME))
+    // tauri-plugin-sql resolves `sqlite:...` relative to app_CONFIG_dir —
+    // on Linux ~/.config/<id>/, NOT ~/.local/share/<id>/ (app_data_dir).
+    // Backing up from app_data_dir silently produced DB-less backups.
+    app.path()
+        .app_config_dir()
+        .map(|d| d.join(DB_FILE_NAME))
+        .map_err(|e| format!("nepodařilo se najít adresář aplikace: {e}"))
 }
 
 fn avatars_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -189,7 +195,12 @@ fn apply_pending_import_inner(app: &AppHandle, pending: &Path) -> Result<(), Str
 
     archive.extract(&staging).map_err(|e| format!("nepodařilo se rozbalit zálohu: {e}"))?;
 
-    let db = data_dir.join(DB_FILE_NAME);
+    // The DB must land where tauri-plugin-sql actually opens it — the app
+    // CONFIG dir (see `db_path`), which differs from data_dir on Linux.
+    let db = db_path(app)?;
+    if let Some(parent) = db.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     remove_if_exists(&db).map_err(|e| e.to_string())?;
     remove_if_exists(&db.with_extension("db-wal")).map_err(|e| e.to_string())?;
     remove_if_exists(&db.with_extension("db-shm")).map_err(|e| e.to_string())?;
@@ -201,7 +212,9 @@ fn apply_pending_import_inner(app: &AppHandle, pending: &Path) -> Result<(), Str
     for sidecar in ["mysillytavern.db-wal", "mysillytavern.db-shm"] {
         let staged = staging.join(sidecar);
         if staged.exists() {
-            let _ = fs::rename(&staged, data_dir.join(sidecar));
+            if let Some(parent) = db.parent() {
+                let _ = fs::rename(&staged, parent.join(sidecar));
+            }
         }
     }
 
