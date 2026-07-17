@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getSetting, setSetting } from "../../db/repositories/settingsRepo";
+import type { TtsVoice } from "../../chat/ttsBackend";
+import { WebSpeechTts } from "../../chat/webSpeechTts";
+import { EdgeTts } from "../../chat/edgeTts";
+import { TtsManager } from "../../chat/ttsManager";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -9,48 +13,92 @@ const inputStyle = {
   color: "var(--color-text)",
 } as const;
 
+// ---------------------------------------------------------------------------
+// Singleton TTS manager — mirrors useTts.ts
+// ---------------------------------------------------------------------------
+let managerInstance: TtsManager | null = null;
+
+function getManager(): TtsManager {
+  if (!managerInstance) {
+    managerInstance = new TtsManager(new WebSpeechTts(), new EdgeTts());
+  }
+  return managerInstance;
+}
+
+// ---------------------------------------------------------------------------
 export function TtsPanel() {
   const { t } = useTranslation("settings");
+  const manager = getManager();
+
   const [autoRead, setAutoRead] = useState(false);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState("");
   const [speed, setSpeed] = useState("1.0");
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [pitch, setPitch] = useState("0");
+  const [backend, setBackend] = useState("0");
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [saved, setSaved] = useState(false);
 
+  // Load persisted settings
   useEffect(() => {
     void (async () => {
-      const [auto, voice, spd] = await Promise.all([
+      const [auto, voice, spd, ptch, bknd] = await Promise.all([
         getSetting("tts_auto"),
         getSetting("tts_voice"),
         getSetting("tts_speed"),
+        getSetting("tts_pitch"),
+        getSetting("tts_backend"),
       ]);
       if (auto) setAutoRead(auto === "1");
       if (voice) setSelectedVoiceUri(voice);
       if (spd) setSpeed(spd);
+      if (ptch) setPitch(ptch);
+      if (bknd) setBackend(bknd);
     })();
   }, []);
 
+  // Populate voices from all backends
   useEffect(() => {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    const populate = () => setVoices(synth.getVoices());
-    populate();
-    synth.addEventListener("voiceschanged", populate);
-    return () => synth.removeEventListener("voiceschanged", populate);
-  }, []);
+    let cancelled = false;
+    void (async () => {
+      const list = await manager.listVoices();
+      if (!cancelled) setVoices(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [backend, manager]);
 
-  const handleSave = async () => {
+  // Sync backend to manager
+  useEffect(() => {
+    manager.setPreferredIndex(Number(backend) || 0);
+  }, [backend, manager]);
+
+  const handleSave = useCallback(async () => {
     const speedNum = Number(speed);
-    const clamped = Math.max(0.5, Math.min(2.0, Number.isFinite(speedNum) ? speedNum : 1.0));
-    setSpeed(String(clamped));
+    const clampedSpeed = Math.max(0.5, Math.min(2.0, Number.isFinite(speedNum) ? speedNum : 1.0));
+    setSpeed(String(clampedSpeed));
+
+    const pitchNum = Number(pitch);
+    const clampedPitch = Math.max(-20, Math.min(20, Number.isFinite(pitchNum) ? pitchNum : 0));
+    setPitch(String(clampedPitch));
+
+    const backendNum = Number(backend) || 0;
+    setBackend(String(backendNum));
+
     await Promise.all([
       setSetting("tts_auto", autoRead ? "1" : "0"),
       setSetting("tts_voice", selectedVoiceUri),
-      setSetting("tts_speed", String(clamped)),
+      setSetting("tts_speed", String(clampedSpeed)),
+      setSetting("tts_pitch", String(clampedPitch)),
+      setSetting("tts_backend", String(backendNum)),
     ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
+  }, [autoRead, selectedVoiceUri, speed, pitch, backend]);
+
+  // Group voices by backend for the dropdown
+  const webSpeechVoices = voices.filter((v) => v.backend === "web-speech");
+  const edgeVoices = voices.filter((v) => v.backend === "edge-tts");
 
   return (
     <section
@@ -77,6 +125,25 @@ export function TtsPanel() {
           </span>
         </label>
 
+        {/* Backend selector */}
+        <label className="flex flex-col gap-1 text-sm">
+          <span>{t("tts.backend")}</span>
+          <select
+            className="w-72 rounded-[var(--radius-sm)] border px-2 py-1.5"
+            style={inputStyle}
+            value={backend}
+            onChange={(e) => setBackend(e.target.value)}
+          >
+            <option value="0">{t("tts.backendEdge")}</option>
+            <option value="1">{t("tts.backendWebSpeech")}</option>
+          </select>
+          <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+            {backend === "0"
+              ? t("tts.backendEdgeHelp", "Online — higher quality, needs internet. Falls back to Web Speech on error.")
+              : t("tts.backendWebSpeechHelp", "Offline — always works, uses system voices.")}
+          </span>
+        </label>
+
         {/* Voice selector */}
         <label className="flex flex-col gap-1 text-sm">
           <span>{t("tts.voice")}</span>
@@ -92,11 +159,24 @@ export function TtsPanel() {
               onChange={(e) => setSelectedVoiceUri(e.target.value)}
             >
               <option value="">{t("tts.voiceDefault")}</option>
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
+              {edgeVoices.length > 0 && (
+                <optgroup label={t("tts.backendEdge")}>
+                  {edgeVoices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {webSpeechVoices.length > 0 && (
+                <optgroup label={t("tts.backendWebSpeech")}>
+                  {webSpeechVoices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           )}
         </label>
@@ -113,6 +193,23 @@ export function TtsPanel() {
             onChange={(e) => setSpeed(e.target.value)}
             className="w-56"
           />
+        </label>
+
+        {/* Pitch slider */}
+        <label className="flex flex-col gap-1 text-sm">
+          <span>{t("tts.pitch")}: {pitch} Hz</span>
+          <input
+            type="range"
+            min="-20"
+            max="20"
+            step="1"
+            value={pitch}
+            onChange={(e) => setPitch(e.target.value)}
+            className="w-56"
+          />
+          <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+            {t("tts.pitchHelp")}
+          </span>
         </label>
       </div>
 

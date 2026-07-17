@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openPath, revealItemInDir } from "../../platform";
 
 // Diagnostics section (roadmap M11 §3): surfaces the error log path
 // (src/logging.ts writes here via the Rust `append_log` command) and

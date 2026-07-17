@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityWrite } from "../syncJournal";
 
 export type QuestStatus = "active" | "completed" | "failed";
 
@@ -75,7 +76,7 @@ export async function createQuest(input: CreateQuestInput): Promise<Quest> {
      VALUES ($1, $2, $3, $4, 'active', $5, $5)`,
     [id, input.chatId, input.name, input.description ?? "", now],
   );
-  return {
+  const quest: Quest = {
     id,
     chatId: input.chatId,
     name: input.name,
@@ -84,6 +85,8 @@ export async function createQuest(input: CreateQuestInput): Promise<Quest> {
     createdAt: now,
     updatedAt: now,
   };
+  journalEntityWrite("quest", quest as unknown as Record<string, unknown>);
+  return quest;
 }
 
 /** Update a quest's status (active / completed / failed). */
@@ -91,10 +94,12 @@ export async function updateQuestStatus(
   id: string,
   status: QuestStatus,
 ): Promise<void> {
+  const now = nowIso();
   await execute(
     "UPDATE quests SET status = $2, updated_at = $3 WHERE id = $1",
-    [id, status, nowIso()],
+    [id, status, now],
   );
+  journalEntityWrite("quest", { id, status, updated_at: now });
 }
 
 /** Append a progress note to the quest description. */
@@ -110,4 +115,5 @@ export async function addQuestNote(id: string, note: string): Promise<void> {
      WHERE id = $1`,
     [id, note, now],
   );
+  journalEntityWrite("quest", { id, _note: note, updated_at: now });
 }

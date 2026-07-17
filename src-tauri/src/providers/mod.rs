@@ -38,7 +38,11 @@ pub struct ConnectionDto {
     pub model: String,
     pub temperature: f32,
     pub top_p: f32,
-    pub max_tokens: u32,
+    #[serde(default)] pub top_k: Option<f32>,
+    #[serde(default)] pub min_p: Option<f32>,
+    #[serde(default)] pub frequency_penalty: Option<f32>,
+    #[serde(default)] pub presence_penalty: Option<f32>,
+    pub max_tokens: i32,
 }
 
 #[derive(Debug, thiserror::Error)]

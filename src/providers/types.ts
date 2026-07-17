@@ -18,6 +18,10 @@ export interface ConnectionConfig {
   model: string;
   temperature: number;
   topP: number;
+  topK?: number;
+  minP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   maxTokens: number;
   contextBudget: number;
   createdAt: string;

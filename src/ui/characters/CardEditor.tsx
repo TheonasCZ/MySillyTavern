@@ -12,12 +12,25 @@ import {
 import { useCharactersStore } from "../../stores/charactersStore";
 import { FieldHelp } from "../common/FieldHelp";
 import { avatarSrc } from "./avatarSrc";
+import type { TtsVoice } from "../../chat/ttsBackend";
+import { WebSpeechTts } from "../../chat/webSpeechTts";
+import { EdgeTts } from "../../chat/edgeTts";
+import { TtsManager } from "../../chat/ttsManager";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
   borderColor: "var(--color-border-strong)",
   color: "var(--color-text)",
 } as const;
+
+// Singleton manager for voice listing (lightweight — just for getVoices)
+let voiceManagerInstance: TtsManager | null = null;
+function getVoiceManager(): TtsManager {
+  if (!voiceManagerInstance) {
+    voiceManagerInstance = new TtsManager(new WebSpeechTts(), new EdgeTts());
+  }
+  return voiceManagerInstance;
+}
 
 function VoiceSelector({
   value,
@@ -27,15 +40,17 @@ function VoiceSelector({
   onChange: (voiceUri: string) => void;
 }) {
   const { t } = useTranslation("characters");
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
 
   useEffect(() => {
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    const populate = () => setVoices(synth.getVoices());
-    populate();
-    synth.addEventListener("voiceschanged", populate);
-    return () => synth.removeEventListener("voiceschanged", populate);
+    let cancelled = false;
+    void (async () => {
+      const list = await getVoiceManager().listVoices();
+      if (!cancelled) setVoices(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -51,7 +66,7 @@ function VoiceSelector({
       >
         <option value="">{t("editor.ttsVoiceDefault")}</option>
         {voices.map((v) => (
-          <option key={v.voiceURI} value={v.voiceURI}>
+          <option key={v.id} value={v.id}>
             {v.name} ({v.lang})
           </option>
         ))}

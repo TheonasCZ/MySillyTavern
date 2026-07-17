@@ -51,6 +51,34 @@ export function ChatInput({
   const [historyIndex, setHistoryIndex] = useState(-1);
   const draftBeforeHistoryRef = useRef("");
 
+  // --- Android soft keyboard / viewport handling ---
+  // On mobile, the soft keyboard pushes the visual viewport up. We adjust
+  // the input bar's bottom padding so it stays above the keyboard.
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+
+    const handleViewportResize = () => {
+      const vv = window.visualViewport!;
+      const keyboardHeight = window.innerHeight - vv.height;
+      // Apply the keyboard offset as padding-bottom on the root scroll container
+      // so content isn't hidden behind the keyboard.
+      const root = document.getElementById("root");
+      if (root) {
+        root.style.paddingBottom = `${keyboardHeight}px`;
+      }
+    };
+
+    window.visualViewport.addEventListener("resize", handleViewportResize);
+    window.visualViewport.addEventListener("scroll", handleViewportResize);
+
+    return () => {
+      window.visualViewport!.removeEventListener("resize", handleViewportResize);
+      window.visualViewport!.removeEventListener("scroll", handleViewportResize);
+      const root = document.getElementById("root");
+      if (root) root.style.paddingBottom = "";
+    };
+  }, []);
+
   // Auto-save draft — restore on mount, save on change
   const draftKey = "chat_draft";
   useEffect(() => {

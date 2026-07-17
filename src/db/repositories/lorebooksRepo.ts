@@ -1,10 +1,13 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 import type { CardBookV2 } from "../../cards/cardTypes";
 import type { LoreEntryLike } from "../../lorebooks/activation";
 import {
   parseWorldInfoJson,
   stringifyWorldInfo,
   type LoreEntryFields,
+  type SelectiveKey,
+  type TimedEffect,
 } from "../../lorebooks/worldInfoImport";
 
 export interface Lorebook {
@@ -50,6 +53,12 @@ interface LoreEntryRow {
   case_sensitive: number;
   enabled: number;
   created_at: string;
+  recursive_activation: number;
+  activation_depth: number;
+  selective_keys: string;
+  timed_json: string | null;
+  vector_threshold: number | null;
+  vector_budget: number;
 }
 
 interface LorebookLinkRow {
@@ -78,6 +87,37 @@ function toLorebook(row: LorebookRow): Lorebook {
   };
 }
 
+function parseSelectiveKeys(text: string): SelectiveKey[] {
+  try {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (sk: unknown) =>
+        typeof sk === "object" &&
+        sk !== null &&
+        typeof (sk as SelectiveKey).key === "string" &&
+        ((sk as SelectiveKey).logic === "AND" || (sk as SelectiveKey).logic === "NOT"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function parseTimed(text: string | null): TimedEffect | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const t: TimedEffect = {};
+    if (typeof parsed.sticky === "number" && parsed.sticky > 0) t.sticky = parsed.sticky;
+    if (typeof parsed.cooldown === "number" && parsed.cooldown > 0) t.cooldown = parsed.cooldown;
+    if (typeof parsed.delay === "number" && parsed.delay > 0) t.delay = parsed.delay;
+    return Object.keys(t).length > 0 ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 function toEntry(row: LoreEntryRow): LoreEntry {
   return {
     id: row.id,
@@ -91,6 +131,12 @@ function toEntry(row: LoreEntryRow): LoreEntry {
     caseSensitive: row.case_sensitive === 1,
     enabled: row.enabled === 1,
     createdAt: row.created_at,
+    recursiveActivation: row.recursive_activation === 1,
+    activationDepth: row.activation_depth > 0 ? row.activation_depth : 1,
+    selectiveKeys: parseSelectiveKeys(row.selective_keys),
+    timed: parseTimed(row.timed_json),
+    vectorThreshold: row.vector_threshold,
+    vectorBudget: row.vector_budget > 0 ? row.vector_budget : 2,
   };
 }
 
@@ -113,6 +159,12 @@ function toLoreEntryLike(row: LoreEntryRow): LoreEntryLike {
     alwaysOn: row.always_on === 1,
     caseSensitive: row.case_sensitive === 1,
     enabled: row.enabled === 1,
+    recursiveActivation: row.recursive_activation === 1,
+    activationDepth: row.activation_depth > 0 ? row.activation_depth : 1,
+    selectiveKeys: parseSelectiveKeys(row.selective_keys),
+    timed: parseTimed(row.timed_json),
+    vectorThreshold: row.vector_threshold,
+    vectorBudget: row.vector_budget > 0 ? row.vector_budget : 2,
   };
 }
 
@@ -141,18 +193,26 @@ export async function createLorebook(draft: LorebookDraft): Promise<Lorebook> {
      VALUES ($1, $2, $3, $4, $4)`,
     [id, draft.name, draft.description, now],
   );
-  return { id, name: draft.name, description: draft.description, createdAt: now, updatedAt: now };
+  const lorebook: Lorebook = { id, name: draft.name, description: draft.description, createdAt: now, updatedAt: now };
+  journalEntityWrite("lorebook", lorebook as unknown as Record<string, unknown>);
+  return lorebook;
 }
 
 export async function updateLorebook(id: string, patch: LorebookDraft): Promise<void> {
+  const now = nowIso();
   await execute(
     `UPDATE lorebooks SET name = $2, description = $3, updated_at = $4 WHERE id = $1`,
-    [id, patch.name, patch.description, nowIso()],
+    [id, patch.name, patch.description, now],
   );
+  journalEntityWrite("lorebook", { id, ...patch, updated_at: now });
 }
 
 export async function deleteLorebook(id: string): Promise<void> {
+  const lorebook = await getLorebook(id);
   await execute("DELETE FROM lorebooks WHERE id = $1", [id]);
+  if (lorebook) {
+    journalEntityDelete("lorebook", lorebook as unknown as Record<string, unknown>);
+  }
 }
 
 // ---- Lore entries -----------------------------------------------------
@@ -171,8 +231,11 @@ async function insertEntry(lorebookId: string, fields: LoreEntryFields): Promise
   await execute(
     `INSERT INTO lore_entries
       (id, lorebook_id, keys, secondary_keys, content, comment, priority,
-       always_on, case_sensitive, enabled, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+       always_on, case_sensitive, enabled, created_at,
+       recursive_activation, activation_depth, selective_keys, timed_json,
+       vector_threshold, vector_budget)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+             $12, $13, $14, $15, $16, $17)`,
     [
       id,
       lorebookId,
@@ -185,9 +248,17 @@ async function insertEntry(lorebookId: string, fields: LoreEntryFields): Promise
       fields.caseSensitive ? 1 : 0,
       fields.enabled ? 1 : 0,
       now,
+      fields.recursiveActivation ? 1 : 0,
+      fields.activationDepth > 0 ? fields.activationDepth : 1,
+      JSON.stringify(fields.selectiveKeys),
+      fields.timed ? JSON.stringify(fields.timed) : null,
+      fields.vectorThreshold,
+      fields.vectorBudget > 0 ? fields.vectorBudget : 2,
     ],
   );
-  return { id, lorebookId, createdAt: now, ...fields };
+  const entry: LoreEntry = { id, lorebookId, createdAt: now, ...fields };
+  journalEntityWrite("lorebook", { ...entry, _entry_type: "lore_entry" } as unknown as Record<string, unknown>);
+  return entry;
 }
 
 export async function createEntry(lorebookId: string, fields: LoreEntryFields): Promise<LoreEntry> {
@@ -198,7 +269,10 @@ export async function updateEntry(id: string, fields: LoreEntryFields): Promise<
   await execute(
     `UPDATE lore_entries SET
       keys = $2, secondary_keys = $3, content = $4, comment = $5, priority = $6,
-      always_on = $7, case_sensitive = $8, enabled = $9
+      always_on = $7, case_sensitive = $8, enabled = $9,
+      recursive_activation = $10, activation_depth = $11,
+      selective_keys = $12, timed_json = $13,
+      vector_threshold = $14, vector_budget = $15
      WHERE id = $1`,
     [
       id,
@@ -210,12 +284,24 @@ export async function updateEntry(id: string, fields: LoreEntryFields): Promise<
       fields.alwaysOn ? 1 : 0,
       fields.caseSensitive ? 1 : 0,
       fields.enabled ? 1 : 0,
+      fields.recursiveActivation ? 1 : 0,
+      fields.activationDepth > 0 ? fields.activationDepth : 1,
+      JSON.stringify(fields.selectiveKeys),
+      fields.timed ? JSON.stringify(fields.timed) : null,
+      fields.vectorThreshold,
+      fields.vectorBudget > 0 ? fields.vectorBudget : 2,
     ],
   );
+  journalEntityWrite("lorebook", { id, ...fields, _entry_type: "lore_entry" } as unknown as Record<string, unknown>);
 }
 
 export async function deleteEntry(id: string): Promise<void> {
+  // Fetch entry before deleting for journal
+  const rows = await query<LoreEntryRow>("SELECT * FROM lore_entries WHERE id = $1", [id]);
   await execute("DELETE FROM lore_entries WHERE id = $1", [id]);
+  if (rows[0]) {
+    journalEntityDelete("lorebook", { id, lorebook_id: rows[0].lorebook_id, _entry_type: "lore_entry" } as unknown as Record<string, unknown>);
+  }
 }
 
 // ---- Links (character / chat / global) --------------------------------
@@ -344,6 +430,12 @@ export async function createLorebookFromCharacterBook(
       alwaysOn: !!entry.constant,
       caseSensitive: !!entry.case_sensitive,
       enabled: entry.enabled !== false,
+      recursiveActivation: false,
+      activationDepth: 1,
+      selectiveKeys: [],
+      timed: null,
+      vectorThreshold: null,
+      vectorBudget: 2,
     });
   }
 

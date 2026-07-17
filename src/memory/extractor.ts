@@ -21,6 +21,7 @@ import { embedTexts } from "../providers/embeddings";
 import { canEmbed } from "./embeddingsEngine";
 import { listEmbeddings } from "../db/repositories/embeddingsRepo";
 import { cosineSimilarity, decodeVector } from "./vector";
+import { EXTRACTION_SYSTEM_PROMPT } from "../prompt/promptTexts";
 
 export type ExtractAction = "upsert" | "remove";
 
@@ -225,43 +226,14 @@ export function mergeExtractedFacts(
 
 // ---- Orchestration (DB + chat_complete) --------------------------------
 
-const EXTRACTION_SYSTEM_PROMPT =
-  "Jsi analytický nástroj, který extrahuje herní fakta z RP konverzace do strukturovaného " +
-  "ledgeru. Dostaneš aktuální snapshot ledgeru (co už je zaznamenáno) a nové zprávy z hry. " +
-  "Vrať POUZE JSON pole objektů ve tvaru " +
-  '{"category": "player"|"world"|"npc"|"event"|"quest", "subject": string, "sub_key": string (volitelné), "fact": string, "action": "upsert"|"remove"}. ' +
-  'Použij "sub_key" pro rozlišení více faktů se stejným subjektem (např. subject "Hráč" + sub_key "meč" pro fakt "má meč" a sub_key "štít" pro fakt "má štít") — ' +
-  "zabraňuje to přepsání prvního faktu druhým. Pokud sub_key nevyplníš, použije se prázdný řetězec. " +
-  "Zaznamenávej jen fakta trvalé povahy (kdo je kdo, co se stalo, kde jsme, cíle úkolů) — " +
-  "ne přechodné popisy nálady nebo dialogu. Použij 'remove' pro fakta, která už neplatí.\n\n" +
-  "Zvláštní pozornost věnuj faktům, které brání driftu žánru a tónu hry — tato hra se hraje " +
-  "klidně stovky zpráv a bez explicitně zaznamenaných hranic se svět i schopnosti hráče " +
-  "postupně a nepozorovaně rozjedou jiným směrem, než jak hra začala:\n" +
-  "- kategorie 'world': pokud konverzace zavádí nebo potvrzuje žánr/tón světa (např. \"klasická " +
-  "fantasy, žádná vyspělá technologie\", \"magie je vzácná a nebezpečná\") nebo původ/pozadí " +
-  "důležité postavy či společníka hráče (odkud pochází, jak byl nalezen/potkán), zaznamenej to " +
-  "jako samostatný fakt subjektu 'Žánr a tón světa' resp. jménem té postavy — a pokud takový " +
-  "fakt v ledgeru už existuje, aktualizuj ho (upsert), místo aby zůstal nezaznamenaný.\n" +
-  "- kategorie 'player': kromě toho, čeho hráč dosáhl nebo co získal, zaznamenávej i JAKÉ MÁ " +
-  "LIMITY a čeho NENÍ schopen — např. \"hráč neumí přímo sesílat magii, jen řemeslně vyrábět " +
-  "artefakty\", \"vylepšení vyžadují dny práce a materiál, nejdou improvizovat okamžitě\". Fakt " +
-  "o limitu zapiš i tehdy, když ho konverzace jen nepřímo potvrzuje tím, že se hráč musí snažit " +
-  "nebo mu něco nejde napoprvé — je to obrana proti tomu, aby hráč postupně a nenápadně získal " +
-  "neomezenou moc.\n" +
-  "V případě rozporu mezi tím, co se v poslední zprávě odehrálo, a dřívějším zamčeným " +
-  "([ZAMČENO]) faktem, dřívější zamčený fakt nikdy nepřepisuj (nepoužívej na něj upsert ani " +
-  "remove) — konverzace se s ním musí srovnat, ne naopak. Fakta označená [KÁNON] jsou ověřená " +
-  "pravidla příběhu: navrhni jejich změnu jen při jasném a nepochybném rozporu, ne kvůli " +
-  "drobné odchylce formulace.\n\n" +
-  "Pokud není nic nového k zaznamenání, vrať prázdné pole []. Žádný text mimo JSON pole.\n\n" +
-  "Detekuj emoční stav postav (sub_key: 'mood', fact: popis nálady, např. 'vyděšená a nedůvěřivá').";
+
 
 function formatSnapshot(facts: LedgerSnapshotFact[], summary?: string): string {
-  if (facts.length === 0) return "(ledger je zatím prázdný)";
+  if (facts.length === 0) return "(ledger is empty)";
   const active = facts.filter((f) => f.status === "active");
   const lines = active.map((f) => {
     const key = f.sub_key ? `${f.category}/${f.subject}/${f.sub_key}` : `${f.category}/${f.subject}`;
-    return `- (${key}) ${f.fact}${f.locked ? " [ZAMČENO]" : f.canon ? " [KÁNON]" : ""}`;
+    return `- (${key}) ${f.fact}${f.locked ? " [LOCKED]" : f.canon ? " [CANON]" : ""}`;
   });
   if (summary) lines.push(summary);
   return lines.join("\n");
@@ -273,7 +245,7 @@ export type TranscriptChatMessage = ChatMessage & { speakerName?: string | null 
 
 function formatNewMessages(messages: TranscriptChatMessage[]): string {
   return messages
-    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč")}: ${m.content}`)
+    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Player")}: ${m.content}`)
     .join("\n");
 }
 
@@ -331,7 +303,7 @@ async function selectRelevantFactsForExtraction(
 
     const summary =
       skippedLabels.length > 0
-        ? `\n(Dalších ${skippedLabels.length} faktů v ledgeru není relevantních k novým zprávám: ${skippedLabels.slice(0, 4).join("; ")}${skippedLabels.length > 4 ? "…" : ""})`
+        ? `\n(Another ${skippedLabels.length} ledger facts are not relevant to the new messages: ${skippedLabels.slice(0, 4).join("; ")}${skippedLabels.length > 4 ? "…" : ""})`
         : "";
 
     return { filtered: relevant, summary };
@@ -351,8 +323,10 @@ export async function runExtraction(
   chatId: string,
   connection: ConnectionConfig,
   newMessages: TranscriptChatMessage[],
+  lang?: string,
 ): Promise<void> {
   try {
+    const language = lang ?? "cs";
     const existingRows = await listAllFacts(chatId);
     const snapshot: LedgerSnapshotFact[] = existingRows.map((f) => ({
       id: f.id,
@@ -373,10 +347,10 @@ export async function runExtraction(
     );
 
     const prompt: ChatMessage[] = [
-      { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+      { role: "system", content: EXTRACTION_SYSTEM_PROMPT(language) },
       {
         role: "user",
-        content: `Snapshot ledgeru:\n${formatSnapshot(filtered, summary)}\n\nNové zprávy:\n${formatNewMessages(newMessages)}`,
+        content: `Ledger snapshot:\n${formatSnapshot(filtered, summary)}\n\nNew messages:\n${formatNewMessages(newMessages)}`,
       },
     ];
 

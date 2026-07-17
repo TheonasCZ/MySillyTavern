@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 import type { NormalizedCard } from "../../cards/cardTypes";
 
 export interface Character {
@@ -144,7 +145,7 @@ export async function createCharacter(
       now,
     ],
   );
-  return {
+  const character: Character = {
     id,
     name: card.name,
     description: card.description,
@@ -164,6 +165,8 @@ export async function createCharacter(
     createdAt: now,
     updatedAt: now,
   };
+  journalEntityWrite("character", character as unknown as Record<string, unknown>);
+  return character;
 }
 
 export interface CharacterUpdate {
@@ -182,6 +185,7 @@ export interface CharacterUpdate {
 }
 
 export async function updateCharacter(id: string, patch: CharacterUpdate): Promise<void> {
+  const now = nowIso();
   await execute(
     `UPDATE characters SET
       name = $2, description = $3, personality = $4, scenario = $5,
@@ -203,9 +207,10 @@ export async function updateCharacter(id: string, patch: CharacterUpdate): Promi
       patch.creatorNotes,
       JSON.stringify(patch.tags),
       patch.ttsVoice ?? null,
-      nowIso(),
+      now,
     ],
   );
+  journalEntityWrite("character", { id, ...patch, updated_at: now });
 }
 
 export async function updateCharacterCardJson(id: string, cardJson: string): Promise<void> {
@@ -225,5 +230,9 @@ export async function updateCharacterAvatar(id: string, avatarPath: string): Pro
 }
 
 export async function deleteCharacter(id: string): Promise<void> {
+  const character = await getCharacter(id);
   await execute("DELETE FROM characters WHERE id = $1", [id]);
+  if (character) {
+    journalEntityDelete("character", character as unknown as Record<string, unknown>);
+  }
 }

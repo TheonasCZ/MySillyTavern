@@ -45,7 +45,9 @@ import { runCanonSeed } from "../memory/canonSeed";
 import { consumeDriftCorrections } from "../memory/driftDetector";
 import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
 import { processGameResponse } from "../chat/inventoryProcessor";
+import { applyRegexRules } from "../chat/regexTransform";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
+import { CONTINUE_AS, CONTINUE_EXACT, CONTINUE_EXACT_SOLO, SUGGEST_PROMPT } from "../prompt/promptTexts";
 import { calendarDescription } from "../memory/calendar";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { chatComplete } from "../providers/chatComplete";
@@ -152,7 +154,7 @@ async function buildApiMessages(
   history: Message[],
   speaker: Character,
   memberCharacters: Character[],
-): Promise<{ messages: ChatMessage[]; report: PromptReport | null; presetParams?: { temperature?: number; topP?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens?: number } }> {
+): Promise<{ messages: ChatMessage[]; report: PromptReport | null; regexRules?: string; presetParams?: { temperature?: number; topP?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens?: number } }> {
   const isGroup = memberCharacters.length > 1;
   const persona = await resolveChatPersona(chat);
 
@@ -179,7 +181,7 @@ async function buildApiMessages(
       getSetting("lore_token_budget"),
     ]);
     activatableLore = activatable;
-    loreEntries = selectActiveEntries(
+    const activationResult = selectActiveEntries(
       activatable,
       history.map((m) => m.content),
       {
@@ -187,6 +189,7 @@ async function buildApiMessages(
         tokenBudget: tokenBudgetSetting ? Number(tokenBudgetSetting) : undefined,
       },
     );
+    loreEntries = activationResult.entries;
   } catch (err) {
     console.warn("lorebook activation failed", err);
   }
@@ -302,19 +305,25 @@ async function buildApiMessages(
     groupMembers,
     calendarDateDescription,
     presetExtraSystemPrompt: activePreset?.extraSystemPrompt || undefined,
+    presetAuthorNote: activePreset?.authorNote || undefined,
     driftCorrections,
     directorNote,
+    gameLanguage: chat.gameLanguage ?? "cs",
   });
 
   const presetParams = activePreset ? {
     temperature: activePreset.temperature ?? undefined,
     topP: activePreset.topP ?? undefined,
+    topK: activePreset.topK ?? undefined,
+    minP: activePreset.minP ?? undefined,
     frequencyPenalty: activePreset.frequencyPenalty ?? undefined,
     presencePenalty: activePreset.presencePenalty ?? undefined,
     maxTokens: activePreset.maxTokens ?? undefined,
   } : undefined;
 
-  return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report, presetParams };
+  const regexRules = activePreset?.regexRules;
+
+  return { messages: isGroup ? mergeConsecutiveRoles(messages) : messages, report, regexRules, presetParams };
 }
 
 type Setter = (
@@ -479,6 +488,8 @@ function resolveConnection(connectionId: string | null): ConnectionConfig | null
 interface PresetParams {
   temperature?: number;
   topP?: number;
+  topK?: number;
+  minP?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
   maxTokens?: number;
@@ -490,9 +501,11 @@ function applyPreset(connection: ConnectionConfig, params?: PresetParams): Conne
   const overridden = { ...connection };
   if (params.temperature !== undefined) overridden.temperature = params.temperature;
   if (params.topP !== undefined) overridden.topP = params.topP;
+  if (params.topK !== undefined) overridden.topK = params.topK;
+  if (params.minP !== undefined) overridden.minP = params.minP;
+  if (params.frequencyPenalty !== undefined) overridden.frequencyPenalty = params.frequencyPenalty;
+  if (params.presencePenalty !== undefined) overridden.presencePenalty = params.presencePenalty;
   if (params.maxTokens != null) overridden.maxTokens = params.maxTokens;
-  // frequencyPenalty and presencePenalty aren't on ConnectionConfig/ConnectionDto
-  // but could be added in the future; for now just temperature/topP/maxTokens.
   return overridden;
 }
 
@@ -595,7 +608,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const seedConnection =
         resolveConnection(chat.extractionConnectionId) ?? resolveConnection(chat.connectionId);
       if (primary && seedConnection) {
-        void runCanonSeed(chat.id, seedConnection, primary);
+        void runCanonSeed(chat.id, seedConnection, primary, chat.gameLanguage);
       }
     }
   },
@@ -676,7 +689,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({ messages: [...s.messages, userMessage], suggestions: null }));
     void touchChat(chatId);
 
-    const { messages: apiMessages, report, presetParams } = await buildApiMessages(
+    const { messages: apiMessages, report, regexRules, presetParams } = await buildApiMessages(
       chat,
       [...messages, userMessage],
       speaker,
@@ -687,7 +700,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const effectiveConnection = applyPreset(connection, presetParams);
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
         const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
         // Guard (M11 bug sweep): the user may have switched/closed the chat
@@ -721,7 +735,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ error: "no-connection", errorRetryable: false, retry: null });
           return;
         }
-        const { messages: retryApiMessages, report: retryReport, presetParams: retryPresetParams } = await buildApiMessages(
+        const { messages: retryApiMessages, report: retryReport, regexRules: _retryRegexRules, presetParams: retryPresetParams } = await buildApiMessages(
           freshChat,
           get().messages,
           speaker,
@@ -760,20 +774,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!speaker) return;
 
     const buildTriggerMessages = async (freshChat: Chat, history: Message[], members: Character[]) => {
-      const { messages: baseApiMessages, report, presetParams: pp } = await buildApiMessages(freshChat, history, speaker, members);
+      const { messages: baseApiMessages, report, regexRules: rr, presetParams: pp } = await buildApiMessages(freshChat, history, speaker, members);
       const apiMessages: ChatMessage[] = [
         ...baseApiMessages,
-        { role: "user", content: `[Pokračuj scénou jako ${speaker.name}.]` },
+        { role: "user", content: CONTINUE_AS(speaker.name) },
       ];
-      return { apiMessages, report, presetParams: pp };
+      return { apiMessages, report, regexRules: rr, presetParams: pp };
     };
 
-    const { apiMessages, report, presetParams } = await buildTriggerMessages(chat, messages, memberCharacters);
+    const { apiMessages, report, regexRules, presetParams } = await buildTriggerMessages(chat, messages, memberCharacters);
     const effectiveConnection = applyPreset(connection, presetParams);
     set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
         const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
         // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
@@ -795,7 +810,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ error: "no-connection", errorRetryable: false, retry: null });
           return;
         }
-        const { apiMessages: retryApiMessages, report: retryReport, presetParams: retryPresetParams } = await buildTriggerMessages(
+        const { apiMessages: retryApiMessages, report: retryReport, regexRules: _retryRegexRules, presetParams: retryPresetParams } = await buildTriggerMessages(
           freshChat,
           get().messages,
           get().memberCharacters,
@@ -833,7 +848,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const speaker = await resolveSpeaker(chat, memberCharacters, target.characterId);
     if (!speaker) return;
 
-    const { messages: apiMessages, report, presetParams } = await buildApiMessages(
+    const { messages: apiMessages, report, regexRules, presetParams } = await buildApiMessages(
       chat,
       messages.slice(0, idx),
       speaker,
@@ -844,7 +859,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     clearInterrupted(set, messageId);
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
         const updated = await appendSwipe(target, finalText);
         // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale;
@@ -893,11 +909,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const isGroup = memberCharacters.length > 1;
 
     const priorHistory = messages.slice(0, idx);
-    const { messages: baseApiMessages, presetParams } = await buildApiMessages(chat, priorHistory, speaker, memberCharacters);
+    const { messages: baseApiMessages, regexRules, presetParams } = await buildApiMessages(chat, priorHistory, speaker, memberCharacters);
     const effectiveConnection = applyPreset(connection, presetParams);
     const continueInstruction = isGroup
-      ? `[Pokračuj přesně tam, kde jsi přestal/a jako ${speaker.name}. Neopakuj už napsaný text, jen naváž další slova.]`
-      : "[Pokračuj přesně tam, kde jsi přestal/a. Neopakuj už napsaný text, jen naváž další slova.]";
+      ? CONTINUE_EXACT(speaker.name)
+      : CONTINUE_EXACT_SOLO;
     const apiMessages: ChatMessage[] = [
       ...baseApiMessages,
       { role: "assistant", content: target.content },
@@ -907,7 +923,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
 
     const finalize = async (text: string, interrupted: boolean) => {
-      const addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      let addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
+      addition = applyRegexRules(addition, regexRules ?? "");
       const combined = addition ? `${target.content}${/\s$/.test(target.content) ? "" : " "}${addition}` : target.content;
       // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
       const stillCurrentChat = get().chatId === chatId;
@@ -1011,8 +1028,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...baseApiMessages,
         {
           role: "user",
-          content:
-            "[Instrukce mimo příběh: Navrhni přesně 3 stručné možnosti, jak může hráčova postava v této situaci reagovat nebo co udělat dál. Každá možnost max 1–2 věty, psaná v první osobě za hráčovu postavu. Využij známá fakta a předměty z příběhu. Odpověz POUZE JSON polem tří řetězců, bez dalšího textu.]",
+          content: SUGGEST_PROMPT(chat.gameLanguage ?? "cs"),
         },
       ];
       const reply = await chatComplete(effectiveConnection, apiMessages);

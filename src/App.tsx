@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { getAutoBackupEnabled, getAutoBackupMaxCount, runAutoBackup } from "./db/backup";
+import { runSyncOnStartup } from "./db/syncReader";
 import { useSettingsStore } from "./stores/settingsStore";
 import { CardEditor } from "./ui/characters/CardEditor";
 import { GalleryScreen } from "./ui/characters/GalleryScreen";
@@ -33,6 +34,18 @@ function App() {
       }
     })();
   }, []);
+
+  // Startup sync (M14) — scan and apply foreign device journals after DB is ready.
+  useEffect(() => {
+    if (!hydrated) return;
+    void (async () => {
+      try {
+        await runSyncOnStartup();
+      } catch (err) {
+        console.warn("[sync] startup sync failed:", err);
+      }
+    })();
+  }, [hydrated]);
 
   if (!hydrated) {
     return null;

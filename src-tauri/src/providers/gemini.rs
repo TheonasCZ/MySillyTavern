@@ -32,6 +32,9 @@ fn build_body(connection: &ConnectionDto, messages: &[ChatMessage]) -> Value {
             "maxOutputTokens": connection.max_tokens,
         }
     });
+    if let Some(tk) = connection.top_k {
+        body["generationConfig"]["topK"] = json!(tk);
+    }
     if let Some(sys) = system_instruction {
         body["systemInstruction"] = sys;
     }

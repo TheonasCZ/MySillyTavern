@@ -120,6 +120,12 @@ describe("buildLoreSection", () => {
         alwaysOn: false,
         caseSensitive: false,
         enabled: true,
+        recursiveActivation: false,
+        activationDepth: 1,
+        selectiveKeys: [],
+        timed: null,
+        vectorThreshold: null,
+        vectorBudget: 2,
       },
     ];
     const section = buildLoreSection(entries, character, makePersona({ name: "Kai" }));

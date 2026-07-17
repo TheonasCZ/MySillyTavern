@@ -31,6 +31,53 @@ import type { ConnectionConfig } from "../providers/types";
 import { cosineSimilarity } from "../memory/vector";
 import { estimateTokens } from "./tokenEstimate";
 import { syncCountTokens } from "./tokenCounter";
+import {
+  RP_INSTRUCTIONS,
+  SECTION_CANON,
+  SECTION_FACTS,
+  SECTION_SCENE_DIRECTION,
+  SECTION_SILENT_CORRECTION,
+  SECTION_STORY_SO_FAR,
+  SECTION_MEMORIES,
+  SECTION_LOREBOOK,
+  SECTION_OTHER_CHARS,
+  SECTION_RIGHT_NOW,
+  SECTION_GAME_TAGS,
+  SECTION_FACTIONS,
+  SECTION_CRAFTING,
+  SECTION_PERSONA,
+  SECTION_TWO_ROLES,
+  SECTION_DIALOG_EXAMPLE,
+  SECTION_CANON_REMINDER,
+  TWO_ROLES_INSTRUCTIONS,
+  DIALOG_EXAMPLE_HEADER,
+  DIALOG_EXAMPLE_BODY,
+  factionLabel,
+  PERSONA_APPEARANCE,
+  PERSONA_SKILLS,
+  PERSONA_LEVEL,
+  PERSONA_INVENTORY,
+  PERSONA_FACTION_REP,
+  GROUP_SPEAKER_INSTRUCTION,
+  TAG_INSTRUCTIONS_CURRENT_INVENTORY,
+  TAG_INSTRUCTIONS_INVENTORY_CHANGES,
+  TAG_INSTRUCTIONS_CURRENT_SKILLS,
+  TAG_INSTRUCTIONS_SKILL_CHANGES,
+  TAG_INSTRUCTIONS_LEVEL_CURRENT,
+  TAG_INSTRUCTIONS_LEVEL_CHANGES,
+  TAG_PLACEMENT_HINT,
+  FACTION_INSTRUCTIONS_REACTIONS,
+  FACTION_INSTRUCTIONS_CHANGES,
+  FACTION_TAG_HINT,
+  CRAFTING_INSTRUCTIONS_BASE,
+  CRAFTING_KNOWN_RECIPES,
+  TRIM_MEMORIES,
+  TRIM_LORE,
+  TRIM_HISTORY,
+  TRIM_SUMMARY,
+  TRIM_FACT,
+  TRIM_MES_EXAMPLE,
+} from "./promptTexts";
 
 export interface CharacterLike {
   name: string;
@@ -159,6 +206,10 @@ export interface PromptBuilderInput {
   /** Optional extra system prompt from a prompt preset (M12.4) — appended
    * to the system core message before the lore/facts/summary sections. */
   presetExtraSystemPrompt?: string;
+  /** Optional author's note from a prompt preset (M26.2) — injected as a
+   * system message right before the last user message in the prompt,
+   * ideal for style/formatting guidance without cluttering the system core. */
+  presetAuthorNote?: string;
   /** Retrieval detail (M25.4) — why each direct-hit memory was selected;
    * same order as the head of `retrievedMemories`. Passed through to the
    * report for the Prompt inspector, truncated to the memories that survive
@@ -176,6 +227,8 @@ export interface PromptBuilderInput {
   /** Director note (M25.3) — per-chat pacing/tone/genre steering, rendered
    * into the trailing system message so it outweighs older instructions. */
   directorNote?: string;
+  /** Language the AI writes in (e.g. 'cs', 'en') — per-chat (M28). */
+  gameLanguage?: string;
 }
 
 export interface PromptReport {
@@ -241,7 +294,7 @@ export interface PromptBuildResult {
 export const DEFAULT_VERBATIM_WINDOW = 6;
 export const MIN_VERBATIM_MESSAGES = 4;
 
-const DEFAULT_RP_INSTRUCTIONS =
+const DEFAULT_RP_INSTRUCTIONS_CS =
   "Jsi vypravěč hry na hrdiny (RP). Hraj roli postavy {{char}} podle popisu níže, " +
   "drž se jejího charakteru a scénáře. Akce a gesta piš kurzívou, přímou řeč normálně. " +
   "Nikdy nemluv ani nejednej za hráče ({{user}}). Drž konzistenci žánru a pravidel světa " +
@@ -250,14 +303,7 @@ const DEFAULT_RP_INSTRUCTIONS =
 
 export const DEFAULT_USER_NAME = "User";
 
-/** Maps a numeric reputation (-100..100) to a Czech label for the prompt. */
-function factionLabel(rep: number): string {
-  if (rep <= -50) return "nepřátelská";
-  if (rep <= -20) return "podezřívavá";
-  if (rep >= 50) return "spojenecká";
-  if (rep >= 20) return "přátelská";
-  return "neutrální";
-}
+
 
 export function personaDisplayName(persona: PersonaLike | null): string {
   return persona?.name.trim() || DEFAULT_USER_NAME;
@@ -305,10 +351,10 @@ function buildGroupMembersSection(
       ? `${m.description.slice(0, GROUP_MEMBER_DESCRIPTION_MAX_LEN)}…`
       : m.description;
     const mood = moodMap.get(m.name);
-    const moodSuffix = mood ? ` (nálada: ${mood})` : "";
+    const moodSuffix = mood ? ` (mood: ${mood})` : "";
     return `- ${m.name}${moodSuffix}: ${desc}`;
   });
-  return `[Další postavy ve scéně]\n${lines.join("\n")}`;
+  return `${SECTION_OTHER_CHARS}\n${lines.join("\n")}`;
 }
 
 function buildSystemCore(
@@ -317,23 +363,13 @@ function buildSystemCore(
   userName: string,
   groupMembers: Array<{ name: string; description: string }>,
   moodFacts: Array<{ subject: string; fact: string }>,
+  lang: string,
 ): string {
-  const base = character.systemPrompt.trim() || DEFAULT_RP_INSTRUCTIONS;
+  const base = character.systemPrompt.trim() || (lang === "cs" ? DEFAULT_RP_INSTRUCTIONS_CS : RP_INSTRUCTIONS(lang));
 
-  // Role split: vypravěč vs mechanik — oddělení narativu od herních tagů
-  const roleSplit = `[TVÉ DVĚ ROLE]
-Jsi zároveň VYPRAVĚČ i MECHANIK. Tyto role nikdy nezaměňuj.
-- Jako VYPRAVĚČ: Popisuješ svět, mluvíš za NPC, vyprávíš příběh. Používáš přirozený jazyk.
-- Jako MECHANIK: Spravuješ inventář, dovednosti, questy, frakce, stavy a čas. Používáš POUZE tagy [INV:...], [SKILL:...], [QUEST:...], [FACTION:...], [COND:...], [TIME:...].
-Tagy piš jako mechanik — nikdy je nezaměňuj do vypravěčského textu. Každý tag na vlastní řádek. Maximálně 3 tagy na odpověď.`;
+  const roleSplit = `${SECTION_TWO_ROLES}\n${TWO_ROLES_INSTRUCTIONS(lang)}`;
 
-  // Few-shot examples — AI se z příkladů učí lépe než z instrukcí
-  const examples = `[PŘÍKLAD SPRÁVNÉ ODPOVĚDI]
-Hráč: Prohledám starou truhlu.
-GM: Truhla zaskřípěla, když jsi odklopil její víko. Uvnitř leží rezavý meč a pár mincí. Vzduch je cítit plísní.
-[INV:+Rezavý meč]
-[INV:+10:Měděné mince]
-Co uděláš dál?`;
+  const examples = `${DIALOG_EXAMPLE_HEADER}\n${DIALOG_EXAMPLE_BODY}`;
 
   const parts = [base, roleSplit, examples, character.description, character.personality, character.scenario].map((p) =>
     p.trim(),
@@ -345,26 +381,26 @@ Co uděláš dál?`;
     if (persona.age) identity.push(`${persona.age} let`);
     if (persona.race) identity.push(persona.race);
     if (identity.length > 0) personaLines.push(identity.join(", "));
-    if (persona.appearance) personaLines.push(`\nVzhled: ${persona.appearance}`);
+    if (persona.appearance) personaLines.push(`\n${PERSONA_APPEARANCE} ${persona.appearance}`);
     if (persona.skills?.length) {
-      personaLines.push("\nDovednosti:");
-      for (const s of persona.skills) personaLines.push(`- ${s.name} (úroveň ${s.level})`);
+      personaLines.push(`\n${PERSONA_SKILLS}`);
+      for (const s of persona.skills) personaLines.push(`- ${s.name} (${PERSONA_LEVEL} ${s.level})`);
     }
     if (persona.inventory?.length) {
-      personaLines.push("\nInventář:");
+      personaLines.push(`\n${PERSONA_INVENTORY}`);
       for (const inv of persona.inventory) {
         personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
       }
     }
     if (persona.factions?.length) {
-      personaLines.push("\nReputace u frakcí:");
+      personaLines.push(`\n${PERSONA_FACTION_REP}`);
       for (const f of persona.factions) {
         const label = factionLabel(f.reputation);
         personaLines.push(`- ${f.factionName}: ${f.reputation} (${label})`);
       }
     }
     if (personaLines.length > 0) {
-      parts.push(`[Hráčova persona — ${userName}]\n${personaLines.join("\n")}`);
+      parts.push(`${SECTION_PERSONA(userName)}\n${personaLines.join("\n")}`);
     }
   }
   const groupSection = buildGroupMembersSection(groupMembers, moodFacts);
@@ -375,18 +411,19 @@ Co uděláš dál?`;
 /** "Speak only as {{char}}" instruction added in group chats (plan §4) —
  * appended to post_history_instructions, or sent as its own trailing
  * system message when the card has none. */
-function buildGroupSpeakerInstruction(otherNames: string[]): string {
+function buildGroupSpeakerInstruction(otherNames: string[], charName: string, userName: string): string {
   const names = otherNames.join(", ");
-  return (
-    "Mluv a jednej pouze za {{char}}. Nikdy nemluv za hráče ({{user}}) ani za ostatní postavy " +
-    `(${names}). Nezačínej odpověď svým jménem s dvojtečkou.`
-  );
+  return substitutePlaceholders(
+    GROUP_SPEAKER_INSTRUCTION("{{char}}", `{{others}}`, "{{user}}"),
+    charName,
+    userName,
+  ).replace("{{others}}", names);
 }
 
 function buildMesExampleSection(character: CharacterLike, charName: string, userName: string): string {
   const trimmed = character.mesExample.trim();
   if (!trimmed) return "";
-  return `[Ukázka stylu dialogu]\n${substitutePlaceholders(trimmed, charName, userName)}`;
+  return `${SECTION_DIALOG_EXAMPLE}\n${substitutePlaceholders(trimmed, charName, userName)}`;
 }
 
 function factLine(fact: LedgerFactLike, charName: string, userName: string): string {
@@ -408,12 +445,12 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
   if (canon.length > 0) {
     const lines = canon.map((f) => factLine(f, charName, userName));
     blocks.push(
-      `[KÁNON PŘÍBĚHU — neporušitelná pravidla; mají přednost před vším ostatním]\n${lines.join("\n")}`,
+      `${SECTION_CANON}\n${lines.join("\n")}`,
     );
   }
   if (rest.length > 0) {
     const lines = rest.map((f) => factLine(f, charName, userName));
-    blocks.push(`[FAKTA SVĚTA — závazná]\n${lines.join("\n")}`);
+    blocks.push(`${SECTION_FACTS}\n${lines.join("\n")}`);
   }
   return blocks.join("\n\n");
 }
@@ -438,7 +475,7 @@ function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, us
     .sort((a, b) => Number(isCanonFact(b)) - Number(isCanonFact(a)));
   if (relevant.length === 0) return "";
 
-  const header = "[Připomínka kánonu — tato pravidla platí závazně a nesmí se driftem hry změnit]";
+  const header = SECTION_CANON_REMINDER;
   const lines: string[] = [];
   let usedChars = header.length;
   for (const f of relevant) {
@@ -455,17 +492,17 @@ function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, us
 function buildLoreSection(entries: LoreEntryLike[], charName: string, userName: string): string {
   if (entries.length === 0) return "";
   const lines = entries.map((e) => `- ${substitutePlaceholders(e.content.trim(), charName, userName)}`);
-  return `[Poznámky ze světa — lorebook]\n${lines.join("\n")}`;
+  return `${SECTION_LOREBOOK}\n${lines.join("\n")}`;
 }
 
 function buildSummarySection(summary: string): string {
   if (!summary.trim()) return "";
-  return `[DOSAVADNÍ PŘÍBĚH]\n${summary.trim()}`;
+  return `${SECTION_STORY_SO_FAR}\n${summary.trim()}`;
 }
 
 function buildMemoriesSection(memories: string[]): string {
   if (memories.length === 0) return "";
-  return `[RELEVANTNÍ VZPOMÍNKY — starší scény, doslovně]\n${memories
+  return `${SECTION_MEMORIES}\n${memories
     .map((m) => `---\n${m.trim()}`)
     .join("\n")}`;
 }
@@ -578,9 +615,11 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   const historyTotal = input.history.length;
   let historyIncluded = input.history.slice(-verbatimWindow);
 
+  const lang = input.gameLanguage ?? "cs";
+
   const groupMembers = input.groupMembers ?? [];
   const moodFacts = input.moodFacts ?? [];
-  const systemCore = buildSystemCore(character, persona, userName, groupMembers, moodFacts);
+  const systemCore = buildSystemCore(character, persona, userName, groupMembers, moodFacts, lang);
 
   function render(): {
     messages: PromptMessage[];
@@ -612,9 +651,24 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const messages: PromptMessage[] = [];
     if (systemText) messages.push({ role: "system", content: systemText });
     for (const m of historyIncluded) messages.push(m);
+
+    // M26.2: author's note injected as a system message right before the last
+    // user message — ideal for writing-style guidance late in the context where
+    // models weigh it most heavily.
+    const authorNote = input.presetAuthorNote?.trim();
+    if (authorNote) {
+      // Find the last user-role message and insert the author's note before it.
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === "user") {
+          messages.splice(i, 0, { role: "system", content: authorNote });
+          break;
+        }
+      }
+    }
+
     let phi = character.postHistoryInstructions.trim();
     if (groupMembers.length > 0) {
-      const groupInstruction = buildGroupSpeakerInstruction(groupMembers.map((m) => m.name));
+      const groupInstruction = buildGroupSpeakerInstruction(groupMembers.map((m) => m.name), charName, userName);
       phi = phi ? `${phi}\n\n${groupInstruction}` : groupInstruction;
     }
     // Calendar date + season block rendered before game-time — gives the
@@ -629,75 +683,53 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     // of the current in-game moment.
     const gameTimeDesc = input.gameTimeDescription?.trim();
     if (gameTimeDesc) {
-      phi = phi ? `${phi}\n\n[PRÁVĚ TEĎ]\n${gameTimeDesc}` : `[PRÁVĚ TEĎ]\n${gameTimeDesc}`;
+      phi = phi ? `${phi}\n\n${SECTION_RIGHT_NOW}\n${gameTimeDesc}` : `${SECTION_RIGHT_NOW}\n${gameTimeDesc}`;
     }
     // Game tag instructions — tells the model to annotate item + skill/level changes
     const progression = persona?.progression ?? "skill";
     const hasInv = persona?.inventory?.length;
     const hasSkills = persona?.skills?.length;
     if (progression !== "none" && (hasInv || (progression === "skill" && hasSkills))) {
-      let tagInstructions = "[HERNÍ TAGY]\n";
+      let tagInstructions = `${SECTION_GAME_TAGS}\n`;
       // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
         const inv = persona.inventory ?? [];
-        tagInstructions += `Aktuální inventář: ${inv.map((i) => i.item + (i.qty > 1 ? ` x${i.qty}` : "")).join(", ")}.\n`;
-        tagInstructions += "Změny inventáře: [INV:+předmět] získání, [INV:-předmět] ztráta, [INV:+počet:předmět] množství.\n";
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${inv.map((i) => i.item + (i.qty > 1 ? ` x${i.qty}` : "")).join(", ")}.\n`;
+        tagInstructions += `${TAG_INSTRUCTIONS_INVENTORY_CHANGES}\n`;
       }
       if (progression === "skill" && hasSkills && persona) {
         const sk = persona.skills ?? [];
-        tagInstructions += `Aktuální dovednosti: ${sk.map((s) => `${s.name} ${s.level}`).join(", ")}.\n`;
-        tagInstructions += "Změny dovedností: [SKILL:+nová] naučení (level 1), [SKILL:+jméno:level] nastavení úrovně, [SKILL:jméno+1] zvýšení.\n";
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${sk.map((s) => `${s.name} ${s.level}`).join(", ")}.\n`;
+        tagInstructions += `${TAG_INSTRUCTIONS_SKILL_CHANGES}\n`;
       }
       if (progression === "level") {
         const xp = persona?.xp ?? 0;
         const lvl = persona?.level ?? 1;
-        tagInstructions += `Aktuálně: úroveň ${lvl}, ${xp} XP.\n`;
-        tagInstructions += "Změny: [LEVEL:+částka] přidá XP.\n";
+        tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CURRENT(lvl, xp)}\n`;
+        tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CHANGES}\n`;
       }
-      tagInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+      tagInstructions += TAG_PLACEMENT_HINT;
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
     }
 
     // Faction reputation instructions — always included when persona has any faction standings
     const hasFactions = persona?.factions?.length;
     if (hasFactions && persona) {
-      let factionInstructions = "[FRAKČNÍ REPUTACE]\n";
-      factionInstructions += "NPC reakce by měly odrážet reputaci u frakcí: ";
-      factionInstructions += "nepřátelské (< -50), podezřívavé (< -20), neutrální, přátelské (> 20), spojenecké (> 50).\n";
-      factionInstructions += "Změny reputace: [FACTION:+jméno:hodnota] zvýšení, [FACTION:-jméno:hodnota] snížení.\n";
-      factionInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+      let factionInstructions = `${SECTION_FACTIONS}\n`;
+      factionInstructions += `${FACTION_INSTRUCTIONS_REACTIONS}\n`;
+      factionInstructions += `${FACTION_INSTRUCTIONS_CHANGES}\n`;
+      factionInstructions += FACTION_TAG_HINT;
       phi = phi ? `${phi}\n\n${factionInstructions}` : factionInstructions;
     }
 
     // Crafting instructions — included when persona has known recipes or an inventory
     const hasRecipes = persona?.craftingRecipes?.length;
     if (hasRecipes || hasInv) {
-      let craftInstructions = "[VÝROBA]\n";
-      craftInstructions += "Skill určuje KVALITU výrobku, ne možnost výroby. Při skillu 1 vznikne z ingrediencí slabý předmět, při skillu 9 mistrovský s bonusovými perky.\n";
-      craftInstructions += "Ingredience se vždy spotřebují (i při neúspěchu). Legendární ingredience jsou vzácné (padají z bossů), nejsou omezeny skillem.\n\n";
-
-      // Perk scale
-      craftInstructions += "Škála perků podle skillu:\n";
-      craftInstructions += "- Skill 1–2: 0 perků, základní předmět\n";
-      craftInstructions += "- Skill 3–5: 1 perk (Tier 1)\n";
-      craftInstructions += "- Skill 6–8: 2 perky (Tier 1 + Tier 2)\n";
-      craftInstructions += "- Skill 9–11: 3 perky (Tier 1 + Tier 2 + Tier 3)\n";
-      craftInstructions += "- Skill 12+: 4 perky (Tier 1 + Tier 2 + Tier 3 + Tier 4)\n\n";
-
-      craftInstructions += "Dostupné perky podle tierů:\n";
-      craftInstructions += "- Tier 1 (od skillu 3): Nabroušený, Nerezaví, Lehký\n";
-      craftInstructions += "- Tier 2 (od skillu 6): Nezlomný, Přesný, Ochranný\n";
-      craftInstructions += "- Tier 3 (od skillu 9): Nasává manu, Leechuje, Magická čepel\n";
-      craftInstructions += "- Tier 4 (od skillu 12): Pojmenovaná, Duše v čepeli\n\n";
-
-      craftInstructions += "Tagy:\n";
-      craftInstructions += "- [CRAFT:výsledek:surovina1+surovina2] — objevení/zápis receptu (suroviny se odečtou z inventáře)\n";
-      craftInstructions += "- [CRAFTED:výsledek] — úspěšné vyrobení (perky vybereš automaticky podle skillu)\n";
-      craftInstructions += "- [CRAFTED:výsledek:perk1+perk2] — vyrobení s konkrétními perky\n";
-      craftInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+      let craftInstructions = `${SECTION_CRAFTING}\n`;
+      craftInstructions += CRAFTING_INSTRUCTIONS_BASE;
 
       if (hasRecipes && persona) {
-        craftInstructions += "\n\nZnámé recepty:\n";
+        craftInstructions += `\n\n${CRAFTING_KNOWN_RECIPES}\n`;
         for (const r of persona.craftingRecipes ?? []) {
           const crafted = r.craftedAt ? "✓" : "✗";
           const skillHint = r.skillName ? ` (skill: ${r.skillName})` : "";
@@ -713,7 +745,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     // it wins over conflicting older style cues.
     const director = input.directorNote?.trim();
     if (director) {
-      phi = phi ? `${phi}\n\n[REŽIE SCÉNY]\n${director}` : `[REŽIE SCÉNY]\n${director}`;
+      phi = phi ? `${phi}\n\n${SECTION_SCENE_DIRECTION}\n${director}` : `${SECTION_SCENE_DIRECTION}\n${director}`;
     }
 
     // Canon reminder is appended last, closest to generation — see
@@ -729,9 +761,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     // never surfaced to the player.
     if (driftCorrections.length > 0) {
       const lines = driftCorrections.map((c) => `- ${c}`).join("\n");
-      const block =
-        `[TICHÁ KOREKCE — poslední scény se odchýlily od kánonu. ` +
-        `Nenápadně, bez komentáře a bez lámání příběhu je srovnej zpět:]\n${lines}`;
+      const block = SECTION_SILENT_CORRECTION(lines);
       phi = phi ? `${phi}\n\n${block}` : block;
     }
     if (phi) {
@@ -784,21 +814,21 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   // semantic bonus, so they go before anything the user curated.
   while (current.totalTokens > budget && memories.length > 0) {
     memories.pop();
-    trimmedNotes.push("Vzpomínky: vynechána nejméně relevantní scéna (rozpočet kontextu).");
+    trimmedNotes.push(TRIM_MEMORIES);
     current = render();
   }
 
   // (a) trim lore, lowest priority first.
   while (current.totalTokens > budget && lore.length > 0) {
     const removed = lore.shift();
-    if (removed) trimmedNotes.push(`Lorebook: vynechán záznam „${removed.id}" (nízká priorita, rozpočet kontextu).`);
+    if (removed) trimmedNotes.push(TRIM_LORE(removed.id));
     current = render();
   }
 
   // (b) trim older verbatim messages, never below MIN_VERBATIM_MESSAGES.
   while (current.totalTokens > budget && historyIncluded.length > MIN_VERBATIM_MESSAGES) {
     historyIncluded = historyIncluded.slice(1);
-    trimmedNotes.push("Historie: vynechána starší zpráva (rozpočet kontextu).");
+    trimmedNotes.push(TRIM_HISTORY);
     current = render();
   }
 
@@ -811,7 +841,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     current = render();
   }
   if (summaryTruncated) {
-    trimmedNotes.push("Shrnutí: zkráceno od začátku (rozpočet kontextu).");
+    trimmedNotes.push(TRIM_SUMMARY);
   }
 
   // (d) trim facts event -> quest -> npc (world/player never touched).
@@ -865,7 +895,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       const idx = factCutIndex(cat);
       if (idx === -1) break;
       const [removed] = facts.splice(idx, 1);
-      trimmedNotes.push(`Fakta: vynechán fakt „(${removed.category}/${removed.subject})" (rozpočet kontextu).`);
+      trimmedNotes.push(TRIM_FACT(removed.category, removed.subject));
       current = render();
     }
     if (current.totalTokens <= budget) break;
@@ -874,7 +904,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   // (e) drop mes_example entirely, last resort.
   if (current.totalTokens > budget && mesExampleIncluded) {
     mesExampleIncluded = false;
-    trimmedNotes.push("Ukázka stylu dialogu: vynechána (rozpočet kontextu).");
+    trimmedNotes.push(TRIM_MES_EXAMPLE);
     current = render();
   }
 

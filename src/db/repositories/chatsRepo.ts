@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 export interface Chat {
   id: string;
@@ -13,6 +14,8 @@ export interface Chat {
   presetId: string | null;
   /** Automatic speaker selection for group chats (plan §M10). */
   autoReply: boolean;
+  /** Language the AI writes in (e.g. 'cs', 'en') — per-chat (M28). */
+  gameLanguage: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +27,8 @@ export interface ChatDraft {
   characterIds: string[];
   connectionId: string | null;
   personaId: string | null;
+  /** Language the AI writes in (e.g. 'cs', 'en'). Defaults to 'cs'. (M28) */
+  gameLanguage?: string;
 }
 
 interface ChatRow {
@@ -37,6 +42,7 @@ interface ChatRow {
   last_summarized_message_id: string | null;
   preset_id: string | null;
   auto_reply: number;
+  game_language: string;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +59,7 @@ function toChat(row: ChatRow): Chat {
     lastSummarizedMessageId: row.last_summarized_message_id,
     presetId: row.preset_id,
     autoReply: !!row.auto_reply,
+    gameLanguage: row.game_language ?? "cs",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -73,9 +80,9 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   const now = nowIso();
   const primaryCharacterId = draft.characterIds[0];
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $6)`,
-    [id, draft.title, primaryCharacterId, draft.personaId, draft.connectionId, now],
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $7)`,
+    [id, draft.title, primaryCharacterId, draft.personaId, draft.connectionId, draft.gameLanguage ?? "cs", now],
   );
   for (let i = 0; i < draft.characterIds.length; i++) {
     await execute(
@@ -84,7 +91,7 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
       [newId(), id, draft.characterIds[i], i, now],
     );
   }
-  return {
+  const chat: Chat = {
     id,
     title: draft.title,
     characterId: primaryCharacterId,
@@ -95,76 +102,95 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
     lastSummarizedMessageId: null,
     presetId: null,
     autoReply: false,
+    gameLanguage: draft.gameLanguage ?? "cs",
     createdAt: now,
     updatedAt: now,
   };
+  journalEntityWrite("chat", chat as unknown as Record<string, unknown>);
+  return chat;
 }
 
 /** Toggles automatic speaker selection for a chat (plan §M10). */
 export async function setAutoReply(id: string, on: boolean): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET auto_reply = $2, updated_at = $3 WHERE id = $1", [
     id,
     on ? 1 : 0,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, auto_reply: on ? 1 : 0, updated_at: now });
 }
 
 /** Changes which member is the primary (`chats.character_id`) — used e.g.
  * when the current primary is removed from the roster. Does not touch
  * `chat_members`; the caller must ensure `characterId` is already a member. */
 export async function setPrimaryCharacter(id: string, characterId: string): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET character_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     characterId,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, character_id: characterId, updated_at: now });
 }
 
 export async function renameChat(id: string, title: string): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET title = $2, updated_at = $3 WHERE id = $1", [
     id,
     title,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, title, updated_at: now });
 }
 
 export async function setChatConnection(id: string, connectionId: string | null): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET connection_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     connectionId,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, connection_id: connectionId, updated_at: now });
 }
 
 export async function setChatPersona(id: string, personaId: string | null): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET persona_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     personaId,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, persona_id: personaId, updated_at: now });
 }
 
 export async function setChatPreset(id: string, presetId: string | null): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET preset_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     presetId,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, preset_id: presetId, updated_at: now });
 }
 
 export async function touchChat(id: string): Promise<void> {
-  await execute("UPDATE chats SET updated_at = $2 WHERE id = $1", [id, nowIso()]);
+  const now = nowIso();
+  await execute("UPDATE chats SET updated_at = $2 WHERE id = $1", [id, now]);
+  journalEntityWrite("chat", { id, updated_at: now });
 }
 
 export async function setExtractionConnection(
   id: string,
   extractionConnectionId: string | null,
 ): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE chats SET extraction_connection_id = $2, updated_at = $3 WHERE id = $1", [
     id,
     extractionConnectionId,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("chat", { id, extraction_connection_id: extractionConnectionId, updated_at: now });
 }
 
 /** Advances the "already extracted up to" marker — used by the memory
@@ -182,7 +208,11 @@ export async function setLastSummarizedMessageId(id: string, messageId: string):
 }
 
 export async function deleteChat(id: string): Promise<void> {
+  const chat = await getChat(id);
   await execute("DELETE FROM chats WHERE id = $1", [id]);
+  if (chat) {
+    journalEntityDelete("chat", chat as unknown as Record<string, unknown>);
+  }
 }
 
 /** Forks a chat at a message: creates a new chat with the same
@@ -222,8 +252,8 @@ export async function branchChat(
   const now = nowIso();
   const title = `${source.title} ${titleSuffix}`.trim();
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
     [
       id,
       title,
@@ -233,6 +263,7 @@ export async function branchChat(
       source.extractionConnectionId,
       source.presetId,
       source.autoReply ? 1 : 0,
+      source.gameLanguage ?? "cs",
       now,
     ],
   );

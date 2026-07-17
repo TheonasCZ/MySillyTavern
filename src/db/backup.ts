@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
 
+import { openDialog, saveDialog, relaunchApp } from "../platform";
 import { getDb } from "./database";
 import { getSetting, setSetting } from "./repositories/settingsRepo";
 
@@ -17,7 +17,7 @@ async function checkpoint(): Promise<void> {
  * chosen `.zip` path. Returns the path written to, or null if the user
  * cancelled the dialog. */
 export async function pickAndExportBackup(): Promise<string | null> {
-  const outPath = await save({
+  const outPath = await saveDialog({
     defaultPath: `mysillytavern-backup-${new Date().toISOString().slice(0, 10)}.zip`,
     filters: [{ name: "MySillyTavern backup", extensions: ["zip"] }],
   });
@@ -34,7 +34,7 @@ export async function pickAndExportBackup(): Promise<string | null> {
  * user cancelled or the file didn't look like a valid backup (the thrown
  * error's message is provider/user-facing Czech/English text from Rust). */
 export async function pickAndStageImport(): Promise<string | null> {
-  const path = await open({
+  const path = await openDialog({
     multiple: false,
     filters: [{ name: "MySillyTavern backup", extensions: ["zip"] }],
   });
@@ -55,8 +55,7 @@ export async function cancelPendingImport(): Promise<void> {
  * happens in Rust's `setup()` hook, before the frontend can open the DB
  * again — see `apply_pending_import` in `backup.rs`). */
 export async function restartApp(): Promise<void> {
-  const { relaunch } = await import("@tauri-apps/plugin-process");
-  await relaunch();
+  await relaunchApp();
 }
 
 // ── M14.1 auto-backup ───────────────────────────────────────────────────

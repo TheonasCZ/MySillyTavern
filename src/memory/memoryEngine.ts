@@ -215,7 +215,7 @@ async function runDueWork(chatId: string): Promise<void> {
     );
     if (connection) {
       const transcript = toApiMessages(newSinceExtraction, memberNames);
-      await runExtraction(chatId, connection, transcript);
+      await runExtraction(chatId, connection, transcript, chat.gameLanguage);
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
 
       // Drift check (M25.2) — same cadence and connection as extraction.
@@ -225,7 +225,7 @@ async function runDueWork(chatId: string): Promise<void> {
         const canon = (await listAllFacts(chatId)).filter(
           (f) => (f.locked || f.canon) && f.status === "active",
         );
-        await runDriftCheck(chatId, connection, canon, transcript);
+        await runDriftCheck(chatId, connection, canon, transcript, chat.gameLanguage);
       } catch (err) {
         console.warn("drift check scheduling failed", err);
       }
@@ -243,7 +243,7 @@ async function runDueWork(chatId: string): Promise<void> {
   if (toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD) {
     const connection = chat.connectionId ? await getConnection(chat.connectionId) : null;
     if (connection) {
-      await runSummarization(chatId, connection, withSpeakerNames(toFold, memberNames));
+      await runSummarization(chatId, connection, withSpeakerNames(toFold, memberNames), chat.gameLanguage);
       await setLastSummarizedMessageId(chatId, toFold[toFold.length - 1].id);
       folded = toFold;
     }

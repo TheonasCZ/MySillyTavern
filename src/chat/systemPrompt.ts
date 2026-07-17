@@ -1,11 +1,20 @@
 import type { Character } from "../db/repositories/charactersRepo";
 import type { Persona } from "../db/repositories/personasRepo";
 import type { LoreEntryLike } from "../lorebooks/activation";
+import {
+  RP_INSTRUCTIONS,
+  PERSONA_APPEARANCE,
+  PERSONA_SKILLS,
+  PERSONA_LEVEL,
+  PERSONA_INVENTORY,
+  SECTION_PERSONA,
+  SECTION_LOREBOOK,
+} from "../prompt/promptTexts";
 
 /** Used when a character has no `system_prompt` of its own. Kept short and
  * generic — the full PromptBuilder (ledger facts, summaries, budget/
  * trimming) lands in M5; this composes card + persona + lorebook (M4). */
-const DEFAULT_RP_INSTRUCTIONS =
+const DEFAULT_RP_INSTRUCTIONS_CS =
   "Jsi vypravěč hry na hrdiny (RP). Hraj roli postavy {{char}} podle popisu níže, " +
   "drž se jejího charakteru a scénáře. Akce a gesta piš kurzívou, přímou řeč normálně. " +
   "Nikdy nemluv ani nejednej za hráče ({{user}}).";
@@ -32,9 +41,10 @@ export function substitutePlaceholders(text: string, charName: string, userName:
  * + scenario + the player persona's description, with `{{char}}`/`{{user}}`
  * replaced throughout. `persona` is optional so chats without one selected
  * still work (falls back to the generic "User" name). */
-export function buildCharacterSystemPrompt(character: Character, persona: Persona | null = null): string {
+export function buildCharacterSystemPrompt(character: Character, persona: Persona | null = null, lang?: string): string {
   const userName = personaDisplayName(persona);
-  const base = character.systemPrompt.trim() || DEFAULT_RP_INSTRUCTIONS;
+  const language = lang ?? "cs";
+  const base = character.systemPrompt.trim() || (language === "cs" ? DEFAULT_RP_INSTRUCTIONS_CS : RP_INSTRUCTIONS(language));
   const parts = [base, character.description, character.personality, character.scenario].map((p) =>
     p.trim(),
   );
@@ -49,25 +59,25 @@ export function buildCharacterSystemPrompt(character: Character, persona: Person
     if (identity.length > 0) personaLines.push(identity.join(", "));
 
     if (persona.appearance) {
-      personaLines.push(`\nVzhled: ${persona.appearance}`);
+      personaLines.push(`\n${PERSONA_APPEARANCE} ${persona.appearance}`);
     }
 
     if (persona.skills.length > 0) {
-      personaLines.push("\nDovednosti:");
+      personaLines.push(`\n${PERSONA_SKILLS}`);
       for (const s of persona.skills) {
-        personaLines.push(`- ${s.name} (úroveň ${s.level})`);
+        personaLines.push(`- ${s.name} (${PERSONA_LEVEL} ${s.level})`);
       }
     }
 
     if (persona.inventory.length > 0) {
-      personaLines.push("\nInventář:");
+      personaLines.push(`\n${PERSONA_INVENTORY}`);
       for (const inv of persona.inventory) {
         personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
       }
     }
 
     if (personaLines.length > 0) {
-      parts.push(`[Hráčova persona — ${userName}]\n${personaLines.join("\n")}`);
+      parts.push(`${SECTION_PERSONA(userName)}\n${personaLines.join("\n")}`);
     }
   }
 
@@ -88,7 +98,7 @@ export function buildLoreSection(
   const lines = entries.map(
     (e) => `- ${substitutePlaceholders(e.content.trim(), character.name, userName)}`,
   );
-  return `[Poznámky ze světa — lorebook]\n${lines.join("\n")}`;
+  return `${SECTION_LOREBOOK}\n${lines.join("\n")}`;
 }
 
 /** Combines the character system prompt with the activated lorebook

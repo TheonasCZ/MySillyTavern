@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { openDialog, saveDialog } from "../platform";
 
 /** File-picker glue for World Info JSON import/export. Kept separate from
  * `worldInfoImport.ts` (which stays DB/Tauri-free for unit testing) — this
@@ -10,7 +10,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 /** Opens a native file picker restricted to `.json` and returns its text
  * content, or null if the user cancelled. */
 export async function pickWorldInfoJsonFile(): Promise<string | null> {
-  const path = await open({
+  const path = await openDialog({
     multiple: false,
     filters: [{ name: "World Info (JSON)", extensions: ["json"] }],
   });
@@ -24,7 +24,7 @@ export async function saveWorldInfoJsonFile(
   defaultFileName: string,
   jsonText: string,
 ): Promise<string | null> {
-  const path = await save({
+  const path = await saveDialog({
     defaultPath: defaultFileName,
     filters: [{ name: "World Info (JSON)", extensions: ["json"] }],
   });

@@ -1,12 +1,17 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 export interface Preset {
   id: string;
   name: string;
   isDefault: boolean;
   extraSystemPrompt: string;
+  authorNote: string;
+  regexRules: string;
   temperature: number | null;
   topP: number | null;
+  topK: number | null;
+  minP: number | null;
   frequencyPenalty: number | null;
   presencePenalty: number | null;
   maxTokens: number | null;
@@ -18,8 +23,12 @@ export interface PresetDraft {
   name: string;
   isDefault?: boolean;
   extraSystemPrompt?: string;
+  authorNote?: string;
+  regexRules?: string;
   temperature?: number | null;
   topP?: number | null;
+  topK?: number | null;
+  minP?: number | null;
   frequencyPenalty?: number | null;
   presencePenalty?: number | null;
   maxTokens?: number | null;
@@ -29,8 +38,12 @@ export interface PresetUpdate {
   name?: string;
   isDefault?: boolean;
   extraSystemPrompt?: string;
+  authorNote?: string;
+  regexRules?: string;
   temperature?: number | null;
   topP?: number | null;
+  topK?: number | null;
+  minP?: number | null;
   frequencyPenalty?: number | null;
   presencePenalty?: number | null;
   maxTokens?: number | null;
@@ -41,8 +54,12 @@ interface PresetRow {
   name: string;
   is_default: number;
   extra_system_prompt: string;
+  author_note: string;
+  regex_rules: string;
   temperature: number | null;
   top_p: number | null;
+  top_k: number | null;
+  min_p: number | null;
   frequency_penalty: number | null;
   presence_penalty: number | null;
   max_tokens: number | null;
@@ -56,8 +73,12 @@ function toPreset(row: PresetRow): Preset {
     name: row.name,
     isDefault: row.is_default === 1,
     extraSystemPrompt: row.extra_system_prompt,
+    authorNote: row.author_note,
+    regexRules: row.regex_rules,
     temperature: row.temperature,
     topP: row.top_p,
+    topK: row.top_k,
+    minP: row.min_p,
     frequencyPenalty: row.frequency_penalty,
     presencePenalty: row.presence_penalty,
     maxTokens: row.max_tokens,
@@ -107,34 +128,45 @@ export async function createPreset(draft: PresetDraft): Promise<Preset> {
     await enforceSingleDefault(id);
   }
   await execute(
-    `INSERT INTO presets (id, name, is_default, extra_system_prompt, temperature, top_p, frequency_penalty, presence_penalty, max_tokens, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
+    `INSERT INTO presets (id, name, is_default, extra_system_prompt, author_note, regex_rules, temperature, top_p, top_k, min_p, frequency_penalty, presence_penalty, max_tokens, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
     [
       id,
       draft.name,
       isDefault,
       draft.extraSystemPrompt ?? "",
+      draft.authorNote ?? "",
+      draft.regexRules ?? "[]",
       draft.temperature ?? null,
       draft.topP ?? null,
+      draft.topK ?? null,
+      draft.minP ?? null,
       draft.frequencyPenalty ?? null,
       draft.presencePenalty ?? null,
       draft.maxTokens ?? null,
       now,
+      now,
     ],
   );
-  return {
+  const preset: Preset = {
     id,
     name: draft.name,
     isDefault: !!draft.isDefault,
     extraSystemPrompt: draft.extraSystemPrompt ?? "",
+    authorNote: draft.authorNote ?? "",
+    regexRules: draft.regexRules ?? "[]",
     temperature: draft.temperature ?? null,
     topP: draft.topP ?? null,
+    topK: draft.topK ?? null,
+    minP: draft.minP ?? null,
     frequencyPenalty: draft.frequencyPenalty ?? null,
     presencePenalty: draft.presencePenalty ?? null,
     maxTokens: draft.maxTokens ?? null,
     createdAt: now,
     updatedAt: now,
   };
+  journalEntityWrite("preset", preset as unknown as Record<string, unknown>);
+  return preset;
 }
 
 export async function updatePreset(id: string, patch: PresetUpdate): Promise<void> {
@@ -157,6 +189,14 @@ export async function updatePreset(id: string, patch: PresetUpdate): Promise<voi
     sets.push(`extra_system_prompt = $${idx++}`);
     params.push(patch.extraSystemPrompt);
   }
+  if (patch.authorNote !== undefined) {
+    sets.push(`author_note = $${idx++}`);
+    params.push(patch.authorNote);
+  }
+  if (patch.regexRules !== undefined) {
+    sets.push(`regex_rules = $${idx++}`);
+    params.push(patch.regexRules);
+  }
   if (patch.temperature !== undefined) {
     sets.push(`temperature = $${idx++}`);
     params.push(patch.temperature);
@@ -164,6 +204,14 @@ export async function updatePreset(id: string, patch: PresetUpdate): Promise<voi
   if (patch.topP !== undefined) {
     sets.push(`top_p = $${idx++}`);
     params.push(patch.topP);
+  }
+  if (patch.topK !== undefined) {
+    sets.push(`top_k = $${idx++}`);
+    params.push(patch.topK);
+  }
+  if (patch.minP !== undefined) {
+    sets.push(`min_p = $${idx++}`);
+    params.push(patch.minP);
   }
   if (patch.frequencyPenalty !== undefined) {
     sets.push(`frequency_penalty = $${idx++}`);
@@ -181,9 +229,14 @@ export async function updatePreset(id: string, patch: PresetUpdate): Promise<voi
   if (sets.length > 1) {
     await execute(`UPDATE presets SET ${sets.join(", ")} WHERE id = $1`, params);
   }
+  journalEntityWrite("preset", { id, ...patch, updated_at: nowIso() });
 }
 
 export async function deletePreset(id: string): Promise<void> {
+  const preset = await getPreset(id);
   await execute("UPDATE chats SET preset_id = NULL WHERE preset_id = $1", [id]);
   await execute("DELETE FROM presets WHERE id = $1", [id]);
+  if (preset) {
+    journalEntityDelete("preset", preset as unknown as Record<string, unknown>);
+  }
 }

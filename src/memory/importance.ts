@@ -180,8 +180,8 @@ export function formatScoredMessages(
     const score = scores.get(m.id) ?? 0;
 
     if (score > IMPORTANCE_THRESHOLD) {
-      const speaker = m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč");
-      lines.push(`[důležité] ${speaker}: ${m.content}`);
+      const speaker = m.speakerName ?? (m.role === "assistant" ? "AI" : "Player");
+      lines.push(`[important] ${speaker}: ${m.content}`);
       i++;
     } else {
       // Collect adjacent routine messages
@@ -198,7 +198,7 @@ export function formatScoredMessages(
       const count = i - start;
       const speakerList = [...speakers].join(", ");
       lines.push(
-        `[rutinní] Proběhla krátká výměna o počasí. (${speakerList} — ${count} ${count === 1 ? "zpráva" : count >= 2 && count <= 4 ? "zprávy" : "zpráv"})`,
+        `[routine] Brief exchange between ${speakerList} (${count} ${count === 1 ? "message" : "messages"})`,
       );
     }
   }

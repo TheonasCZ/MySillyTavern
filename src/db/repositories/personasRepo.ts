@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 export interface SkillEntry {
   name: string;
@@ -174,7 +175,7 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
       draft.avatarPath, isDefault ? 1 : 0, now,
     ],
   );
-  return {
+  const persona: Persona = {
     id, name: draft.name, description,
     gender: draft.gender, age: draft.age, race: draft.race,
     appearance: draft.appearance,
@@ -186,19 +187,23 @@ export async function createPersona(draft: PersonaDraft): Promise<Persona> {
     avatarPath: draft.avatarPath, isDefault,
     createdAt: now, updatedAt: now,
   };
+  journalEntityWrite("persona", persona as unknown as Record<string, unknown>);
+  return persona;
 }
 
 export async function updatePersona(id: string, patch: PersonaUpdate): Promise<void> {
   const description = buildPersonaDescription(patch);
+  const now = nowIso();
   await execute(
     `UPDATE personas SET name = $2, description = $3, gender = $4, age = $5, race = $6, appearance = $7, progression = $8, skills = $9, inventory = $10, conditions = $11, updated_at = $12 WHERE id = $1`,
     [
       id, patch.name, description,
       patch.gender, patch.age, patch.race, patch.appearance, patch.progression || "skill",
       JSON.stringify(patch.skills), JSON.stringify(patch.inventory), JSON.stringify(patch.conditions ?? []),
-      nowIso(),
+      now,
     ],
   );
+  journalEntityWrite("persona", { id, ...patch, updated_at: now });
 }
 
 export async function updatePersonaXpLevel(
@@ -227,7 +232,11 @@ export async function setDefaultPersona(id: string): Promise<void> {
 }
 
 export async function deletePersona(id: string): Promise<void> {
+  const persona = await getPersona(id);
   await execute("DELETE FROM personas WHERE id = $1", [id]);
+  if (persona) {
+    journalEntityDelete("persona", persona as unknown as Record<string, unknown>);
+  }
 }
 
 /** Sets image_path on a specific inventory item by name within a persona's inventory JSON. */

@@ -8,6 +8,7 @@ import { ConnectionsPanel } from "./ConnectionsPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { MemorySettingsPanel } from "./MemorySettingsPanel";
 import { PresetsPanel } from "./PresetsPanel";
+import { SyncPanel } from "./SyncPanel";
 import { TtsPanel } from "./TtsPanel";
 import { UsagePanel } from "./UsagePanel";
 
@@ -21,6 +22,7 @@ export function SettingsScreen() {
       <ConnectionsPanel />
       <PresetsPanel />
       <MemorySettingsPanel />
+      <SyncPanel />
       <AppearancePanel />
       <TtsPanel />
       <BackupPanel />

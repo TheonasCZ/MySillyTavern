@@ -22,9 +22,13 @@ jobs:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Setup Android SDK
+        id: setup-android
         uses: android-actions/setup-android@v3
         with:
           packages: "platforms;android-34 build-tools;34.0.0 ndk;27.0.12077973"
+
+      - name: Set NDK_HOME
+        run: echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: npm install
@@ -34,16 +38,25 @@ jobs:
 
       - name: Init Android project
         run: npx tauri android init
-      - name: Build Tauri Android (APK + AAB)
+
+      - name: Patch AndroidManifest (adjustResize for keyboard)
+        run: |
+          manifest=src-tauri/gen/android/app/src/main/AndroidManifest.xml
+          if ! grep -q windowSoftInputMode "$manifest"; then
+            sed -i 's/<activity/<activity android:windowSoftInputMode="adjustResize"/' "$manifest"
+          fi
+          grep windowSoftInputMode "$manifest"
+
+      - name: Build Tauri Android (release APK + AAB)
         run: npm run tauri android build
-        env:
-          ANDROID_HOME: ${{ steps.setup-android.outputs.ANDROID_HOME }}
-          NDK_HOME: ${{ steps.setup-android.outputs.ANDROID_NDK }}
+
+      - name: Build Tauri Android (debug APK, installable)
+        run: npm run tauri android build -- --debug --apk
 
       - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MySillyTavern-Android
           path: |
-            src-tauri/gen/android/app/build/outputs/apk/release/*.apk
-            src-tauri/gen/android/app/build/outputs/bundle/release/*.aab
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/**/*.aab

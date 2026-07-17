@@ -119,6 +119,42 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_019,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "tts: voice profiles with pitch/rate/volume per profile",
+            sql: MIGRATION_020,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 21,
+            description: "presets: add top_k and min_p sampler params",
+            sql: MIGRATION_021,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 22,
+            description: "presets: add author_note for hloubková injekce",
+            sql: MIGRATION_022,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 23,
+            description: "presets: add regex_rules for find/replace output transform",
+            sql: MIGRATION_023,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 24,
+            description: "chats: add game_language for per-chat AI output language",
+            sql: MIGRATION_024,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 25,
+            description: "lore_entries: recursive activation, selective AND/NOT, timed effects, vector activation",
+            sql: MIGRATION_025,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -439,4 +475,37 @@ const MIGRATION_019: &str = r#"
 ALTER TABLE ledger_facts ADD COLUMN canon INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE ledger_facts ADD COLUMN stability INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE ledger_facts ADD COLUMN contradiction_streak INTEGER NOT NULL DEFAULT 0;
+"#;
+
+const MIGRATION_021: &str = r#"
+ALTER TABLE presets ADD COLUMN top_k REAL;
+ALTER TABLE presets ADD COLUMN min_p REAL;
+"#;
+
+const MIGRATION_022: &str = r#"ALTER TABLE presets ADD COLUMN author_note TEXT NOT NULL DEFAULT '';"#;
+
+const MIGRATION_023: &str = r#"ALTER TABLE presets ADD COLUMN regex_rules TEXT NOT NULL DEFAULT '[]';"#;
+
+const MIGRATION_024: &str = r#"ALTER TABLE chats ADD COLUMN game_language TEXT NOT NULL DEFAULT 'cs';"#;
+
+const MIGRATION_025: &str = r#"
+ALTER TABLE lore_entries ADD COLUMN recursive_activation INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE lore_entries ADD COLUMN activation_depth INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE lore_entries ADD COLUMN selective_keys TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE lore_entries ADD COLUMN timed_json TEXT;
+ALTER TABLE lore_entries ADD COLUMN vector_threshold REAL;
+ALTER TABLE lore_entries ADD COLUMN vector_budget INTEGER NOT NULL DEFAULT 2;
+"#;
+
+const MIGRATION_020: &str = r#"
+CREATE TABLE tts_voice_profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  backend TEXT NOT NULL DEFAULT 'edge-tts',
+  voice_id TEXT NOT NULL,
+  pitch REAL NOT NULL DEFAULT 0.0,
+  rate REAL NOT NULL DEFAULT 1.0,
+  volume REAL NOT NULL DEFAULT 1.0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 "#;

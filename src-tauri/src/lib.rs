@@ -12,6 +12,7 @@ use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
 use commands::dice::eval_dice;
+use commands::export_campaign::export_campaign_zip;
 use commands::export_chronicle::{
     cancel_export, get_export_status, resume_export, start_export, ExportRegistry,
 };
@@ -19,13 +20,23 @@ use commands::files::{read_text_file, write_text_file};
 use commands::image_gen::generate_illustration;
 use commands::logging::{append_log, get_log_path};
 use commands::secrets::{delete_api_key, has_api_key, init_store, set_api_key};
+use commands::sync_journal::{
+    append_journal_line, delete_sync_file, list_sync_entries, read_journal_chunk,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_process::init())
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init());
+
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_process::init());
+    }
+
+    builder
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:mysillytavern.db", migrations::all_migrations())
@@ -63,10 +74,15 @@ pub fn run() {
             get_log_path,
             eval_dice,
             generate_illustration,
+            export_campaign_zip,
             start_export,
             resume_export,
             get_export_status,
             cancel_export,
+            append_journal_line,
+            list_sync_entries,
+            read_journal_chunk,
+            delete_sync_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

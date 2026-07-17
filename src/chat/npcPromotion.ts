@@ -4,6 +4,7 @@
  * lives in `GroupMembersPopover`. */
 
 import type { ChatMessage } from "../providers/types";
+import { NPC_PROMOTION_PROMPT } from "../prompt/promptTexts";
 
 export interface NpcFact {
   subject: string;
@@ -33,12 +34,7 @@ export const MAX_CONTEXT_MESSAGES = 40;
  * blow the context budget. */
 const MAX_MESSAGE_CHARS = 500;
 
-const SYSTEM_PROMPT =
-  "Jsi asistent, který z kontextu RP konverzace vytváří kartu vedlejší postavy (NPC) pro povýšení " +
-  "na plnohodnotnou hratelnou postavu. Dostaneš známá fakta o dané NPC a nedávné zprávy z chatu. " +
-  "Na jejich základě vytvoř kartu postavy. Odpověz POUZE JSON objektem ve tvaru " +
-  '{"name": string, "description": string, "personality": string, "scenario": string, "first_mes": ""} ' +
-  "— pole first_mes nech vždy prázdné, protože postava vstupuje do už běžícího příběhu. Žádný text mimo JSON.";
+
 
 function truncateMessageContent(content: string): string {
   if (content.length <= MAX_MESSAGE_CHARS) return content;
@@ -58,14 +54,14 @@ export function truncateTranscript(
 }
 
 function formatFacts(facts: NpcFact[]): string {
-  if (facts.length === 0) return "(žádná zaznamenaná fakta)";
+  if (facts.length === 0) return "(no recorded facts)";
   return facts.map((f) => `- ${f.fact}`).join("\n");
 }
 
 function formatTranscript(messages: TranscriptEntry[]): string {
-  if (messages.length === 0) return "(žádné zprávy)";
+  if (messages.length === 0) return "(no messages)";
   return messages
-    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč")}: ${m.content}`)
+    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Player")}: ${m.content}`)
     .join("\n");
 }
 
@@ -76,15 +72,17 @@ export function buildPromotionPrompt(
   npcName: string,
   facts: NpcFact[],
   messages: TranscriptEntry[],
+  lang?: string,
 ): ChatMessage[] {
+  const language = lang ?? "cs";
   const transcript = truncateTranscript(messages);
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: NPC_PROMOTION_PROMPT(language) },
     {
       role: "user",
       content:
-        `NPC: ${npcName}\n\nZnámá fakta:\n${formatFacts(facts)}\n\n` +
-        `Poslední zprávy z chatu:\n${formatTranscript(transcript)}`,
+        `NPC: ${npcName}\n\nKnown facts:\n${formatFacts(facts)}\n\n` +
+        `Latest chat messages:\n${formatTranscript(transcript)}`,
     },
   ];
 }

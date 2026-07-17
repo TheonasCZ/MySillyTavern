@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityWrite } from "../syncJournal";
 
 export interface Summary {
   id: string;
@@ -51,7 +52,9 @@ export async function upsertSummary(
       `UPDATE summaries SET up_to_message_id = $2, text = $3, updated_at = $4 WHERE chat_id = $1`,
       [chatId, upToMessageId, text, now],
     );
-    return { ...existing, upToMessageId, text, updatedAt: now };
+    const summary = { ...existing, upToMessageId, text, updatedAt: now };
+    journalEntityWrite("summary", summary as unknown as Record<string, unknown>);
+    return summary;
   }
   const id = newId();
   await execute(
@@ -59,7 +62,9 @@ export async function upsertSummary(
      VALUES ($1, $2, $3, $4, $5, $5)`,
     [id, chatId, upToMessageId, text, now],
   );
-  return { id, chatId, upToMessageId, text, createdAt: now, updatedAt: now };
+  const summary: Summary = { id, chatId, upToMessageId, text, createdAt: now, updatedAt: now };
+  journalEntityWrite("summary", summary as unknown as Record<string, unknown>);
+  return summary;
 }
 
 /** Manual edit from the memory panel — rewrites the text only, keeps

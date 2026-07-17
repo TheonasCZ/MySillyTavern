@@ -4,6 +4,7 @@
  * of the prompt by `buildPrompt` (input `directorNote`). */
 
 import { getSetting, setSetting } from "../db/repositories/settingsRepo";
+import { DIRECTOR_PACE, DIRECTOR_TONE, DIRECTOR_FOCUS } from "../prompt/promptTexts";
 
 export type DirectorPace = "slow" | "normal" | "fast";
 export type DirectorTone = "light" | "neutral" | "dark" | "epic";
@@ -22,23 +23,23 @@ export function defaultDirectorSettings(): DirectorSettings {
 }
 
 const PACE_NOTES: Record<DirectorPace, string> = {
-  slow: "Zpomal tempo — rozehrávej scény do detailu, dej prostor atmosféře a rozhovorům, neposouvej děj o víc než jeden krok najednou.",
-  normal: "",
-  fast: "Drž svižné tempo — kratší popisy, rychlejší střihy mezi událostmi, děj se hýbe každou odpovědí.",
+  slow: DIRECTOR_PACE.slow,
+  normal: DIRECTOR_PACE.normal,
+  fast: DIRECTOR_PACE.fast,
 };
 
 const TONE_NOTES: Record<DirectorTone, string> = {
-  light: "Tón drž odlehčený a hravý; humor je vítaný, ponurost jen výjimečně.",
-  neutral: "",
-  dark: "Tón drž temný a vážný; svět je nebezpečný, činy mají následky, humor jen střídmě.",
-  epic: "Tón drž epický a vznešený; velká gesta, vysoké sázky, patos je na místě.",
+  light: DIRECTOR_TONE.light,
+  neutral: DIRECTOR_TONE.neutral,
+  dark: DIRECTOR_TONE.dark,
+  epic: DIRECTOR_TONE.epic,
 };
 
 const FOCUS_NOTES: Record<DirectorFocus, string> = {
-  dialogue: "Těžiště scén polož do rozhovorů a vztahů mezi postavami.",
-  balanced: "",
-  action: "Těžiště scén polož do akce — souboje, honičky, fyzické překážky.",
-  exploration: "Těžiště scén polož do objevování — prostředí, záhady, nálezy.",
+  dialogue: DIRECTOR_FOCUS.dialogue,
+  balanced: DIRECTOR_FOCUS.balanced,
+  action: DIRECTOR_FOCUS.action,
+  exploration: DIRECTOR_FOCUS.exploration,
 };
 
 /** Renders the settings into the prompt note; returns "" when everything is

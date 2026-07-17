@@ -50,6 +50,7 @@ export function ChatListScreen() {
   const [starterCharacterId, setStarterCharacterId] = useState<string>("");
   const [newPersonaId, setNewPersonaId] = useState<string>("");
   const [newGreeting, setNewGreeting] = useState<string>("");
+  const [newGameLanguage, setNewGameLanguage] = useState<string>("cs");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -157,6 +158,7 @@ export function ChatListScreen() {
       characterIds: orderedIds,
       connectionId: newConnectionId || null,
       personaId: newPersonaId || null,
+      gameLanguage: newGameLanguage,
     });
 
     const character = await getCharacter(starterCharacterId);
@@ -170,6 +172,7 @@ export function ChatListScreen() {
 
     setCreating(false);
     setNewTitle("");
+    setNewGameLanguage("cs");
     navigate(`/chat/${created.id}`);
   };
 
@@ -235,6 +238,22 @@ export function ChatListScreen() {
               {t("newChat.noConnectionsHint")}
             </p>
           )}
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span>{t("newChat.gameLanguage")}</span>
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newGameLanguage}
+              onChange={(e) => setNewGameLanguage(e.target.value)}
+            >
+              <option value="cs">Čeština</option>
+              <option value="en">English</option>
+            </select>
+            <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+              {t("newChat.gameLanguageHelp")}
+            </span>
+          </label>
 
           <div className="flex flex-col gap-1 text-sm">
             {t("newChat.charactersLabel")}

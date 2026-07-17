@@ -124,6 +124,12 @@ describe("entriesToWorldInfo / roundtrip", () => {
       alwaysOn: true,
       caseSensitive: true,
       enabled: false,
+      recursiveActivation: false,
+      activationDepth: 1,
+      selectiveKeys: [],
+      timed: null,
+      vectorThreshold: null,
+      vectorBudget: 2,
     };
     const wi = entriesToWorldInfo([fields]);
     const [[, exported]] = Object.entries(wi.entries);

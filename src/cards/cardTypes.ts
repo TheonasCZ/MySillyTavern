@@ -103,6 +103,22 @@ export function normalizeCard(card: CharacterCard): NormalizedCard {
   };
 }
 
+/** MySillyTavern-specific extensions stored in the `extensions.mysillytavern`
+ * namespace of V2/V3 character cards. ST ignores unknown extensions, so this
+ * is lossless for ST users and roundtrips through our import/export. */
+export interface MySillyTavernExtensions {
+  /** TTS voice URI assigned to this character. */
+  ttsVoice?: string;
+  /** Preset ID recommended for chats with this character. */
+  recommendedPreset?: string;
+  /** Default director parameters for new chats. */
+  directorDefaults?: {
+    pace?: string;
+    tone?: string;
+    focus?: string;
+  };
+}
+
 /** Fields for a fresh character created from scratch in the editor
  * (as opposed to imported from a card file). */
 export function blankNormalizedCard(name: string): NormalizedCard {
@@ -141,24 +157,35 @@ export function parseCardJson(text: string): CharacterCard {
 /** Builds a V2 card JSON object from the current DB-shape fields of a
  * character, for export. We always export as V2 for maximum compatibility
  * — V3-only fields aren't modeled by this app yet (M4+ lorebook UI may add
- * some), and V2 readers can still open the result. */
-export function buildCardV2Json(card: NormalizedCard): CharacterCardV2 {
+ * some), and V2 readers can still open the result.
+ *
+ * When `extensions` is provided it is written into
+ * `data.extensions.mysillytavern`, preserving the spec-compliant
+ * `extensions` namespace so ST ignores it. */
+export function buildCardV2Json(
+  card: NormalizedCard,
+  mstExtensions?: MySillyTavernExtensions,
+): CharacterCardV2 {
+  const data: CharacterCardV2["data"] = {
+    name: card.name,
+    description: card.description,
+    personality: card.personality,
+    scenario: card.scenario,
+    first_mes: card.firstMes,
+    mes_example: card.mesExample,
+    creator_notes: card.creatorNotes,
+    system_prompt: card.systemPrompt,
+    post_history_instructions: card.postHistoryInstructions,
+    alternate_greetings: card.alternateGreetings,
+    tags: card.tags,
+    character_book: card.characterBook ?? undefined,
+  };
+  if (mstExtensions) {
+    data.extensions = { mysillytavern: mstExtensions as Record<string, unknown> };
+  }
   return {
     spec: "chara_card_v2",
     spec_version: "2.0",
-    data: {
-      name: card.name,
-      description: card.description,
-      personality: card.personality,
-      scenario: card.scenario,
-      first_mes: card.firstMes,
-      mes_example: card.mesExample,
-      creator_notes: card.creatorNotes,
-      system_prompt: card.systemPrompt,
-      post_history_instructions: card.postHistoryInstructions,
-      alternate_greetings: card.alternateGreetings,
-      tags: card.tags,
-      character_book: card.characterBook ?? undefined,
-    },
+    data,
   };
 }

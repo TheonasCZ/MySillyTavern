@@ -10,27 +10,9 @@ import type { Message } from "../db/repositories/messagesRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { scoreImportance, formatScoredMessages } from "./importance";
+import { SUMMARY_SYSTEM_PROMPT } from "../prompt/promptTexts";
 
-const SUMMARY_SYSTEM_PROMPT =
-  "Jsi nástroj, který udržuje stručné shrnutí dosavadního příběhu RP hry. Dostaneš " +
-  "dosavadní shrnutí (může být prázdné) a nové události od poslední aktualizace. Vrať " +
-  "aktualizované shrnutí v maximálně přibližně 300 slovech, které zahrnuje staré i nové " +
-  "podstatné události v chronologickém pořadí. Piš věcně, ve třetí osobě, bez uvozovek a " +
-  "bez nadpisů — jen souvislý text shrnutí, nic jiného.\n\n" +
-  "Nové události jsou označeny značkami:\n" +
-  "- [důležité] — zpráva s vysokou informační hodnotou (klíčové dějové zvraty, důležitá " +
-  "fakta, jména, rozhodnutí). Těm věnuj největší pozornost.\n" +
-  "- [rutinní] — běžná, opakující se nebo málo informační komunikace (pozdravy, " +
-  "souhlas, krátké odpovědi). Tyto zprávy jsou již zkomprimované do souhrnných řádků; " +
-  "nezahrnuj je do shrnutí, pokud neobsahují novou informaci.\n\n" +
-  "Toto shrnutí je jediná paměť dlouhodobého děje, kterou hra má — udržuj proto žánr, tón " +
-  "a zavedená pravidla světa stejná, jaká byla na začátku dosavadního shrnutí, i když nové " +
-  "události ve zprávách postupně vyznívají jinak (např. fantasy svět, který ve zprávách " +
-  "nenápadně sklouzává k sci-fi/technologii, nebo hráč, který nabírá schopnosti nad rámec " +
-  "toho, co bylo dřív zavedeno jako jeho limity). Nové události piš tak, jak se skutečně " +
-  "staly, ale nepřejímej beze zmínky jejich žánrový posun jako novou normu — pokud je v " +
-  "rozporu s dosavadním shrnutím nebo se zavedenými pravidly světa, tuto skutečnost do " +
-  "shrnutí zahrň jako fakt (co se stalo), ne jako potvrzení, že staré hranice už neplatí.";
+
 
 /** Message with an optional group-chat speaker name (plan §M10) — additive
  * over `Message` so existing callers still typecheck. */
@@ -38,7 +20,7 @@ export type TranscriptMessage = Message & { speakerName?: string | null };
 
 function formatMessages(messages: TranscriptMessage[]): string {
   return messages
-    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Hráč")}: ${m.content}`)
+    .map((m) => `${m.speakerName ?? (m.role === "assistant" ? "AI" : "Player")}: ${m.content}`)
     .join("\n");
 }
 
@@ -48,17 +30,19 @@ export function buildSummaryPrompt(
   previousSummary: string,
   newMessages: TranscriptMessage[],
   scores?: Map<string, number>,
+  lang?: string,
 ): ChatMessage[] {
+  const language = lang ?? "cs";
   const formatted = scores
     ? formatScoredMessages(newMessages, scores)
     : formatMessages(newMessages);
   return [
-    { role: "system", content: SUMMARY_SYSTEM_PROMPT },
+    { role: "system", content: SUMMARY_SYSTEM_PROMPT(language) },
     {
       role: "user",
       content:
-        `Dosavadní shrnutí:\n${previousSummary.trim() || "(zatím žádné)"}\n\n` +
-        `Nové události:\n${formatted}`,
+        `Previous summary:\n${previousSummary.trim() || "(none yet)"}\n\n` +
+        `New events:\n${formatted}`,
     },
   ];
 }
@@ -73,12 +57,13 @@ export async function runSummarization(
   chatId: string,
   connection: ConnectionConfig,
   messagesToFold: TranscriptMessage[],
+  lang?: string,
 ): Promise<void> {
   if (messagesToFold.length === 0) return;
   try {
     const existing = await getSummary(chatId);
     const scores = scoreImportance(messagesToFold);
-    const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold, scores);
+    const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold, scores, lang);
     const text = await chatComplete(connection, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
     void logUsage("memory", connection.id, inputTokens, estimateTokens(text)).catch(() => {});

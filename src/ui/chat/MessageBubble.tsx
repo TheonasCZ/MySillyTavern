@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -114,8 +114,40 @@ export function MessageBubble({
   const swipeCount = message.swipes.length;
   const showSwipeControls = !isUser && swipeCount > 1 && !isStreaming;
 
+  // --- Touch swipe for variant switching (Android / mobile) ---
+  const touchStartXRef = useRef<number | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartXRef.current = e.touches[0].clientX;
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartXRef.current === null) return;
+      const deltaX = (e.changedTouches[0]?.clientX ?? 0) - touchStartXRef.current;
+      touchStartXRef.current = null;
+      // Only process swipes on the bubble itself (not on action buttons)
+      if (Math.abs(deltaX) > 50 && showSwipeControls) {
+        // Swipe left → next variant (+1), swipe right → previous (-1)
+        if (deltaX < -50 && message.activeSwipe < swipeCount - 1) {
+          onSwipe(1);
+        } else if (deltaX > 50 && message.activeSwipe > 0) {
+          onSwipe(-1);
+        }
+      }
+    },
+    [showSwipeControls, swipeCount, message.activeSwipe, onSwipe],
+  );
+
   return (
-    <div className={`flex w-full items-end gap-2 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div
+      className={`flex w-full items-end gap-2 ${isUser ? "flex-row-reverse" : ""}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      style={{ touchAction: "pan-y" }}
+    >
       <Avatar url={avatarUrl} name={authorName} isUser={isUser} />
       <div
         className="flex max-w-[75%] flex-col gap-1.5 rounded-[var(--radius-lg)] border px-4 py-3"

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { applyRegexRules } from "../../chat/regexTransform";
 import { usePresetsStore } from "../../stores/presetsStore";
 import type { Preset, PresetDraft, PresetUpdate } from "../../db/repositories/presetsRepo";
 
@@ -24,8 +25,14 @@ function PresetEditor({
   const { t } = useTranslation("settings");
   const [name, setName] = useState(preset?.name ?? "");
   const [extraSystemPrompt, setExtraSystemPrompt] = useState(preset?.extraSystemPrompt ?? "");
+  const [authorNote, setAuthorNote] = useState(preset?.authorNote ?? "");
+  const [regexRules, setRegexRules] = useState(preset?.regexRules ?? "[]");
+  const [regexTestInput, setRegexTestInput] = useState("");
+  const [regexTestResult, setRegexTestResult] = useState("");
   const [temperature, setTemperature] = useState(preset?.temperature?.toString() ?? "");
   const [topP, setTopP] = useState(preset?.topP?.toString() ?? "");
+  const [topK, setTopK] = useState(preset?.topK?.toString() ?? "");
+  const [minP, setMinP] = useState(preset?.minP?.toString() ?? "");
   const [frequencyPenalty, setFrequencyPenalty] = useState(preset?.frequencyPenalty?.toString() ?? "");
   const [presencePenalty, setPresencePenalty] = useState(preset?.presencePenalty?.toString() ?? "");
   const [maxTokens, setMaxTokens] = useState(preset?.maxTokens?.toString() ?? "");
@@ -44,8 +51,12 @@ function PresetEditor({
       await onSave({
         name: name.trim(),
         extraSystemPrompt,
+        authorNote,
+        regexRules,
         temperature: parseNum(temperature),
         topP: parseNum(topP),
+        topK: parseNum(topK),
+        minP: parseNum(minP),
         frequencyPenalty: parseNum(frequencyPenalty),
         presencePenalty: parseNum(presencePenalty),
         maxTokens: parseNum(maxTokens),
@@ -83,6 +94,66 @@ function PresetEditor({
         />
       </label>
 
+      <label className="flex flex-col gap-1 text-sm">
+        {t("presets.fields.authorNote")}
+        <textarea
+          className="min-h-[6rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
+          style={inputStyle}
+          value={authorNote}
+          placeholder={t("presets.fields.authorNotePlaceholder") ?? ""}
+          onChange={(e) => setAuthorNote(e.target.value)}
+          rows={5}
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        {t("presets.fields.regexRules")}
+        <textarea
+          className="min-h-[4rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm font-mono"
+          style={inputStyle}
+          value={regexRules}
+          placeholder={t("presets.fields.regexRulesHelp") ?? ""}
+          onChange={(e) => setRegexRules(e.target.value)}
+          rows={4}
+        />
+      </label>
+
+      <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] border p-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
+        <span className="text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>{t("presets.regexTest")}</span>
+        <textarea
+          className="min-h-[3rem] rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
+          style={inputStyle}
+          value={regexTestInput}
+          placeholder={t("presets.regexTestPlaceholder") ?? ""}
+          onChange={(e) => setRegexTestInput(e.target.value)}
+          rows={3}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setRegexTestResult(applyRegexRules(regexTestInput, regexRules))}
+            className="rounded-[var(--radius-sm)] px-2 py-1 text-xs"
+            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
+          >
+            {t("presets.regexTest")}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setRegexTestInput(""); setRegexTestResult(""); }}
+            className="rounded-[var(--radius-sm)] px-2 py-1 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {t("actions.clear", { ns: "common" })}
+          </button>
+        </div>
+        {regexTestResult && (
+          <div className="rounded-[var(--radius-sm)] border p-2 text-sm" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+            <span className="text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>{t("presets.regexTestResult")}:</span>
+            <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm">{regexTestResult}</pre>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-sm">
           {t("presets.fields.temperature")}
@@ -110,6 +181,34 @@ function PresetEditor({
             value={topP}
             placeholder="0.95"
             onChange={(e) => setTopP(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          {t("presets.fields.topK")}
+          <input
+            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+            style={inputStyle}
+            type="number"
+            step="1"
+            min="1"
+            max="100"
+            value={topK}
+            placeholder="40"
+            onChange={(e) => setTopK(e.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          {t("presets.fields.minP")}
+          <input
+            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+            style={inputStyle}
+            type="number"
+            step="0.01"
+            min="0"
+            max="1"
+            value={minP}
+            placeholder="0.05"
+            onChange={(e) => setMinP(e.target.value)}
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
@@ -261,6 +360,7 @@ export function PresetsPanel() {
                   if (draft.frequencyPenalty !== preset.frequencyPenalty) patch.frequencyPenalty = draft.frequencyPenalty ?? null;
                   if (draft.presencePenalty !== preset.presencePenalty) patch.presencePenalty = draft.presencePenalty ?? null;
                   if (draft.maxTokens !== preset.maxTokens) patch.maxTokens = draft.maxTokens ?? null;
+                  if (draft.regexRules !== preset.regexRules) patch.regexRules = draft.regexRules;
                   if (draft.isDefault !== preset.isDefault) patch.isDefault = draft.isDefault;
                   await update(preset.id, patch);
                   setEditingId(null);

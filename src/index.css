@@ -93,6 +93,12 @@ select option {
   outline-offset: 2px;
 }
 
+/* Android / mobile: allow vertical pan but prevent horizontal swipe
+   interference on message bubbles (M15 touch gestures). */
+[data-msg-id] {
+  touch-action: pan-y;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

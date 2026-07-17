@@ -19,14 +19,21 @@ fn build_body(connection: &ConnectionDto, messages: &[ChatMessage]) -> Value {
         })
         .collect();
 
-    json!({
+    let mut body = json!({
         "model": connection.model,
         "messages": msgs,
         "temperature": connection.temperature,
         "top_p": connection.top_p,
         "max_tokens": connection.max_tokens,
         "stream": true,
-    })
+    });
+    if let Some(fp) = connection.frequency_penalty {
+        body["frequency_penalty"] = json!(fp);
+    }
+    if let Some(pp) = connection.presence_penalty {
+        body["presence_penalty"] = json!(pp);
+    }
+    body
 }
 
 /// Parses one OpenAI-compatible `data: {...}` SSE payload (also handles the

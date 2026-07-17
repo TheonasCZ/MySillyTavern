@@ -78,7 +78,7 @@ describe("buildPrompt — composition order & placeholders", () => {
           priority: 10,
           alwaysOn: false,
           caseSensitive: false,
-          enabled: true,
+          enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0,
         },
       ],
       summary: "Elara arrived in Ashford and met the innkeeper.",
@@ -89,9 +89,9 @@ describe("buildPrompt — composition order & placeholders", () => {
     const system = messages[0];
     expect(system.role).toBe("system");
 
-    const factsIdx = system.content.indexOf("[FAKTA SVĚTA");
+    const factsIdx = system.content.indexOf("[WORLD FACTS");
     const loreIdx = system.content.indexOf("keep stands north");
-    const summaryIdx = system.content.indexOf("[DOSAVADNÍ PŘÍBĚH]");
+    const summaryIdx = system.content.indexOf("[STORY SO FAR]");
     const descriptionIdx = system.content.indexOf("A wandering mage");
 
     expect(descriptionIdx).toBeGreaterThanOrEqual(0);
@@ -108,7 +108,7 @@ describe("buildPrompt — composition order & placeholders", () => {
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
     expect(last.content.startsWith("Stay in character, Elara.")).toBe(true);
-    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("[Canon reminder");
     expect(last.content).toContain("- (world/Ashford) The capital.");
   });
 
@@ -162,7 +162,7 @@ describe("buildPrompt — composition order & placeholders", () => {
           priority: 5,
           alwaysOn: true,
           caseSensitive: false,
-          enabled: true,
+          enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0,
         },
       ],
     });
@@ -203,9 +203,9 @@ describe("buildPrompt — composition order & placeholders", () => {
 describe("buildPrompt — trimming under budget pressure", () => {
   it("(a) trims lore from the lowest priority first when over budget", () => {
     const entries: LoreEntryLike[] = [
-      { id: "low", keys: [], secondaryKeys: [], content: "L".repeat(200), priority: 10, alwaysOn: true, caseSensitive: false, enabled: true },
-      { id: "mid", keys: [], secondaryKeys: [], content: "M".repeat(200), priority: 50, alwaysOn: true, caseSensitive: false, enabled: true },
-      { id: "high", keys: [], secondaryKeys: [], content: "H".repeat(200), priority: 90, alwaysOn: true, caseSensitive: false, enabled: true },
+      { id: "low", keys: [], secondaryKeys: [], content: "L".repeat(200), priority: 10, alwaysOn: true, caseSensitive: false, enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0 },
+      { id: "mid", keys: [], secondaryKeys: [], content: "M".repeat(200), priority: 50, alwaysOn: true, caseSensitive: false, enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0 },
+      { id: "high", keys: [], secondaryKeys: [], content: "H".repeat(200), priority: 90, alwaysOn: true, caseSensitive: false, enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0 },
     ];
     const fits = baseInput({ loreEntries: entries, history: makeHistory(2) });
     const baseline = buildPrompt(fits).report.estimatedTokens;
@@ -307,11 +307,11 @@ describe("buildPrompt — trimming under budget pressure", () => {
         retrievedMemories: ["Hráč: Vytáhnu krystal.\nVypravěč: Krystal se rozzáří."],
       }),
     );
-    expect(roomy.messages[0].content).toContain("[RELEVANTNÍ VZPOMÍNKY");
+    expect(roomy.messages[0].content).toContain("[RELEVANT MEMORIES");
     expect(roomy.messages[0].content).toContain("Krystal se rozzáří.");
     expect(roomy.report.sections.memoriesIncluded).toBe(1);
-    const summaryIdx = roomy.messages[0].content.indexOf("[DOSAVADNÍ PŘÍBĚH]");
-    const memoriesIdx = roomy.messages[0].content.indexOf("[RELEVANTNÍ VZPOMÍNKY");
+    const summaryIdx = roomy.messages[0].content.indexOf("[STORY SO FAR]");
+    const memoriesIdx = roomy.messages[0].content.indexOf("[RELEVANT MEMORIES");
     expect(memoriesIdx).toBeGreaterThan(summaryIdx);
 
     const tight = buildPrompt(
@@ -344,7 +344,7 @@ describe("buildPrompt — trimming under budget pressure", () => {
       character: makeCharacter({ mesExample: "Example dialogue line." }),
       ledgerFacts: [makeFact({ category: "world", subject: "Ashford", fact: "The capital." })],
       loreEntries: [
-        { id: "l1", keys: [], secondaryKeys: [], content: "Lore content here.", priority: 10, alwaysOn: true, caseSensitive: false, enabled: true },
+        { id: "l1", keys: [], secondaryKeys: [], content: "Lore content here.", priority: 10, alwaysOn: true, caseSensitive: false, enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0 },
       ],
       summary: "Something happened once.",
       history: makeHistory(20),
@@ -370,7 +370,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("[Canon reminder");
     expect(last.content).toContain("(world/Ashford)");
     expect(last.content).toContain("(player/Kai)");
     expect(last.content).not.toContain("(npc/Innkeeper)");
@@ -384,7 +384,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    expect(last.content).not.toContain("[Připomínka kánonu");
+    expect(last.content).not.toContain("[Canon reminder");
   });
 
   it("sends the canon reminder as its own trailing system message when the card has no post_history_instructions", () => {
@@ -395,7 +395,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("[Canon reminder");
   });
 
   it("substitutes {{char}}/{{user}} placeholders in the canon reminder", () => {
@@ -415,7 +415,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const input = baseInput({ ledgerFacts: facts });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    const canonBlock = last.content.slice(last.content.indexOf("[Připomínka kánonu"));
+    const canonBlock = last.content.slice(last.content.indexOf("[Canon reminder"));
     expect(canonBlock.indexOf("(world/Locked)")).toBeLessThan(canonBlock.indexOf("(world/Unlocked)"));
   });
 
@@ -426,7 +426,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const input = baseInput({ ledgerFacts: facts });
     const { messages, report } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    const canonBlock = last.content.slice(last.content.indexOf("[Připomínka kánonu"));
+    const canonBlock = last.content.slice(last.content.indexOf("[Canon reminder"));
     expect(canonBlock.length).toBeLessThan(2600);
     expect(report.sections.canonReminderTokens).toBeGreaterThan(0);
   });
@@ -439,7 +439,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    expect(last.content).toContain("[Připomínka kánonu");
+    expect(last.content).toContain("[Canon reminder");
   });
 
   it("reports canonReminderTokens as 0 when there are no world/player facts", () => {
@@ -449,7 +449,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
 });
 
 describe("buildPrompt — groupMembers (group chats)", () => {
-  it("renders a '[Další postavy ve scéně]' section with name + description per member", () => {
+  it("renders a '[Other characters in the scene]' section with name + description per member", () => {
     const input = baseInput({
       groupMembers: [
         { name: "Kai", description: "A blunt novice mage." },
@@ -458,7 +458,7 @@ describe("buildPrompt — groupMembers (group chats)", () => {
     });
     const { messages } = buildPrompt(input);
     const system = messages[0].content;
-    expect(system).toContain("[Další postavy ve scéně]");
+    expect(system).toContain("[Other characters in the scene]");
     expect(system).toContain("- Kai: A blunt novice mage.");
     expect(system).toContain("- Rowan: A quiet archer.");
   });
@@ -472,9 +472,9 @@ describe("buildPrompt — groupMembers (group chats)", () => {
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
     expect(last.content).toContain("Stay vivid, Elara.");
-    expect(last.content).toContain("Mluv a jednej pouze za Elara.");
-    expect(last.content).toContain("Nikdy nemluv za hráče (Kai) ani za ostatní postavy (Rowan).");
-    expect(last.content).toContain("Nezačínej odpověď svým jménem s dvojtečkou.");
+    expect(last.content).toContain("Speak and act only as Elara.");
+    expect(last.content).toContain("Never speak for the player (Kai) or other characters (Rowan).");
+    expect(last.content).toContain("Do not start your reply with your name followed by a colon.");
   });
 
   it("sends the group instruction as its own trailing system message when the card has no post_history_instructions", () => {
@@ -485,7 +485,7 @@ describe("buildPrompt — groupMembers (group chats)", () => {
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("Mluv a jednej pouze za Elara.");
+    expect(last.content).toContain("Speak and act only as Elara.");
   });
 
   it("truncates a group member's description to ~500 chars", () => {
@@ -517,7 +517,7 @@ describe("buildPrompt — groupMembers (group chats)", () => {
       character: makeCharacter({ postHistoryInstructions: "Stay in character, {{char}}.", mesExample: "Example line." }),
       ledgerFacts: [makeFact({ category: "world", subject: "Ashford", fact: "The capital." })],
       loreEntries: [
-        { id: "l1", keys: ["keep"], secondaryKeys: [], content: "The old keep stands north.", priority: 10, alwaysOn: false, caseSensitive: false, enabled: true },
+        { id: "l1", keys: ["keep"], secondaryKeys: [], content: "The old keep stands north.", priority: 10, alwaysOn: false, caseSensitive: false, enabled: true, recursiveActivation: false, activationDepth: 1, selectiveKeys: [], timed: null, vectorThreshold: null, vectorBudget: 0 },
       ],
       summary: "Elara arrived in Ashford.",
       history: makeHistory(4),
@@ -529,10 +529,10 @@ describe("buildPrompt — groupMembers (group chats)", () => {
     // Fixed expectations pinning the solo-chat shape (no group section, no
     // group instruction, no groupMembersIncluded field).
     const system = withoutGroupMembers.messages[0].content;
-    expect(system).not.toContain("[Další postavy ve scéně]");
+    expect(system).not.toContain("[Other characters in the scene]");
     const last = withoutGroupMembers.messages[withoutGroupMembers.messages.length - 1];
     expect(last.content.startsWith("Stay in character, Elara.")).toBe(true);
-    expect(last.content).not.toContain("Mluv a jednej pouze za");
+    expect(last.content).not.toContain("Speak and act only as");
     expect(withoutGroupMembers.report.sections.groupMembersIncluded).toBeUndefined();
   });
 });
@@ -640,7 +640,7 @@ describe("presetExtraSystemPrompt (M12.4)", () => {
 });
 
 describe("canon facts (M25.1)", () => {
-  it("renders locked facts in a [KÁNON PŘÍBĚHU] block before [FAKTA SVĚTA]", () => {
+  it("renders locked facts in a [STORY CANON] block before [WORLD FACTS]", () => {
     const { report } = buildPrompt(
       baseInput({
         ledgerFacts: [
@@ -650,9 +650,9 @@ describe("canon facts (M25.1)", () => {
       }),
     );
     const sys = report.sections.systemText;
-    expect(sys).toContain("[KÁNON PŘÍBĚHU");
-    expect(sys).toContain("[FAKTA SVĚTA — závazná]");
-    expect(sys.indexOf("[KÁNON PŘÍBĚHU")).toBeLessThan(sys.indexOf("[FAKTA SVĚTA"));
+    expect(sys).toContain("[STORY CANON");
+    expect(sys).toContain("[WORLD FACTS");
+    expect(sys.indexOf("[STORY CANON")).toBeLessThan(sys.indexOf("[WORLD FACTS"));
     expect(report.sections.canonFactsIncluded).toBe(1);
   });
 
@@ -700,14 +700,14 @@ describe("drift corrections (M25.2)", () => {
     );
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("[TICHÁ KOREKCE");
+    expect(last.content).toContain("[SILENT CORRECTION");
     expect(last.content).toContain("neumí sesílat magii");
     expect(report.sections.driftCorrections).toHaveLength(1);
   });
 
   it("renders nothing when there are no corrections", () => {
     const { report } = buildPrompt(baseInput());
-    expect(report.sections.phiText).not.toContain("[TICHÁ KOREKCE");
+    expect(report.sections.phiText).not.toContain("[SILENT CORRECTION");
     expect(report.sections.driftCorrections).toHaveLength(0);
   });
 });
@@ -717,7 +717,7 @@ describe("director note (M25.3)", () => {
     const { report } = buildPrompt(
       baseInput({ directorNote: "Zpomal tempo a drž temný tón." }),
     );
-    expect(report.sections.phiText).toContain("[REŽIE SCÉNY]");
+    expect(report.sections.phiText).toContain("[SCENE DIRECTION]");
     expect(report.sections.phiText).toContain("Zpomal tempo");
   });
 });

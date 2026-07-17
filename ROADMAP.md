@@ -62,12 +62,12 @@ Zbývá ověřit ručně: dostupnost hlasů ve WebKitGTK na reálném systému
    při startu (řízeno z frontendu, respektuje nastavení, WAL checkpoint),
    UI v `BackupPanel`: toggle, počet, „zálohovat teď", seznam záloh
    (commity `c2342e7`, `64fb91a`).
-2. ⬜ **Sync přes složku** (Syncthing/Nextcloud/Dropbox — bez vlastního
+2. ✅ **Sync přes složku** (Syncthing/Nextcloud/Dropbox — bez vlastního
    cloudu): volitelná „sync složka"; žurnál změn (append-only JSONL per
    zařízení + snapshoty). Merge: last-write-wins per entita (zprávy
    append-only → bezkonfliktní; fakta/summary podle updated_at; konflikt =
    zachovat obě verze k ručnímu sloučení v Memory panelu).
-3. ⬜ **Konfliktní UI** — banner „nalezeny změny z jiného zařízení" + náhled.
+3. ⬜ **Konfliktní UI** — banner „nalezeny změny z jiného zařízení" + náhled. (odloženo — základní sync funguje, konflikty se řeší last-write-wins)
 4. API klíče se NIKDY nesyncují (zůstávají v keyringu zařízení).
 
 **Hotovo když:** dvě instalace sdílející složku si vymění nový chat
@@ -85,9 +85,34 @@ fakta/summary až druhá fáze. Největší zbývající milník, dělit na 2 č
 8–14 člověko-dnů. Mezitím přibyl Android build v GitHub Actions
 (APK + AAB, commity `749e386`–`46f65e9`) — CI build je první krok fáze B.
 
-**Fáze B (port):** ⬜ responzivní úpravy, touch gesta pro swipe variant,
-klávesnice vs. input bar, Android back tlačítko, náhrada keyringu,
-SAF dialogy pro import/export záloh.
+**Fáze B (port):** ✅ hotovo — změny:
+1. ✅ **Keyring** — nebyl blokátor, `secrets.rs` už používal `FileStore` (JSON soubor)
+2. ✅ **Desktop pluginy za feature flagem** — `desktop-plugins` v Cargo.toml,
+   `tauri-plugin-dialog` a `tauri-plugin-process` volitelné; Rust builder s `#[cfg]`
+3. ✅ **`src/platform.ts`** — bezpečné wrappery pro dialog/process/opener,
+   catch import failures na Androidu, `openDialog()`/`saveDialog()` vracejí `string | null`
+4. ✅ **Touch swipe gesta** — `MessageBubble.tsx`: swipe left/right pro varianty
+   (50px threshold), `touch-action: pan-y` v CSS
+5. ✅ **Klávesnice viewport** — `ChatInput.tsx`: `visualViewport` resize listener,
+   paddingBottom offset
+6. ✅ **Android back button** — `src/ui/useAndroidBack.ts`: poslouchá `tauri://back`
+   + `popstate`, zavírá panely (export → memory → inventory → questy → director →
+   group → navigate back)
+7. ✅ **9× import nahrazen** — `backup.ts`, `cardImport.ts`, `cardExport.ts`,
+   `campaignExport.ts`, `personaExport.ts`, `worldInfoFile.ts`, `PersonaForm.tsx`,
+   `SyncPanel.tsx`, `DiagnosticsPanel.tsx` používají `platform.ts` wrappery
+
+**Dokončení (2026-07-17):**
+- ✅ Feature flag `desktop-plugins` nahrazen target-podmíněnými závislostmi
+  (`[target.'cfg(not(target_os = "android"))'.dependencies]`) — Android build
+  už nepotřebuje `--no-default-features` ani žádný jiný speciální flag
+- ✅ Workflow `build-android.yml` opraven: chybějící `id: setup-android`
+  (env `NDK_HOME` se předtím nenastavoval), patch `AndroidManifest.xml`
+  (`windowSoftInputMode="adjustResize"`) po `tauri android init`,
+  přidán debug APK build (release APK je nepodepsaný → nejde nainstalovat;
+  debug APK je podepsaný debug klíčem a hratelný)
+- ⬜ Volitelně: lokální Android SDK pro build mimo CI; podepisování release
+  APK vlastním keystorem (secrets v GitHubu)
 
 **Hotovo když (B):** APK hratelné: otevřít chat, poslat zprávu, stream,
 paměť funguje, klíč bezpečně uložen.
@@ -164,57 +189,75 @@ admin: odemknout/zrušit/smazat jde vždy, jen s „tytyty" hláškou.
 
 ---
 
-## M26 — Pokročilé prompt nástroje (užitečný výběr ze ST)
+## M26 — Pokročilé prompt nástroje ✅ HOTOVO
 
 Jen to, co dává smysl pro API providery (Gemini/Claude/OpenAI-compat/Ollama)
 — žádné instruct šablony, CFG ani logit bias.
 
 **Rozsah:**
 1. **Plné samplery** — doplnit `top_k`, `min_p`, `frequency_penalty`,
-   `presence_penalty` do ConnectionConfig + Rust adaptérů (poslat jen
-   providerům, kteří je umí; Ollama umí vše, Gemini topK, OpenAI penalty).
-   Presety je už ukládají — `applyPreset` je zatím nepřenáší, dotáhnout.
-2. **Author's note / hloubková injekce** — instrukce vkládaná N zpráv
-   před konec historie (per chat, editovatelná v Memory panelu); klasika
-   ST, výborná na udržení stylu bez přepisování karty.
+   `presence_penalty` do `ConnectionConfig` + Rust adaptérů (poslat jen
+   providerům, kteří je umí; nepodporovaný parametr tiše přeskočit, ne failnout).
+   `applyPreset` už presety ukládá, jen parametry nepřenáší — dotáhnout.
+2. **Author's note / hloubková injekce** — instrukce vkládaná jako
+   samostatná systémová zpráva těsně před poslední user message (N=0,
+   uživatelsky nastavitelné); editovatelná v Memory panelu per chat.
+   Klasika ST, výborná na udržení stylu bez přepisování karty.
 3. **Regex transformace výstupu** — uživatelská pravidla find→replace
-   aplikovaná na odpovědi (odstranit oblíbené fráze modelu, opravit
-   formát kurzívy…); per chat i globálně, s náhledem.
+   aplikovaná na odpovědi před zobrazením (odstranit oblíbené fráze modelu,
+   opravit formát kurzívy…); per chat i globálně. UI musí obsahovat
+   **testovací pole** — „vlož ukázkovou odpověď" a náhled, co regex udělá.
 
 **Hotovo když:** preset s min_p projde do Ollamy, author's note viditelně
 drží styl, regex pravidlo umlčí zvolenou frázi.
 
 ---
 
-## M27 — World Info navíc (aktivace jako ST, ale chytřejší)
+## M27 — World Info navíc (aktivace jako ST, ale chytřejší) ✅ HOTOVO
 
 **Rozsah:**
 1. **Rekurzivní aktivace** — aktivovaný záznam může klíči aktivovat další
    (limit hloubky, ochrana proti cyklu).
 2. **Selektivní logika** — sekundární klíče s AND/NOT (záznam se aktivuje
    jen když „drak" A ZÁROVEŇ ne „sen").
-3. **Timed effects** — sticky (drží N zpráv po aktivaci), cooldown,
-   delay; stav per chat.
-4. **Vektorová aktivace** — lore záznamy bez klíčového zásahu se mohou
+3. **Vektorová aktivace** — lore záznamy bez klíčového zásahu se mohou
    aktivovat sémantickou podobností přes existující embedding engine
    (náš trumf — ST na tohle potřebuje extension). Práh + budget v
    nastavení, viditelné v Prompt inspectoru.
-
-5. **Automatické plnění lorebooku** (duch M25.5 — žádná ruční povinnost):
-   při každém běhu summarizeru se ze skládaných scén na pozadí destilují
-   TRVALÉ znalosti světa (místa, artefakty, legendy, zvyky — NE dějové
-   události, ty patří kronice/ledgeru) do kampaňového lorebooku
-   s klíčovými slovy + embeddingy; dedup proti existujícím záznamům
-   (sémantická podobnost). Uživatel-admin: záznamy jde editovat/mazat.
-   Tlačítko „Přegenerovat z celé kampaně" jen jako ruční doplněk.
+4. **Timed effects** — sticky (drží N zpráv po aktivaci), cooldown,
+   delay; stav per chat.
 
 **Hotovo když:** import ST World Info se selective/sticky poli zachová
-chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem;
-generátor vyrobí použitelný lorebook z uživatelovy kampaně.
+chování; vektorově aktivovaný záznam se ukáže v reportu s důvodem.
 
 ---
 
-## M28 — Jazyk hry per chat (globalizace promptů)
+## M27.5 — Auto-plnění lorebooku ✂️ ZRUŠENO
+
+Navazuje na ducha M25.5 — žádná ruční povinnost. **POZOR: riziko halucinací
+a nárůstu API požadavků.**
+
+**Rozsah:**
+1. **Destilace lore záznamů ze summarizeru** — při každém běhu summarizeru
+   se ze skládaných scén na pozadí destilují TRVALÉ znalosti světa (místa,
+   artefakty, legendy, zvyky — NE dějové události, ty patří kronice/ledgeru)
+   do kampaňového lorebooku s klíčovými slovy + embeddingy; dedup proti
+   existujícím záznamům (sémantická podobnost).
+2. **Karanténa** — vygenerované záznamy jdou do stavu „pending"; uživatel
+   je v lorebook editoru schválí/zahodí (prevence zanesení halucinací).
+   Uživatel-admin: záznamy jde editovat/mazat, karanténu lze vypnout.
+3. **Úsporný režim** — destilační LLM call používat laciný model (Gemini
+   Flash / Claude Haiku / lokální Ollama); uživatel může auto-plnění
+   vypnout úplně.
+4. Tlačítko „Přegenerovat z celé kampaně" jako ruční doplněk.
+
+**Hotovo když:** generátor vyrobí použitelný lorebook z kampaně bez
+halucinací; schvalovací karanténa funguje; náklady na API jsou řádově
+nižší než hlavní chat.
+
+---
+
+## M28 — Jazyk hry per chat (globalizace promptů) — fáze A ✅, fáze B ⬜
 
 **Motivace:** LLM prompty jsou dnes hardcodované české string konstanty
 rozstrkané po modulech. Čeština v instrukcích stojí tokeny navíc a anglické
@@ -222,7 +265,8 @@ komunitní karty dostávají české obálky. Zároveň NEJDE jen přepsat vše 
 angličtiny — jazyk promptu táhne jazyk výstupu (vyprávění, extrahovaná fakta
 v Memory panelu musí zůstat v jazyce hry).
 
-**Rozsah:**
+### Fáze A („teď" — střední)
+
 1. **Centralizace prompt textů** — nový modul `src/prompt/promptTexts.ts`:
    JEDNA univerzální anglická sada promptů (žádné soubory per jazyk!) +
    parametr `{lang}`; jazyk výstupu vynucuje direktiva „Always respond /
@@ -245,7 +289,16 @@ v Memory panelu musí zůstat v jazyce hry).
    stejný princip, anglické instrukce + „write field contents (fact,
    contradiction, summary) in {lang}". Stávající české kampaně mají česká
    fakta — direktiva podle jazyka chatu to drží.
-4. **Jazyková nápověda v editorech** — u polí karty postavy a persony
+4. **UI dočištění** — vymést hardcodované fallbacky (`?? "Obnovit…"`
+   v SettingsScreen apod.) a české chybové hlášky v Rustu (backup.rs
+   „Databáze zatím neexistuje…") → přes i18n / anglicky s překladem na FE.
+5. **Podtitulky v sidebaru** — zachovat ST-kompatibilní názvy (Characters /
+   Personas), ale přidat vysvětlující podtitulky menším písmem:
+   - **Characters / Postavy** → *"AI-run characters — narrators, companions"*
+     / *"Postavy ovládané AI — vypravěči, společníci"*
+   - **Personas / Persony** → *"Your character — who you are in the story"*
+     / *"Tvoje postava — kým jsi ve hře ty"*
+6. **Jazyková nápověda v editorech** — u polí karty postavy a persony
    drobný hint (FieldHelp), co psát raději anglicky vs. v jazyce hry:
    ANGLICKY pole čtená AI jako instrukce (system prompt, post-history
    instructions, description/personality) — přesnější a levnější;
@@ -253,9 +306,8 @@ v Memory panelu musí zůstat v jazyce hry).
    message, ukázka dialogu mes_example, scénář, jména). U importované
    anglické karty hint „hraješ-li česky, zvaž překlad first message /
    ukázky dialogu — táhnou jazyk a styl výstupu".
-5. **UI dočištění** — vymést hardcodované fallbacky (`?? "Obnovit…"`
-   v SettingsScreen apod.) a české chybové hlášky v Rustu (backup.rs
-   „Databáze zatím neexistuje…") → přes i18n / anglicky s překladem na FE.
+   Barevně/ikonou odlišit pole „instrukce pro AI (doporučeně anglicky)"
+   vs. „tvůj příběh (tvým jazykem)".
 
 **Hotovo když:** anglická karta + chat s game_language='en' hraje čistou
 angličtinou (vyprávění, fakta, kronika); česká kampaň se chová beze změny;
@@ -264,99 +316,132 @@ angličtinou (vyprávění, fakta, kronika); česká kampaň se chová beze změ
 přepnutí analytických jobů na EN instrukce přejet testy a ručně ověřit
 extrakci na české kampani (fakta musí zůstat česky).
 
-**Fáze B (volitelná, až po fázi A):** anglický pivot pro PAMĚŤOVÉ artefakty
-— fakta/shrnutí/drift nálezy ukládat interně anglicky (přesnější embeddingy,
-univerzální prompty) a překládat LLM voláním jen pro zobrazení v Memory
-panelu (dávkově, kešovaně; editace uživatele v jeho jazyce se uloží zpět
-anglicky = obousměrný překlad s možností korekce). VÝSLOVNĚ NE pro samotné
-vyprávění: překladová vrstva by zabila streaming (první token ~1 s),
-zdvojnásobila požadavky proti RPD limitům a ztrátově prohnala styl prózy
-dvojím překladem. Vyprávění vždy přímo v jazyce hry přes {lang} direktivu.
+### Fáze B — anglický pivot pro paměťové artefakty (ODLOŽENO)
+
+> **Nerealizovat dokud fáze A není v provozu a nejsou data z reálných
+> vícejazyčných kampaní.** Riziko: překladová vrstva (CS↔EN) by přidala
+> LLM volání na každé uložení/načtení faktu, zdvojnásobila náklady na
+> analytické joby. Vyhodnotit přínos (přesnější embeddingy?) až po
+> zkušenostech z fáze A.
+
+Stručně: fakta/shrnutí/drift nálezy ukládat interně anglicky a překládat
+LLM voláním pro zobrazení v Memory panelu. VÝSLOVNĚ NE pro samotné
+vyprávění — překladová vrstva by zabila streaming. Vyprávění vždy přímo
+v jazyce hry přes `{lang}` direktivu.
 
 ---
 
-## M31 — Piper TTS backend (offline, desktop + mobil)
+## M29 — UI ✂️ ZRUŠENO JAKO SAMOSTATNÝ MILNÍK
 
-**Motivace:** Web Speech na WebKitGTK = robotický espeak; Android WebView
-`speechSynthesis` nepodporuje vůbec. Piper = lokální neuronové TTS, běží na
-CPU rychleji než real-time, české hlasy, funguje na desktopu i Androidu →
-jednotné offline řešení. PŘED implementací poslechnout ukázky
-(rhasspy.github.io/piper-samples) — rozhodnutí jít/nejít podle kvality.
+Původní rozsah M29 (přejmenování, jednoduchý/pokročilý režim, jazykové
+zóny, seskupení panelů) je rozpuštěn do ostatních milníků:
 
-**Rozsah:**
-1. **Rust command `tts_synthesize(text, voice_model) -> wav path/bytes`** —
-   volá piper binárku (sidecar v Tauri bundle) se staženým .onnx modelem;
-   streamovat po větách (Piper umí stdin řádky) ať start řeči < 1 s.
-2. **Správa hlasů** — panel v Nastavení → Předčítání: seznam dostupných
-   českých (a EN) modelů, stažení do `$APPDATA/tts-voices/`, velikosti
-   ~20–60 MB/hlas; per-postava mapování už existuje (characters.tts_voice
-   — rozšířit o prefix backendu, např. "piper:cs_CZ-jirka-medium").
-3. **useTts: druhý backend** — přehrávání WAV přes HTMLAudioElement;
-   fallback řetěz piper → Web Speech → nic.
-3b. **Ladění hlasu + vlastní kolekce** — hlas není jen model, ale PROFIL:
-   model + posuvníky pitch shift (post-processing, ±6 půltónů),
-   tempo (length_scale) a variabilita intonace (noise_scale/noise_w).
-   Dodané presety („Temný vypravěč" = pitch −3/tempo 0.9/nízká
-   variabilita, „Stařec", „Dítě", „Hlasatel"…) + možnost uložit vlastní
-   profil pod jménem → uživatelova kolekce hlasů (tabulka
-   `tts_voice_profiles`, migrace); per-postava mapování odkazuje na
-   profil, ne přímo na model. Náhled „přehrát ukázku" u posuvníků.
-4. **Android (váže na M15 B)** — piper se kompiluje na aarch64; alternativa
-   nativní Android TTS přes malý plugin jako fallback.
-
-**Hotovo když:** česká odpověď se přehraje Piperem do 1 s od kliknutí,
-hlasy per postava fungují, vše offline; espeak/Web Speech zůstává jen jako
-fallback bez stažených modelů.
+- **Podtitulky v sidebaru** (Characters/Personas) → součást M28 bod 5
+- **Jazykové zóny v editorech** (barevné/ikonové odlišení) → součást M28 bod 6
+- **FieldHelp ke každému poli** → Definition of Done pro všechny nové featur
+- **Jednoduchý/Pokročilý režim** → průběžná UI údržba; každý nový panel
+  defaultně ukazuje jen základní pole, zbytek za „Pokročilé"
+- **Seskupení panelů v Nastavení** → jednorázová změna mimo milníky
 
 ---
 
-## M29 — Zpřehlednění UI (jednoduchý vs. pokročilý režim)
-
-**Motivace:** nastavení i editory mají příliš polí bez vysvětlení; „Persony"
-vs. „Postavy" mate i autora projektu.
-
-**Rozsah:**
-1. **Přejmenování a sloučení** — „Postavy (AI)" a „Moje postava (hráč)"
-   (= persona) jako jedna sekce se dvěma záložkami; všude vysvětlující
-   podtitulky (postava = koho hraje AI; persona = kdo jsi ve hře ty).
-2. **Jednoduchý/Pokročilý režim** — editory karet, person i Nastavení
-   defaultně ukazují jen základní pole s lidskými popisky; zbytek za
-   rozbalovací „Pokročilé". FieldHelp ke KAŽDÉMU poli (co dělá, příklad).
-3. **Vizuální jazykové zóny** (návaznost na M28.4) — barevně/ikonou odlišit
-   pole „instrukce pro AI (doporučeně anglicky)" vs. „tvůj příběh (tvým
-   jazykem)".
-4. Projít Nastavení: seskupit panely do karet/tabů (Připojení | Hraní |
-   Vzhled a zvuk | Data a diagnostika), sekce s jednořádkovým „k čemu to je".
-
-**Hotovo když:** nový uživatel založí postavu a rozehraje hru bez čtení
-dokumentace; každé pole má nápovědu.
-
----
-
-## M30 — Export/import 2.0 (ST-kompatibilní + naše data)
+## M30 — Export/import 2.0 (ST-kompatibilní + naše data) ✅ HOTOVO
 
 **Motivace:** zůstat čitelní pro originální SillyTavern, ale bezeztrátově
 přenášet i naše rozšíření.
 
 **Rozsah:**
 1. **Namespace blok** `extensions.mysillytavern` v kartě V2/V3 (JSON i PNG
-   tEXt chunk) — spec s tím počítá, ST ho ignoruje, my čteme: kánon fakta
-   šablony, TTS hlas, výchozí režie, doporučený preset.
+   tEXt chunk) — spec s tím počítá, ST ho ignoruje, my čteme: TTS hlas,
+   výchozí režie, doporučený preset. **Do karty dávat jen metadata, ne**
+   celý lorebook (některé ST implementace selžou nad velkými tEXt chunky).
 2. **Export chatu/kampaně** — vlastní ZIP formát (chat + ledger vč.
    canon/stability + summary + questy + inventář + kalendář + lorebooky
-   + kronika) s manifestem verze; import s migrací.
+   + kronika) s manifestem verze (pro budoucí migrace). **Selektivní export:**
+   „jen chat", „chat + paměť", „vše".
 3. **World Info export** — zachovat ST pole 1:1 (vč. selective/sticky z
    M27), naše navíc (embeddingy ne — dopočítají se) do `extensions`.
-4. Roundtrip testy: naše→ST→naše bez ztráty ST polí; naše→naše bez ztráty
-   čehokoli.
+4. **Roundtrip testy v CI** — naše→ST→naše bez ztráty ST polí; naše→naše
+   bez ztráty čehokoli. Smoke test s reálným ST (import projde bez chyby).
 
 **Hotovo když:** karta exportovaná u nás jde importovat do originálního ST
-beze změny chování; reimport k nám vrátí i všechna naše data.
+beze změny chování; reimport k nám vrátí i všechna naše data; roundtrip
+testy prochází v CI.
+
+---
+
+## M31 — TTS backendy (fallback řetězec) — fáze A ✅, fáze B ⬜
+
+**Motivace:** Web Speech API na Linuxu = espeak (robotický), na Androidu
+nefunguje vůbec. Chceme offline neuronové hlasy pro češtinu. Původní plán
+na Piper TTS padá: (1) `rhasspy/piper` archivován v říjnu 2025, (2) eSpeak-ng
+neobsahuje české fonémy (ř, ť, ď, ň, ě…), výslovnost je nekonzistentní,
+(3) existují lepší alternativy — Edge-TTS (online, zdarma, výborná čeština)
+a Sherpa-ONNX / Chatterbox (offline, k průzkumu).
+
+### Architektura — fallback řetězec
+
+```
+1. Edge-TTS (online, zdarma, neuronové hlasy, ~300 ms)
+   ↓ fallback při offline / chybě
+2. Offline backend (Sherpa-ONNX / Piper — podle průzkumu ve fázi B)
+   ↓ fallback
+3. Web Speech API (už máme — funguje jako poslední záchrana)
+   ↓
+4. Ticho + notifikace „TTS nedostupné"
+```
+
+### Fáze A — Edge-TTS (malý)
+
+**Edge-TTS fakta:** Microsoft provozuje TTS API pro Edge browser (Read Aloud).
+Zdarma, bez API klíče, používá se přes WebSocket. České neuronové hlasy:
+`cs-CZ-VlastaNeural` (žena) a `cs-CZ-AntoninNeural` (muž) — kvalita 8/10,
+latence první slabiky pod 500 ms, podporuje streaming. SSML umožňuje
+modulaci pitch (±Hz), rate (±%), volume (±%). Limit: jen jeden `<voice>` +
+jeden `<prosody>` tag, ale pro čtení dialogů to stačí. Riziko: neoficiální
+API — Microsoft může změnit/zablokovat (naposledy omezili custom SSML 2023,
+základní TTS funguje stabilně).
+
+**Rozsah:**
+1. **Druhý backend v `useTts`** — rozšířit `speak()` o backend selektor;
+   fallback logika: zkus Edge-TTS → Web Speech.
+2. **Integrace `msedge-tts`** — npm balíček (TypeScript, funguje v browseru
+   přes WebSocket, žádný Python, žádný Rust). Syntéza streamuje audio do
+   `<audio>` elementu — první slovo slyšet během desítek ms.
+3. **Voice profily per postava** — nová tabulka `tts_voice_profiles`
+   (migrace 21): jméno profilu, voice ID, pitch, rate, volume. Presety:
+   „Temný vypravěč" (Antonin, pitch -15Hz, rate -10%), „Elf" (Vlasta,
+   pitch +20Hz), „Stařec" (Antonin, pitch -25Hz, rate -15%)…
+   `characters.tts_voice` odkazuje na profil (zpětně kompatibilní —
+   fallback na holé voice ID). Náhled „přehrát ukázku".
+4. **UI** — `TtsPanel` ukáže aktuální backend („online — Microsoft neural"
+   / „offline — Web Speech fallback"); voice picker s profily + testovacím
+   tlačítkem.
+
+**Hotovo když:** česká odpověď se přehraje Edge-TTS do 500 ms od kliknutí,
+hlasy per postava včetně modulace (pitch/rate), offline fallback na Web
+Speech funguje.
+
+### Fáze B — Offline backend (malý–střední, PO PRŮZKUMU)
+
+> **Nerealizovat před fází A.** Nejdřív vyhodnotit Edge-TTS v provozu
+> (stabilita, limity). Pak prozkoumat offline alternativy.
+
+1. **Průzkum Sherpa-ONNX + VITS** — Sherpa-ONNX má C API, jde bundlovat
+   jako nativní knihovnu (žádný Python). Pokud existuje český VITS model
+   s dobrou kvalitou → preferovaný offline backend.
+2. **Alternativně Piper** — pokud Sherpa-ONNX nevyjde, Piper jako offline
+   fallback s explicitním varováním o kvalitě české výslovnosti (chybějící
+   fonémy).
+3. **Android** (váže na M15 B) — oba offline backendy musí fungovat na
+   aarch64; Edge-TTS funguje všude kde je internet.
 
 ---
 
 ## Průběžně (mimo milníky)
 
+- **UI kvalita jako DoD** — každý nový feature musí přijít s FieldHelp
+  u všech nových polí; složitější nastavení za rozbalovacím „Pokročilé".
 - **Ladění paměti** — po delším hraní uživatele vyhodnotit: drží žánr?
   Vytahují se správné vzpomínky? (viz memory poznámka: nejdřív zkontrolovat,
   zda si zvedl context budget a zamkl kánon fakta.) MMR diverzifikace a
@@ -372,14 +457,17 @@ beze změny chování; reimport k nám vrátí i všechna naše data.
 
 | Milník | Velikost | Poznámka |
 |--------|----------|----------|
-| M26 prompt nástroje | malý–střední | samplery + author's note + regex |
-| M27 World Info navíc | střední | vektorová aktivace = náš trumf |
-| M28 jazyk hry | střední | centralizace promptů, EN analytické joby |
-| M29 zpřehlednění UI | střední | jednoduchý/pokročilý režim, jazykové zóny |
-| M30 export/import 2.0 | malý–střední | ST kompatibilita + extensions namespace |
-| M31 Piper TTS | malý–střední | nejdřív poslechnout ukázky hlasů! |
-| M14 sync (body 2–3) | velký | začít žurnálem a zprávami |
-| M15 mobil fáze B | velký | po M14; 8–14 dnů dle průzkumu |
+| M26 prompt nástroje | ✅ HOTOVO | samplery, author's note, regex transform |
+| M31 TTS fáze A | ✅ HOTOVO | Edge-TTS + Web Speech fallback, voice profily |
+| M28 jazyk hry fáze A | ✅ HOTOVO | promptTexts.ts, game_language, EN prompty + {lang} |
+| M27 World Info navíc | ✅ HOTOVO | rekurzivní, AND/NOT, timed, vektorová aktivace |
+| M30 export/import 2.0 | ✅ HOTOVO | extensions.mysillytavern, campaign ZIP |
+| M27.5 auto-plnění lorebooku | ✂️ ZRUŠENO | tlačítko "Uložit jako lore" u faktů |
+| M14 sync | ✅ HOTOVO | JSONL žurnál, SyncPanel, 9× repo |
+| M15 mobil | ✅ HOTOVO | platform.ts, feature flags, touch swipe, useAndroidBack |
+| M31 TTS fáze B | ⬜ odloženo | offline backend — až po průzkumu |
+| M28 fáze B | ⬜ odloženo | EN pivot pro paměť |
+| M14 konfliktní UI | ⬜ odloženo | banner pro ruční merge konfliktů |
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.

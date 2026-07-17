@@ -21,6 +21,7 @@ import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
 import { useTts } from "../../chat/useTts";
+import { useAndroidBack } from "../useAndroidBack";
 import {
   calendarFromJSON,
   type CalendarDate,
@@ -103,6 +104,21 @@ export function ChatScreen() {
   const [exportIllustrations, setExportIllustrations] = useState(true);
   const [exportJobId, setExportJobId] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
+
+  // Android back button: close panels first, then navigate back
+  const hasOpenPanel = memoryOpen || inventoryOpen || questsOpen || directorOpen || groupOpen || exportOpen;
+  useAndroidBack(
+    { hasOpenPanel },
+    () => {
+      if (exportOpen) setExportOpen(false);
+      else if (memoryOpen) setMemoryOpen(false);
+      else if (inventoryOpen) setInventoryOpen(false);
+      else if (questsOpen) setQuestsOpen(false);
+      else if (directorOpen) setDirectorOpen(false);
+      else if (groupOpen) setGroupOpen(false);
+      else navigate(-1);
+    },
+  );
 
   // TTS
   const tts = useTts();

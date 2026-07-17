@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 import type { LedgerCategory, LedgerFactLike } from "../../prompt/promptBuilder";
 
 export type { LedgerCategory };
@@ -92,7 +93,7 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
      VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $9)`,
     [id, chatId, draft.category, draft.subject, draft.sub_key ?? '', draft.fact, draft.locked ? 1 : 0, draft.canon ? 1 : 0, now],
   );
-  return {
+  const fact: LedgerFact = {
     id,
     chatId,
     category: draft.category,
@@ -108,6 +109,8 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
     createdAt: now,
     updatedAt: now,
   };
+  journalEntityWrite("fact", fact as unknown as Record<string, unknown>);
+  return fact;
 }
 
 export interface LedgerFactUpdate {
@@ -120,10 +123,12 @@ export interface LedgerFactUpdate {
 /** Manual edit from the memory panel. Does not touch `locked` — use
  * `setFactLocked` for that (keeps intent explicit in the UI). */
 export async function updateFact(id: string, patch: LedgerFactUpdate): Promise<void> {
+  const now = nowIso();
   await execute(
     `UPDATE ledger_facts SET category = $2, subject = $3, sub_key = $4, fact = $5, updated_at = $6 WHERE id = $1`,
-    [id, patch.category, patch.subject, patch.sub_key ?? '', patch.fact, nowIso()],
+    [id, patch.category, patch.subject, patch.sub_key ?? '', patch.fact, now],
   );
+  journalEntityWrite("fact", { id, ...patch, sub_key: patch.sub_key ?? '', updated_at: now });
 }
 
 export async function getFact(id: string): Promise<LedgerFact | null> {
@@ -199,15 +204,21 @@ export async function applySoftCanonCorrection(id: string, fact: string): Promis
 }
 
 export async function setFactStatus(id: string, status: "active" | "archived"): Promise<void> {
+  const now = nowIso();
   await execute("UPDATE ledger_facts SET status = $2, updated_at = $3 WHERE id = $1", [
     id,
     status,
-    nowIso(),
+    now,
   ]);
+  journalEntityWrite("fact", { id, status, updated_at: now });
 }
 
 export async function deleteFact(id: string): Promise<void> {
+  const fact = await getFact(id);
   await execute("DELETE FROM ledger_facts WHERE id = $1", [id]);
+  if (fact) {
+    journalEntityDelete("fact", fact as unknown as Record<string, unknown>);
+  }
 }
 
 /** Fetches a single fact by (chatId, category, subject, sub_key)
@@ -240,13 +251,16 @@ export async function applyLedgerUpsert(
   const existing = await findFactBySubject(chatId, category, subject, sub_key);
   if (existing) {
     if (existing.locked) return;
+    const now = nowIso();
     await execute(
       `UPDATE ledger_facts SET fact = $2, status = 'active', updated_at = $3 WHERE id = $1`,
-      [existing.id, fact, nowIso()],
+      [existing.id, fact, now],
     );
+    journalEntityWrite("fact", { id: existing.id, fact, status: "active", updated_at: now });
     return;
   }
   await createFact(chatId, { category, subject, sub_key, fact });
+  // createFact already journals
 }
 
 export async function applyLedgerRemove(
@@ -258,4 +272,5 @@ export async function applyLedgerRemove(
   const existing = await findFactBySubject(chatId, category, subject, sub_key);
   if (!existing || existing.locked) return;
   await setFactStatus(existing.id, "archived");
+  // setFactStatus already journals
 }

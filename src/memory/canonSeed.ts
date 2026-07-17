@@ -12,6 +12,7 @@ import { createFact, listAllFacts, type LedgerCategory } from "../db/repositorie
 import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
+import { SEED_SYSTEM_PROMPT } from "../prompt/promptTexts";
 
 export interface SeedRule {
   category: LedgerCategory;
@@ -55,13 +56,7 @@ export function parseSeedOutput(raw: string): SeedRule[] {
     .slice(0, 5);
 }
 
-const SEED_SYSTEM_PROMPT =
-  "Jsi analytický nástroj. Z karty postavy pro RP hru vytáhni 3–5 ZÁKLADNÍCH PRAVIDEL " +
-  "příběhu, která se nesmí během hry nepozorovaně změnit: žánr a tón světa (subjekt " +
-  "'Žánr a tón světa', kategorie world), schopnosti a LIMITY hráčovy role (kategorie player), " +
-  "případně klíčové zákony světa (kategorie world). Piš je jako krátká závazná tvrzení. " +
-  'Vrať POUZE JSON pole objektů {"category": "world"|"player"|"npc", "subject": string, ' +
-  '"fact": string}. Žádný text mimo JSON pole.';
+
 
 export interface SeedCharacterLike {
   name: string;
@@ -80,6 +75,7 @@ export async function runCanonSeed(
   chatId: string,
   connection: ConnectionConfig,
   character: SeedCharacterLike,
+  lang?: string,
 ): Promise<void> {
   try {
     if (await getSetting(seedKey(chatId))) return;
@@ -89,19 +85,21 @@ export async function runCanonSeed(
     const existing = await listAllFacts(chatId);
     if (existing.length > 0) return;
 
+    const language = lang ?? "cs";
+
     const card = [
-      `Jméno: ${character.name}`,
-      character.description && `Popis: ${character.description}`,
-      character.personality && `Osobnost: ${character.personality}`,
-      character.scenario && `Scénář: ${character.scenario}`,
-      character.systemPrompt && `Instrukce: ${character.systemPrompt}`,
+      `Name: ${character.name}`,
+      character.description && `Description: ${character.description}`,
+      character.personality && `Personality: ${character.personality}`,
+      character.scenario && `Scenario: ${character.scenario}`,
+      character.systemPrompt && `Instructions: ${character.systemPrompt}`,
     ]
       .filter(Boolean)
       .join("\n");
     if (card.trim().length < 40) return; // nothing substantial to distill
 
     const prompt: ChatMessage[] = [
-      { role: "system", content: SEED_SYSTEM_PROMPT },
+      { role: "system", content: SEED_SYSTEM_PROMPT(language) },
       { role: "user", content: card },
     ];
     const zeroTemp: ConnectionConfig = { ...connection, temperature: 0 };

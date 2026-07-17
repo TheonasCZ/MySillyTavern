@@ -16,6 +16,7 @@ import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import type { TranscriptChatMessage } from "./extractor";
+import { DRIFT_CHECK_SYSTEM_PROMPT } from "../prompt/promptTexts";
 
 export interface DriftFinding {
   /** Subject of the canon fact that was contradicted. */
@@ -177,17 +178,7 @@ export async function consumeDriftCorrections(chatId: string): Promise<string[]>
 
 // ---- LLM check ----------------------------------------------------------
 
-const DRIFT_CHECK_SYSTEM_PROMPT =
-  "Jsi kontrolor konzistence RP hry. Dostaneš KÁNON (neporušitelná pravidla příběhu) a " +
-  "přepis posledních scén. Najdi místa, kde se děj scén dostal do rozporu s kánonem — " +
-  "např. postava umí něco, co podle kánonu neumí; svět se chová jinak, než kánon určuje; " +
-  "mrtvá postava jedná; tón/žánr se změnil proti pravidlu o žánru.\n" +
-  "Vrať POUZE JSON pole objektů " +
-  '{"subject": string (subjekt porušeného pravidla), "contradiction": string (stručně co scéna ' +
-  'porušila a jak to má správně být), "severity": number 0-1 (0.3 drobnost, 0.6 zjevný rozpor, ' +
-  "0.9 zásadní zlom)}. " +
-  "Ignoruj věci, které kánon nepokrývá, i legitimní vývoj příběhu. Pokud rozpor není, vrať []. " +
-  "Žádný text mimo JSON pole.";
+
 
 export interface CanonFactLike {
   subject: string;
@@ -213,15 +204,18 @@ export async function runDriftCheck(
   connection: ConnectionConfig,
   canonFacts: CanonFactLike[],
   messages: TranscriptChatMessage[],
+  lang?: string,
 ): Promise<void> {
   try {
     if (canonFacts.length === 0 || messages.length === 0) return;
 
+    const language = lang ?? "cs";
+
     const prompt: ChatMessage[] = [
-      { role: "system", content: DRIFT_CHECK_SYSTEM_PROMPT },
+      { role: "system", content: DRIFT_CHECK_SYSTEM_PROMPT(language) },
       {
         role: "user",
-        content: `KÁNON:\n${formatCanon(canonFacts)}\n\nPOSLEDNÍ SCÉNY:\n${formatTranscript(messages)}`,
+        content: `CANON:\n${formatCanon(canonFacts)}\n\nLATEST SCENES:\n${formatTranscript(messages)}`,
       },
     ];
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { open } from "@tauri-apps/plugin-dialog";
+import { openDialog } from "../../platform";
 
 import type { Persona, PersonaDraft, PersonaUpdate, SkillEntry, InventoryEntry } from "../../db/repositories/personasRepo";
 import type { FactionRep } from "../../db/repositories/factionsRepo";
@@ -75,7 +75,7 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
   const handlePickAvatar = async () => {
     if (!onPickAvatar) return;
     const avatarsDir = await appDataDir().then((d) => join(d, "avatars")).catch(() => undefined);
-    const path = await open({
+    const path = await openDialog({
       multiple: false,
       defaultPath: avatarsDir,
       filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp"] }],

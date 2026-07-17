@@ -118,12 +118,12 @@ describe("formatScoredMessages", () => {
     expect(formatScoredMessages([], new Map())).toBe("");
   });
 
-  it("prefixes important messages with [důležité]", () => {
+  it("prefixes important messages with [important]", () => {
     const messages = [msg("1", "Našel jsem meč v jeskyni.", "user", "Hráč")];
     const scores = new Map([["1", 0.9]]);
 
     const result = formatScoredMessages(messages, scores);
-    expect(result).toContain("[důležité]");
+    expect(result).toContain("[important]");
     expect(result).toContain("Našel jsem meč v jeskyni.");
   });
 
@@ -140,7 +140,7 @@ describe("formatScoredMessages", () => {
     ]);
 
     const result = formatScoredMessages(messages, scores);
-    expect(result).toContain("[rutinní]");
+    expect(result).toContain("[routine]");
     expect(result).not.toContain("ok");
     expect(result).not.toContain("dobře");
     expect(result).not.toContain("jo");
@@ -166,12 +166,12 @@ describe("formatScoredMessages", () => {
     const lines = result.split("\n");
 
     // First line should be routine (msg 1)
-    expect(lines[0]).toContain("[rutinní]");
+    expect(lines[0]).toContain("[routine]");
     // Second line should be important (msg 2)
-    expect(lines[1]).toContain("[důležité]");
+    expect(lines[1]).toContain("[important]");
     expect(lines[1]).toContain("Našel jsem artefakt.");
     // Third line should be routine (msg 3)
-    expect(lines[2]).toContain("[rutinní]");
+    expect(lines[2]).toContain("[routine]");
   });
 
   it("falls back to role-based speaker name", () => {
@@ -187,18 +187,18 @@ describe("formatScoredMessages", () => {
     const justBelow = new Map([["1", IMPORTANCE_THRESHOLD]]);
     const justAbove = new Map([["1", IMPORTANCE_THRESHOLD + 0.001]]);
 
-    expect(formatScoredMessages(messages, justBelow)).toContain("[rutinní]");
-    expect(formatScoredMessages(messages, justAbove)).toContain("[důležité]");
+    expect(formatScoredMessages(messages, justBelow)).toContain("[routine]");
+    expect(formatScoredMessages(messages, justAbove)).toContain("[important]");
   });
 
   it("uses correct Czech plural for message counts", () => {
     const single = [msg("1", "ok")];
     const singleScores = new Map([["1", 0.1]]);
-    expect(formatScoredMessages(single, singleScores)).toContain("1 zpráva");
+    expect(formatScoredMessages(single, singleScores)).toContain("1 message");
 
     const two = [msg("1", "ok"), msg("2", "jo")];
     const twoScores = new Map([["1", 0.1], ["2", 0.1]]);
-    expect(formatScoredMessages(two, twoScores)).toContain("2 zprávy");
+    expect(formatScoredMessages(two, twoScores)).toContain("2 messages");
 
     const five = [
       msg("1", "ok"), msg("2", "ok"), msg("3", "ok"),
@@ -207,6 +207,6 @@ describe("formatScoredMessages", () => {
     const fiveScores = new Map([
       ["1", 0.1], ["2", 0.1], ["3", 0.1], ["4", 0.1], ["5", 0.1],
     ]);
-    expect(formatScoredMessages(five, fiveScores)).toContain("5 zpráv");
+    expect(formatScoredMessages(five, fiveScores)).toContain("5 messages");
   });
 });

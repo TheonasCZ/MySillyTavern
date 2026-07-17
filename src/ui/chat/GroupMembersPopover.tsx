@@ -151,6 +151,7 @@ export function GroupMembersPopover({
         content: m.content,
         speakerName: m.characterId ? (allCharactersById.get(m.characterId)?.name ?? null) : null,
       }));
+      // TODO(M28): pass chat.gameLanguage when available
       const prompt = buildPromotionPrompt(npcName, facts, transcript);
       const raw = await chatComplete(promotionConnection, prompt);
       const card = parsePromotedCard(raw);

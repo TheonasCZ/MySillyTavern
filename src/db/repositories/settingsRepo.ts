@@ -57,3 +57,44 @@ export async function setCalendarSetting(chatId: string, cal: CalendarJSON): Pro
   const key = `${CALENDAR_SETTING_KEY}_${chatId}`;
   await setSetting(key, JSON.stringify(cal));
 }
+
+// ---- Sync helpers (M14) -------------------------------------------------
+
+/** Generates and stores a random device-id the first time sync is enabled.
+ *  Returns the existing device-id if one is already stored. */
+export async function ensureDeviceId(): Promise<string> {
+  const existing = await getSetting("device_id");
+  if (existing) return existing;
+  const id = crypto.randomUUID();
+  await setSetting("device_id", id);
+  return id;
+}
+
+export interface SyncPosition {
+  file: string;
+  byteOffset: number;
+}
+
+/** Reads tracked sync positions (which byte of each foreign journal file has
+ *  already been processed). Returns an empty array when nothing is tracked. */
+export async function getSyncPositions(): Promise<SyncPosition[]> {
+  const raw = await getSetting("sync_positions");
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p: unknown): p is SyncPosition =>
+        typeof p === "object" && p !== null &&
+        typeof (p as SyncPosition).file === "string" &&
+        typeof (p as SyncPosition).byteOffset === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Persists the current sync positions. */
+export async function setSyncPositions(positions: SyncPosition[]): Promise<void> {
+  await setSetting("sync_positions", JSON.stringify(positions));
+}

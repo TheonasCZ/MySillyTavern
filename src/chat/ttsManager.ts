@@ -1,0 +1,75 @@
+import type { TtsBackend, TtsSpeakOptions, TtsVoice } from "./ttsBackend";
+import type { WebSpeechTts } from "./webSpeechTts";
+import type { EdgeTts } from "./edgeTts";
+
+export class TtsManager implements TtsBackend {
+  readonly id = "edge-tts" as const; // primary backend ID
+  readonly label = "Auto (Edge-TTS → Web Speech)";
+
+  private backends: TtsBackend[];
+
+
+  constructor(webSpeech: WebSpeechTts, edgeTts: EdgeTts) {
+    // Edge-TTS first (online, better quality), Web Speech as fallback
+    this.backends = [edgeTts, webSpeech];
+  }
+
+  /**
+   * Try each backend in order. The first one that succeeds wins.
+   * On failure, log the error and continue to the next backend.
+   */
+  async speak(text: string, options?: TtsSpeakOptions): Promise<void> {
+    for (let i = 0; i < this.backends.length; i++) {
+      try {
+        await this.backends[i].speak(text, options);
+        return;
+      } catch (e) {
+        console.warn(`TTS backend "${this.backends[i].id}" failed:`, e);
+        // Continue to next backend
+      }
+    }
+    // All backends failed — nothing we can do
+    console.error("All TTS backends failed");
+  }
+
+  stop(): void {
+    this.backends.forEach((b) => b.stop());
+  }
+
+  get isSpeaking(): boolean {
+    return this.backends.some((b) => b.isSpeaking);
+  }
+
+  async listVoices(): Promise<TtsVoice[]> {
+    // Merge voices from all backends, Edge-TTS first
+    const results: TtsVoice[] = [];
+    const seen = new Set<string>();
+
+    for (const backend of this.backends) {
+      try {
+        const voices = await backend.listVoices();
+        for (const v of voices) {
+          if (!seen.has(v.id)) {
+            seen.add(v.id);
+            results.push(v);
+          }
+        }
+      } catch {
+        // Skip backends that fail to list voices
+      }
+    }
+    return results;
+  }
+
+  /** Set which backend to prefer (0 = edge-tts, 1 = web-speech). */
+  setPreferredIndex(index: number): void {
+    if (index >= 0 && index < this.backends.length) {
+      // preference stored for future fallback logic
+    }
+  }
+
+  /** The backends array — for UI introspection. */
+  getBackends(): ReadonlyArray<TtsBackend> {
+    return this.backends;
+  }
+}

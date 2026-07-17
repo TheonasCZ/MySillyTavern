@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { openDialog, saveDialog } from "../platform";
 
 import type { Persona, PersonaDraft } from "../db/repositories/personasRepo";
 
@@ -80,7 +80,7 @@ export function cardJsonToDraft(json: string): PersonaDraft {
 
 /** Opens a native save dialog and exports the persona as a JSON file. */
 export async function pickAndExportPersona(persona: Persona): Promise<string | null> {
-  const outPath = await save({
+  const outPath = await saveDialog({
     defaultPath: `${persona.name.replace(/[/\\?%*:|"<>]/g, "_")}.persona.json`,
     filters: [{ name: "Persona (JSON)", extensions: ["json"] }],
   });
@@ -92,7 +92,7 @@ export async function pickAndExportPersona(persona: Persona): Promise<string | n
 /** Opens a native save dialog and exports the persona as a PNG card
  *  (same format as character cards, for SillyTavern compatibility). */
 export async function pickAndExportPersonaAsPng(persona: Persona): Promise<string | null> {
-  const outPath = await save({
+  const outPath = await saveDialog({
     defaultPath: `${persona.name.replace(/[/\\?%*:|"<>]/g, "_")}.png`,
     filters: [{ name: "PNG", extensions: ["png"] }],
   });
@@ -136,7 +136,7 @@ export async function pickAndExportPersonaAsPng(persona: Persona): Promise<strin
 /** Opens a native open dialog and imports a persona from a JSON file.
  *  Returns the draft or null if cancelled. */
 export async function pickAndImportPersona(): Promise<PersonaDraft | null> {
-  const path = await open({
+  const path = await openDialog({
     multiple: false,
     filters: [{ name: "Persona (JSON)", extensions: ["json"] }],
   });
@@ -148,7 +148,7 @@ export async function pickAndImportPersona(): Promise<PersonaDraft | null> {
 /** Opens a native open dialog and imports a persona from a PNG card.
  *  Returns the draft or null if cancelled. */
 export async function pickAndImportPersonaFromPng(): Promise<PersonaDraft | null> {
-  const path = await open({
+  const path = await openDialog({
     multiple: false,
     filters: [{ name: "PNG", extensions: ["png"] }],
   });

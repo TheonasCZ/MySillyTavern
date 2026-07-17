@@ -1,8 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { saveDialog } from "../platform";
 
 import type { Character } from "../db/repositories/charactersRepo";
-import { buildCardV2Json, type CharacterCardV2, type NormalizedCard } from "./cardTypes";
+import {
+  buildCardV2Json,
+  type CharacterCardV2,
+  type MySillyTavernExtensions,
+  type NormalizedCard,
+} from "./cardTypes";
 
 function characterToNormalized(character: Character): NormalizedCard {
   return {
@@ -22,6 +27,14 @@ function characterToNormalized(character: Character): NormalizedCard {
   };
 }
 
+function buildMstExtensions(character: Character): MySillyTavernExtensions | undefined {
+  const ext: MySillyTavernExtensions = {};
+  if (character.ttsVoice) ext.ttsVoice = character.ttsVoice;
+  // recommendedPreset and directorDefaults are reserved for future use;
+  // they are populated here when the data sources become available.
+  return Object.keys(ext).length > 0 ? ext : undefined;
+}
+
 /** Merges the character's current column values into its original
  * `card_json` (if any), preserving fields this app doesn't model
  * (extensions, creator, character_book, ...) while overwriting everything
@@ -30,19 +43,28 @@ function characterToNormalized(character: Character): NormalizedCard {
  * JSON that failed to parse as an object). */
 export function mergeCharacterIntoCardJson(character: Character): CharacterCardV2 {
   const normalized = characterToNormalized(character);
-  const fresh = buildCardV2Json(normalized);
+  const mstExt = buildMstExtensions(character);
+  const fresh = buildCardV2Json(normalized, mstExt);
 
   if (!character.cardJson) return fresh;
 
   try {
     const original = JSON.parse(character.cardJson) as { data?: Record<string, unknown> };
     if (!original.data) return fresh;
+    // Merge: original data (including any other extensions) is the base,
+    // then our fresh data overlays on top. The mst extensions are always
+    // written from current character state so they don't go stale.
+    const mergedExtensions = {
+      ...((original.data as { extensions?: Record<string, unknown> }).extensions ?? {}),
+      ...(fresh.data.extensions ?? {}),
+    };
     return {
       spec: "chara_card_v2",
       spec_version: "2.0",
       data: {
-        ...original.data,
-        ...fresh.data,
+        ...(original.data as Record<string, unknown>),
+        ...(fresh.data as Record<string, unknown>),
+        extensions: mergedExtensions,
         // Keep the original character_book (if any) rather than dropping it —
         // this app doesn't edit lorebooks embedded in cards (M4 has full
         // lorebook UI), so the safest thing on export is to leave it as-is.
@@ -50,7 +72,7 @@ export function mergeCharacterIntoCardJson(character: Character): CharacterCardV
           | CharacterCardV2["data"]["character_book"]
           | undefined,
       },
-    };
+    } as CharacterCardV2;
   } catch {
     return fresh;
   }
@@ -69,7 +91,7 @@ export async function exportCharacterToPng(character: Character, outPath: string
 /** Opens a native save dialog and exports the character there, or does
  * nothing if the user cancelled. */
 export async function pickAndExportCharacter(character: Character): Promise<string | null> {
-  const outPath = await save({
+  const outPath = await saveDialog({
     defaultPath: `${character.name.replace(/[/\\?%*:|"<>]/g, "_")}.png`,
     filters: [{ name: "Character card (PNG)", extensions: ["png"] }],
   });

@@ -1,5 +1,6 @@
 import { foldForSearch } from "../../chat/searchSnippet";
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityWrite } from "../syncJournal";
 
 export type MessageRole = "user" | "assistant" | "system";
 
@@ -147,7 +148,7 @@ export async function createMessage(
      VALUES ($1, $2, $3, $4, $5, 0, $6, $7)`,
     [id, chatId, role, content, swipes, characterId, now],
   );
-  return {
+  const msg: Message = {
     id,
     chatId,
     role,
@@ -157,6 +158,8 @@ export async function createMessage(
     characterId,
     createdAt: now,
   };
+  journalEntityWrite("message", msg as unknown as Record<string, unknown>);
+  return msg;
 }
 
 /** Edits the content of the currently active swipe (used for manual message

@@ -2,13 +2,35 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { prepareForTts } from "./ttsText";
+import type { TtsVoice } from "./ttsBackend";
+import { TtsManager } from "./ttsManager";
+import { WebSpeechTts } from "./webSpeechTts";
+import { EdgeTts } from "./edgeTts";
 
 const TTS_AUTO_KEY = "tts_auto";
 const TTS_SPEED_KEY = "tts_speed";
 const TTS_VOICE_KEY = "tts_voice";
+const TTS_PITCH_KEY = "tts_pitch";
+const TTS_BACKEND_KEY = "tts_backend";
 
 const DEFAULT_SPEED = 1.0;
+const DEFAULT_PITCH = 0; // Hz offset
 
+// ---------------------------------------------------------------------------
+// Singleton TTS manager — created once per app lifetime
+// ---------------------------------------------------------------------------
+let managerInstance: TtsManager | null = null;
+
+function getManager(): TtsManager {
+  if (!managerInstance) {
+    managerInstance = new TtsManager(new WebSpeechTts(), new EdgeTts());
+  }
+  return managerInstance;
+}
+
+// ---------------------------------------------------------------------------
+// Hook interface — extended with backend, pitch, and combined voice list
+// ---------------------------------------------------------------------------
 export interface TtsHook {
   /** Speak the given text after stripping markdown. */
   speak: (text: string, voiceUri?: string) => void;
@@ -16,105 +38,103 @@ export interface TtsHook {
   stop: () => void;
   /** Whether speech is currently playing. */
   isSpeaking: boolean;
-  /** Available SpeechSynthesisVoice objects (populated asynchronously). */
-  voices: SpeechSynthesisVoice[];
+  /** Available voices from all backends (populated asynchronously). */
+  voices: TtsVoice[];
   /** Enable/disable auto-read mode (persisted). */
   autoRead: boolean;
   setAutoRead: (v: boolean) => void;
-  /** Speech speed multiplier (0.5–2.0, persisted). */
+  /** Speech rate multiplier (0.5–2.0, persisted). */
   speed: number;
   setSpeed: (v: number) => void;
-  /** Currently selected global voice URI (persisted). */
+  /** Currently selected global voice ID (persisted). */
   selectedVoiceUri: string;
   setSelectedVoiceUri: (v: string) => void;
+  /** Active backend index (0 = edge-tts, 1 = web-speech, persisted). */
+  backend: number;
+  setBackend: (v: number) => void;
+  /** Pitch offset in Hz (-20..+20, persisted). */
+  pitch: number;
+  setPitch: (v: number) => void;
 }
 
+// ---------------------------------------------------------------------------
 export function useTts(): TtsHook {
-  const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
+  const manager = getManager();
   const [autoRead, setAutoReadState] = useState(false);
   const [speed, setSpeedState] = useState(DEFAULT_SPEED);
+  const [pitch, setPitchState] = useState(DEFAULT_PITCH);
   const [selectedVoiceUri, setSelectedVoiceUriState] = useState("");
+  const [backend, setBackendState] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load persisted settings on mount
   useEffect(() => {
     void (async () => {
-      const [auto, spd, voice] = await Promise.all([
+      const [auto, spd, voice, ptch, bknd] = await Promise.all([
         getSetting(TTS_AUTO_KEY),
         getSetting(TTS_SPEED_KEY),
         getSetting(TTS_VOICE_KEY),
+        getSetting(TTS_PITCH_KEY),
+        getSetting(TTS_BACKEND_KEY),
       ]);
       if (auto) setAutoReadState(auto === "1");
       if (spd) setSpeedState(Number(spd) || DEFAULT_SPEED);
       if (voice) setSelectedVoiceUriState(voice);
+      if (ptch) setPitchState(Number(ptch) || DEFAULT_PITCH);
+      if (bknd) setBackendState(Number(bknd) || 0);
     })();
   }, []);
 
-  // Populate available voices
+  // Sync backend preference to manager
   useEffect(() => {
-    if (!synth) return;
+    manager.setPreferredIndex(backend);
+  }, [backend, manager]);
 
-    const populate = () => {
-      setVoices(synth.getVoices());
-    };
-    populate();
-
-    // Chrome/WebView loads voices asynchronously
-    synth.addEventListener("voiceschanged", populate);
-    return () => synth.removeEventListener("voiceschanged", populate);
-  }, [synth]);
-
-  // Track speaking state via utterance events
+  // Populate available voices from all backends
   useEffect(() => {
-    if (!synth) return;
-
-    const check = () => {
-      setIsSpeaking(synth.speaking);
+    let cancelled = false;
+    void (async () => {
+      const list = await manager.listVoices();
+      if (!cancelled) setVoices(list);
+    })();
+    return () => {
+      cancelled = true;
     };
+  }, [backend, manager]);
 
-    // Poll periodically as a fallback (events are unreliable cross-browser)
-    const timer = setInterval(check, 200);
-    return () => clearInterval(timer);
-  }, [synth]);
+  // Poll isSpeaking (event-driven doesn't cover all backends)
+  useEffect(() => {
+    pollRef.current = setInterval(() => {
+      setIsSpeaking(manager.isSpeaking);
+    }, 200);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [manager]);
 
   const stop = useCallback(() => {
-    if (synth) {
-      synth.cancel();
-      setIsSpeaking(false);
-    }
-  }, [synth]);
+    manager.stop();
+    setIsSpeaking(false);
+  }, [manager]);
 
   const speak = useCallback(
     (text: string, voiceUri?: string) => {
-      if (!synth) return;
-
-      // Stop any current speech
-      synth.cancel();
-
       const cleaned = prepareForTts(text);
       if (!cleaned) return;
 
-      const utterance = new SpeechSynthesisUtterance(cleaned);
-      utterance.rate = speed;
+      manager.stop();
 
-      // Select voice by URI
-      const targetUri = voiceUri || selectedVoiceUri;
-      if (targetUri) {
-        const allVoices = synth.getVoices();
-        const match = allVoices.find((v) => v.voiceURI === targetUri);
-        if (match) utterance.voice = match;
-      }
+      const targetVoice = voiceUri || selectedVoiceUri;
 
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-
-      utteranceRef.current = utterance;
-      synth.speak(utterance);
+      void manager.speak(cleaned, {
+        voice: targetVoice || undefined,
+        rate: speed,
+        pitch,
+      });
     },
-    [synth, speed, selectedVoiceUri],
+    [manager, speed, pitch, selectedVoiceUri],
   );
 
   const setAutoRead = useCallback((v: boolean) => {
@@ -128,9 +148,21 @@ export function useTts(): TtsHook {
     void setSetting(TTS_SPEED_KEY, String(clamped));
   }, []);
 
+  const setPitch = useCallback((v: number) => {
+    const clamped = Math.max(-20, Math.min(20, v));
+    setPitchState(clamped);
+    void setSetting(TTS_PITCH_KEY, String(clamped));
+  }, []);
+
   const setSelectedVoiceUri = useCallback((v: string) => {
     setSelectedVoiceUriState(v);
     void setSetting(TTS_VOICE_KEY, v);
+  }, []);
+
+  const setBackend = useCallback((v: number) => {
+    const clamped = Math.max(0, Math.min(1, v));
+    setBackendState(clamped);
+    void setSetting(TTS_BACKEND_KEY, String(clamped));
   }, []);
 
   return {
@@ -144,5 +176,9 @@ export function useTts(): TtsHook {
     setSpeed,
     selectedVoiceUri,
     setSelectedVoiceUri,
+    backend,
+    setBackend,
+    pitch,
+    setPitch,
   };
 }
