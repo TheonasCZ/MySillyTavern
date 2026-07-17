@@ -89,6 +89,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_014,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 15,
+            description: "crafting: crafting_recipes table",
+            sql: MIGRATION_015,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -348,3 +354,19 @@ CREATE INDEX idx_quests_chat ON quests(chat_id, status);
 
 const MIGRATION_013: &str = r#"ALTER TABLE personas ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]';"#;
 const MIGRATION_014: &str = r#"CREATE TABLE IF NOT EXISTS faction_reputations (id TEXT PRIMARY KEY, persona_id TEXT NOT NULL, faction_name TEXT NOT NULL, reputation INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY (persona_id) REFERENCES personas(id));"#;
+
+const MIGRATION_015: &str = r#"
+CREATE TABLE crafting_recipes (
+  id TEXT PRIMARY KEY,
+  persona_id TEXT NOT NULL,
+  result_item TEXT NOT NULL,
+  ingredients TEXT NOT NULL,
+  skill_name TEXT,
+  tier INTEGER NOT NULL DEFAULT 0,
+  perks TEXT NOT NULL DEFAULT '[]',
+  description TEXT,
+  crafted_at TEXT,
+  FOREIGN KEY (persona_id) REFERENCES personas(id)
+);
+CREATE INDEX idx_crafting_recipes_persona ON crafting_recipes(persona_id);
+"#;

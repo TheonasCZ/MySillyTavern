@@ -47,6 +47,15 @@ export interface FactionRepLike {
   reputation: number;
 }
 
+export interface CraftingRecipeLike {
+  resultItem: string;
+  ingredients: string[];
+  skillName: string | null;
+  tier: number;
+  perks: string[];
+  craftedAt: string | null;
+}
+
 export interface PersonaLike {
   name: string;
   description: string;
@@ -61,6 +70,8 @@ export interface PersonaLike {
   inventory?: Array<{ item: string; qty: number; note?: string }>;
   /** Current faction standings for this persona. */
   factions?: FactionRepLike[];
+  /** Known crafting recipes for this persona. */
+  craftingRecipes?: CraftingRecipeLike[];
 }
 
 export type LedgerCategory = "player" | "world" | "npc" | "event" | "quest";
@@ -574,6 +585,46 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       factionInstructions += "Změny reputace: [FACTION:+jméno:hodnota] zvýšení, [FACTION:-jméno:hodnota] snížení.\n";
       factionInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
       phi = phi ? `${phi}\n\n${factionInstructions}` : factionInstructions;
+    }
+
+    // Crafting instructions — included when persona has known recipes or an inventory
+    const hasRecipes = persona?.craftingRecipes?.length;
+    if (hasRecipes || hasInv) {
+      let craftInstructions = "[VÝROBA]\n";
+      craftInstructions += "Skill určuje KVALITU výrobku, ne možnost výroby. Při skillu 1 vznikne z ingrediencí slabý předmět, při skillu 9 mistrovský s bonusovými perky.\n";
+      craftInstructions += "Ingredience se vždy spotřebují (i při neúspěchu). Legendární ingredience jsou vzácné (padají z bossů), nejsou omezeny skillem.\n\n";
+
+      // Perk scale
+      craftInstructions += "Škála perků podle skillu:\n";
+      craftInstructions += "- Skill 1–2: 0 perků, základní předmět\n";
+      craftInstructions += "- Skill 3–5: 1 perk (Tier 1)\n";
+      craftInstructions += "- Skill 6–8: 2 perky (Tier 1 + Tier 2)\n";
+      craftInstructions += "- Skill 9–11: 3 perky (Tier 1 + Tier 2 + Tier 3)\n";
+      craftInstructions += "- Skill 12+: 4 perky (Tier 1 + Tier 2 + Tier 3 + Tier 4)\n\n";
+
+      craftInstructions += "Dostupné perky podle tierů:\n";
+      craftInstructions += "- Tier 1 (od skillu 3): Nabroušený, Nerezaví, Lehký\n";
+      craftInstructions += "- Tier 2 (od skillu 6): Nezlomný, Přesný, Ochranný\n";
+      craftInstructions += "- Tier 3 (od skillu 9): Nasává manu, Leechuje, Magická čepel\n";
+      craftInstructions += "- Tier 4 (od skillu 12): Pojmenovaná, Duše v čepeli\n\n";
+
+      craftInstructions += "Tagy:\n";
+      craftInstructions += "- [CRAFT:výsledek:surovina1+surovina2] — objevení/zápis receptu (suroviny se odečtou z inventáře)\n";
+      craftInstructions += "- [CRAFTED:výsledek] — úspěšné vyrobení (perky vybereš automaticky podle skillu)\n";
+      craftInstructions += "- [CRAFTED:výsledek:perk1+perk2] — vyrobení s konkrétními perky\n";
+      craftInstructions += "Tagy umísti kamkoliv do textu — budou automaticky odstraněny.";
+
+      if (hasRecipes && persona) {
+        craftInstructions += "\n\nZnámé recepty:\n";
+        for (const r of persona.craftingRecipes ?? []) {
+          const crafted = r.craftedAt ? "✓" : "✗";
+          const skillHint = r.skillName ? ` (skill: ${r.skillName})` : "";
+          const perksStr = r.perks.length > 0 ? ` [perky: ${r.perks.join(", ")}]` : "";
+          craftInstructions += `- ${crafted} ${r.resultItem} ← ${r.ingredients.join(" + ")}${skillHint}${perksStr}\n`;
+        }
+      }
+
+      phi = phi ? `${phi}\n\n${craftInstructions}` : craftInstructions;
     }
 
     // Canon reminder is appended last, closest to generation — see

@@ -1,6 +1,7 @@
 import type { Persona } from "../db/repositories/personasRepo";
 import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
+import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
 
 /** Parses game tags (inventory + skill + level + faction) from the AI response,
@@ -11,8 +12,8 @@ export async function processGameResponse(
   _chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0) return text;
 
   // Apply inventory mutations
   const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
@@ -80,6 +81,66 @@ export async function processGameResponse(
         await updateReputation(match.id, fm.delta);
       } else {
         await createFaction(persona.id, fm.name, fm.delta);
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  // Apply craft mutations: [CRAFT:result:ingredient1+ingredient2]
+  for (const cm of craftMutations) {
+    try {
+      // Create the recipe in DB (or skip if already known)
+      const existing = await getRecipeByResult(persona.id, cm.resultItem);
+      if (!existing) {
+        // Determine tier based on skill level (AI may set later, default 0)
+        const relatedSkill = persona.skills?.find(
+          (s) => cm.ingredients.some((ing) =>
+            ing.toLowerCase().includes(s.name.toLowerCase().slice(0, 4)) ||
+            s.name.toLowerCase().includes("alchymie")
+          )
+        );
+        // Try to infer skill name from context (default "Alchymie" for potions, "Kovářství" for weapons)
+        let inferredSkill = relatedSkill?.name ?? null;
+        if (!inferredSkill && cm.resultItem.toLowerCase().includes("lektvar")) inferredSkill = "Alchymie";
+        else if (!inferredSkill && cm.resultItem.toLowerCase().includes("jed")) inferredSkill = "Alchymie";
+        else if (!inferredSkill) inferredSkill = "Kovářství";
+
+        await createRecipe({
+          personaId: persona.id,
+          resultItem: cm.resultItem,
+          ingredients: cm.ingredients,
+          skillName: inferredSkill,
+          tier: 0,
+        });
+      }
+      // Consume ingredients from inventory (always consumed, even on failure)
+      for (const ing of cm.ingredients) {
+        const entry = inv.find((i) => i.item.toLowerCase() === ing.toLowerCase());
+        if (entry) {
+          entry.qty -= 1;
+          if (entry.qty <= 0) inv.splice(inv.indexOf(entry), 1);
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  // Apply crafted mutations: [CRAFTED:result] or [CRAFTED:result:perk1+perk2]
+  for (const cdm of craftedMutations) {
+    try {
+      // Add the crafted item to inventory
+      const existingItem = inv.find((i) => i.item.toLowerCase() === cdm.resultItem.toLowerCase());
+      if (existingItem) {
+        existingItem.qty += 1;
+      } else {
+        inv.push({ item: cdm.resultItem, qty: 1 });
+      }
+      // Update the recipe's perks
+      const recipe = await getRecipeByResult(persona.id, cdm.resultItem);
+      if (recipe) {
+        await updateRecipePerks(recipe.id, cdm.perks);
       }
     } catch {
       // Non-critical

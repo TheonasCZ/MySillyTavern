@@ -1,6 +1,6 @@
 /**
  * Parses game tags from AI responses — inventory mutations, skill changes,
- * level progression, and faction reputation tags.
+ * level progression, faction reputation, and crafting tags.
  * 
  * Inventory tags:
  *   [INV:+item_name]              — add item (qty 1)
@@ -21,6 +21,11 @@
  * Faction tags:
  *   [FACTION:+name:delta]         — adjust reputation by delta (or create at delta)
  *   [FACTION:name]                — show current reputation (no-op in parsing)
+ * 
+ * Crafting tags:
+ *   [CRAFT:result_name:ingredient1+ingredient2]  — discover recipe (consumes ingredients)
+ *   [CRAFTED:result_name]                        — craft item (perks auto by skill)
+ *   [CRAFTED:result_name:perk1+perk2]            — craft item with specific perks
  * 
  * Returns the cleaned text (all tags removed) and parsed mutations.
  */
@@ -44,7 +49,19 @@ export interface LevelMutation {
 
 export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }
 
-export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }
+export interface CraftMutation {
+  /** Result item name (what this recipe produces). */
+  resultItem: string;
+  /** List of ingredient names consumed by the recipe. */
+  ingredients: string[];
+}
+
+export interface CraftedMutation {
+  /** Result item name (what was successfully crafted). */
+  resultItem: string;
+  /** Specific perks chosen by the AI. Empty when perks should be auto-filled. */
+  perks: string[];
+}
 
 export interface FactionMutation {
   /** Faction name (lowercased for matching). */
@@ -61,6 +78,8 @@ interface ParsedTags {
   skillChanges: SkillMutation[];
   levelChanges: LevelMutation[];
   factionMutations: FactionMutation[];
+  craftMutations: CraftMutation[];
+  craftedMutations: CraftedMutation[];
 }
 
 export function parseGameTags(text: string): ParsedTags {
@@ -68,6 +87,8 @@ export function parseGameTags(text: string): ParsedTags {
   const skillChanges: SkillMutation[] = [];
   const levelChanges: LevelMutation[] = [];
   const factionMutations: FactionMutation[] = [];
+  const craftMutations: CraftMutation[] = [];
+  const craftedMutations: CraftedMutation[] = [];
 
   let cleanText = text;
 
@@ -131,5 +152,26 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations };
+  // Parse CRAFTED tags first (more specific) before CRAFT tags:
+  //   [CRAFTED:result_name]              — crafted with auto perks
+  //   [CRAFTED:result_name:perk1+perk2]  — crafted with specific perks
+  cleanText = cleanText.replace(/\[CRAFTED:([^:\]]+?)(?::([^:\]]+?))?\]/gi, (_m, resultItem: string, perksStr?: string) => {
+    const perks = perksStr
+      ? perksStr.split("+").map((p) => p.trim()).filter(Boolean)
+      : [];
+    craftedMutations.push({ resultItem: resultItem.trim(), perks });
+    return "";
+  });
+
+  // Parse CRAFT tags:
+  //   [CRAFT:result_name:ingredient1+ingredient2]  — discover recipe
+  cleanText = cleanText.replace(/\[CRAFT:([^:\]]+?):([^:\]]+?)\]/gi, (_m, resultItem: string, ingredientsStr: string) => {
+    const ingredients = ingredientsStr.split("+").map((i) => i.trim()).filter(Boolean);
+    if (ingredients.length > 0) {
+      craftMutations.push({ resultItem: resultItem.trim(), ingredients });
+    }
+    return "";
+  });
+
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations };
 }
