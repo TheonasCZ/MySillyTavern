@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { FONT_SCALES, useSettingsStore, type Theme } from "../../stores/settingsStore";
-import type { SupportedLanguage } from "../../i18n";
+import { supportedLanguages, type SupportedLanguage } from "../../i18n";
 
 export function AppearancePanel() {
   const { t } = useTranslation("settings");
@@ -19,23 +19,22 @@ export function AppearancePanel() {
           <span className="mb-2 block text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
             {t("appearance.language")}
           </span>
-          <div className="inline-flex overflow-hidden rounded-[var(--radius-sm)] border" style={{ borderColor: "var(--color-border-strong)" }}>
-            {(["cs", "en"] as SupportedLanguage[]).map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => void setLanguage(lang)}
-                aria-pressed={language === lang}
-                className="px-3 py-1.5 text-sm transition-colors"
-                style={{
-                  backgroundColor: language === lang ? "var(--color-accent)" : "transparent",
-                  color: language === lang ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-                }}
-              >
+          <select
+            className="rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
+            style={{
+              backgroundColor: "var(--color-surface-2)",
+              borderColor: "var(--color-border-strong)",
+              color: "var(--color-text)",
+            }}
+            value={language}
+            onChange={(e) => void setLanguage(e.target.value as SupportedLanguage)}
+          >
+            {supportedLanguages.map((lang) => (
+              <option key={lang} value={lang}>
                 {lang === "cs" ? t("appearance.languageCs") : t("appearance.languageEn")}
-              </button>
+              </option>
             ))}
-          </div>
+          </select>
         </div>
 
         <div>
