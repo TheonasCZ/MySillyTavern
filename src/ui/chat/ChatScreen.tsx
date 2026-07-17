@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 
 import { branchChat } from "../../db/repositories/chatsRepo";
+import { createMessage } from "../../db/repositories/messagesRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
@@ -10,6 +12,7 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
+import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
 import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
 import { ChatInput } from "./ChatInput";
@@ -75,6 +78,26 @@ export function ChatScreen() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
+
+  const handleDiceRoll = useCallback(
+    async (expression: string) => {
+      if (!chatId) return;
+      try {
+        const result: string = await invoke("eval_dice", { expression });
+        const content = formatDiceSystemMessage(expression, result);
+        const systemMsg = await createMessage(chatId, "system", content);
+        // Check we're still on the same chat before inserting
+        if (useChatStore.getState().chatId === chatId) {
+          useChatStore.setState((s) => ({
+            messages: [...s.messages, systemMsg],
+          }));
+        }
+      } catch (err) {
+        console.warn("dice roll failed", err);
+      }
+    },
+    [chatId],
+  );
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
@@ -351,6 +374,7 @@ export function ChatScreen() {
             disabled={loading || !connection}
             streaming={streaming}
             onSend={(content) => void sendMessage(content)}
+            onDiceRoll={(expression) => void handleDiceRoll(expression)}
             onStop={() => void stop()}
             suggestions={combinedSuggestions}
             suggesting={suggesting}

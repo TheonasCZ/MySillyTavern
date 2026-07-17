@@ -11,6 +11,7 @@ use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_pn
 use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
+use commands::dice::eval_dice;
 use commands::files::{read_text_file, write_text_file};
 use commands::logging::{append_log, get_log_path};
 use commands::secrets::{delete_api_key, has_api_key, set_api_key};
@@ -56,6 +57,7 @@ pub fn run() {
             cancel_pending_import,
             append_log,
             get_log_path,
+            eval_dice,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -71,6 +71,31 @@ pub async fn list_models(
     api_key: &str,
 ) -> Result<Vec<String>, ProviderError> {
     let client = reqwest::Client::new();
+
+    // If the base URL looks like a localhost address, try the Ollama API
+    // first — it's a best-effort fallback so a failure silently drops
+    // through to the provider-specific match below.
+    if let Some(base) = base_url {
+        if base.contains("localhost") || base.contains("127.0.0.1") {
+            let url = format!("{}/api/tags", base.trim_end_matches('/'));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(body) = resp.json::<serde_json::Value>().await {
+                        if let Some(models_arr) = body["models"].as_array() {
+                            let mut ollama_models: Vec<String> = models_arr
+                                .iter()
+                                .filter_map(|m| m["name"].as_str().map(str::to_string))
+                                .collect();
+                            ollama_models.sort();
+                            ollama_models.dedup();
+                            return Ok(ollama_models);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut models: Vec<String> = match provider {
         "gemini" => {
             let body: serde_json::Value = check_status(

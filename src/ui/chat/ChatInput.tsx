@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 
+import { isDiceCommand, extractDiceExpression } from "../../chat/diceCommand";
 import { stripEmphasis } from "../../chat/inlineSuggestions";
 
 const chipMarkdownComponents = {
@@ -16,6 +17,7 @@ interface Props {
   disabled: boolean;
   streaming: boolean;
   onSend: (content: string) => void;
+  onDiceRoll?: (expression: string) => void;
   onStop: () => void;
   suggestions: string[] | null;
   suggesting: boolean;
@@ -30,6 +32,7 @@ export function ChatInput({
   disabled,
   streaming,
   onSend,
+  onDiceRoll,
   onStop,
   suggestions,
   suggesting,
@@ -39,10 +42,25 @@ export function ChatInput({
 }: Props) {
   const { t } = useTranslation("chat");
   const [value, setValue] = useState("");
+  const [diceFlash, setDiceFlash] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = () => {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
+
+    if (isDiceCommand(trimmed) && onDiceRoll) {
+      const expression = extractDiceExpression(trimmed);
+      if (expression) {
+        onDiceRoll(expression);
+        setValue("");
+        // Brief flash animation to acknowledge the dice roll
+        setDiceFlash(true);
+        setTimeout(() => setDiceFlash(false), 300);
+        return;
+      }
+    }
+
     onSend(trimmed);
     setValue("");
   };
@@ -107,10 +125,11 @@ export function ChatInput({
       </button>
       )}
       <textarea
-        className="min-h-[2.5rem] max-h-40 flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm"
+        ref={textareaRef}
+        className="min-h-[2.5rem] max-h-40 flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm transition-colors duration-150"
         style={{
-          backgroundColor: "var(--color-surface-2)",
-          borderColor: "var(--color-border-strong)",
+          backgroundColor: diceFlash ? "var(--color-accent)" : "var(--color-surface-2)",
+          borderColor: diceFlash ? "var(--color-brass)" : "var(--color-border-strong)",
           color: "var(--color-text)",
         }}
         placeholder={t("room.inputPlaceholder") ?? ""}
