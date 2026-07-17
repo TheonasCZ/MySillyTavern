@@ -4,7 +4,9 @@
     "nav": {
       "chats": "Chats",
       "characters": "Characters",
+      "charactersSub": "AI-run characters — narrators, companions",
       "personas": "Personas",
+      "personasSub": "Your character — who you are in the story",
       "lorebooks": "Lorebooks",
       "settings": "Settings"
     },
@@ -190,14 +192,14 @@
       "ttsVoiceDefault": "Default voice",
       "help": {
         "name": "The character's name as the AI uses it when writing their lines and as shown in the chat.",
-        "description": "The character's core description — appearance, background, key traits. Sent to the AI in every prompt, so keep it concise and to the point.",
-        "personality": "A short summary of personality traits (e.g. \"quiet, watchful, dry sense of humor\"). Helps the AI play the character consistently across the whole chat.",
-        "scenario": "A description of the starting situation or setting the chat begins in. Sets context before the first message is sent.",
-        "firstMes": "The message the character sends first when you start a new chat. It's the first thing you see, so it should showcase the character's tone and style.",
-        "alternateGreetings": "Extra opening-message variants you can pick from instead of the default one when starting a chat.",
-        "mesExample": "Example dialogue that teaches the model this character's writing style and reply length. Never sent as a visible chat message.",
-        "systemPrompt": "A custom system instruction just for this character — overrides the app's default general RP instruction. Leave empty if the default behavior works for you.",
-        "postHistoryInstructions": "Text inserted into the prompt after the entire chat history, right before the model's reply. Use it for rules the model should follow right now (e.g. formatting, a style reminder).",
+        "description": "The character's core description — appearance, background, key traits. Sent to the AI in every prompt, so keep it concise. ⚙ Best in English (AI instruction).",
+        "personality": "A short summary of personality traits (e.g. \"quiet, watchful, dry sense of humor\"). Helps the AI play the character consistently. ⚙ Best in English (AI instruction).",
+        "scenario": "A description of the starting situation or setting the chat begins in. Sets context before the first message is sent. 🖊 In your game's language (story content).",
+        "firstMes": "The message the character sends first when you start a new chat. It's the first thing you see, so it should showcase the character's tone and style. 🖊 In your game's language (story content).",
+        "alternateGreetings": "Extra opening-message variants you can pick from instead of the default one when starting a chat. 🖊 In your game's language.",
+        "mesExample": "Example dialogue that teaches the model this character's writing style and reply length. Never sent as a visible chat message. 🖊 In your game's language (story content).",
+        "systemPrompt": "A custom system instruction just for this character — overrides the app's default general RP instruction. ⚙ Best in English (AI instruction).",
+        "postHistoryInstructions": "Text inserted into the prompt after the entire chat history, right before the model's reply. Use it for rules the model should follow right now. ⚙ Best in English (AI instruction).",
         "creatorNotes": "The card creator's internal notes. Never sent to the model — for your (or whoever you share the card with) reference only.",
         "tags": "Labels used for filtering and searching in the character gallery. Have no effect on the AI's behavior."
       }

@@ -4,7 +4,9 @@
     "nav": {
       "chats": "Chaty",
       "characters": "Postavy",
+      "charactersSub": "Postavy ovládané AI — vypravěči, společníci",
       "personas": "Persony",
+      "personasSub": "Tvoje postava — kým jsi ve hře ty",
       "lorebooks": "Lorebooky",
       "settings": "Nastavení"
     },
@@ -190,14 +192,14 @@
       },
       "help": {
         "name": "Jméno postavy tak, jak ho AI používá při psaní za sebe a jak se zobrazuje v chatu.",
-        "description": "Základní popis postavy — vzhled, pozadí, klíčové vlastnosti. Posílá se AI v každém promptu, drž ho stručný a věcný.",
-        "personality": "Krátký souhrn povahových rysů (např. „tichá, ostražitá, suchý humor“). Pomáhá AI hrát postavu konzistentně napříč celým chatem.",
-        "scenario": "Popis výchozí situace nebo prostředí, ve kterém chat začíná. Nastavuje kontext dřív, než padne první zpráva.",
-        "firstMes": "Zpráva, kterou postava napíše jako první, když založíš nový chat. Je vidět hned, tak by měla ukázat tón i styl postavy.",
-        "alternateGreetings": "Další varianty úvodní zprávy, mezi kterými si můžeš při zakládání chatu vybrat místo té výchozí.",
-        "mesExample": "Ukázkové dialogy, které učí model stylu psaní a délce replik této postavy. Neposílají se jako viditelná zpráva v chatu.",
-        "systemPrompt": "Vlastní systémová instrukce jen pro tuto postavu — přepíše výchozí obecnou RP instrukci aplikace. Nech prázdné, pokud ti stačí výchozí chování.",
-        "postHistoryInstructions": "Text vložený do promptu až za celou historií chatu, těsně před odpovědí modelu. Používá se pro pravidla, která má model dodržet právě teď (např. formátování, připomenutí stylu).",
+        "description": "Základní popis postavy — vzhled, pozadí, klíčové vlastnosti. Posílá se AI v každém promptu, drž ho stručný. ⚙ Nejlépe anglicky (instrukce pro AI).",
+        "personality": "Krátký souhrn povahových rysů (např. „tichá, ostražitá, suchý humor“). Pomáhá AI hrát postavu konzistentně. ⚙ Nejlépe anglicky (instrukce pro AI).",
+        "scenario": "Popis výchozí situace nebo prostředí, ve kterém chat začíná. Nastavuje kontext dřív, než padne první zpráva. 🖊 V jazyce hry (příběhový obsah).",
+        "firstMes": "Zpráva, kterou postava napíše jako první, když založíš nový chat. Je vidět hned, tak by měla ukázat tón i styl postavy. 🖊 V jazyce hry (příběhový obsah).",
+        "alternateGreetings": "Další varianty úvodní zprávy, mezi kterými si můžeš při zakládání chatu vybrat místo té výchozí. 🖊 V jazyce hry.",
+        "mesExample": "Ukázkové dialogy, které učí model stylu psaní a délce replik této postavy. Neposílají se jako viditelná zpráva v chatu. 🖊 V jazyce hry (příběhový obsah).",
+        "systemPrompt": "Vlastní systémová instrukce jen pro tuto postavu — přepíše výchozí obecnou RP instrukci aplikace. ⚙ Nejlépe anglicky (instrukce pro AI).",
+        "postHistoryInstructions": "Text vložený do promptu až za celou historií chatu, těsně před odpovědí modelu. Používá se pro pravidla, která má model dodržet právě teď. ⚙ Nejlépe anglicky (instrukce pro AI).",
         "creatorNotes": "Interní poznámky tvůrce karty. Do promptu se neposílají, slouží jen tobě (nebo komu kartu sdílíš).",
         "tags": "Štítky pro filtrování a hledání v galerii postav. Na chování AI nemají vliv."
       }

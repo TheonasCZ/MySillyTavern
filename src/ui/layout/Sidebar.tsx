@@ -3,8 +3,8 @@ import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/", key: "chats", labelKey: "nav.chats" },
-  { to: "/characters", key: "characters", labelKey: "nav.characters" },
-  { to: "/personas", key: "personas", labelKey: "nav.personas" },
+  { to: "/characters", key: "characters", labelKey: "nav.characters", subtitleKey: "nav.charactersSub" },
+  { to: "/personas", key: "personas", labelKey: "nav.personas", subtitleKey: "nav.personasSub" },
   { to: "/lorebooks", key: "lorebooks", labelKey: "nav.lorebooks" },
 ] as const;
 
@@ -43,7 +43,15 @@ export function Sidebar() {
                 color: isActive ? "var(--color-text)" : "var(--color-text-muted)",
               })}
             >
-              {t(item.labelKey)}
+              <span>{t(item.labelKey)}</span>
+              {"subtitleKey" in item && (
+                <span
+                  className="mt-0.5 text-[11px] leading-tight"
+                  style={{ color: "var(--color-text-faint)" }}
+                >
+                  {t(item.subtitleKey)}
+                </span>
+              )}
             </NavLink>
           </li>
         ))}
