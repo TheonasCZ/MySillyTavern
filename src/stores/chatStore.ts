@@ -45,6 +45,7 @@ import { runCanonSeed } from "../memory/canonSeed";
 import { consumeDriftCorrections } from "../memory/driftDetector";
 import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
 import { processGameResponse } from "../chat/inventoryProcessor";
+import { setOnInventoryImageWritten } from "../memory/imageGenQueue";
 import { applyRegexRules } from "../chat/regexTransform";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { CONTINUE_AS, CONTINUE_EXACT, CONTINUE_EXACT_SOLO, SUGGEST_PROMPT } from "../prompt/promptTexts";
@@ -156,7 +157,20 @@ async function buildApiMessages(
   memberCharacters: Character[],
 ): Promise<{ messages: ChatMessage[]; report: PromptReport | null; regexRules?: string; presetParams?: { temperature?: number; topP?: number; frequencyPenalty?: number; presencePenalty?: number; maxTokens?: number } }> {
   const isGroup = memberCharacters.length > 1;
-  const persona = await resolveChatPersona(chat);
+  const resolvedPersona = await resolveChatPersona(chat);
+  // The prompt must reflect the chat's live gameplay state, not the
+  // persona's template — inventory/skills/xp/level/conditions are all
+  // chat-scoped now.
+  const persona = resolvedPersona
+    ? {
+        ...resolvedPersona,
+        inventory: chat.inventory ?? [],
+        skills: chat.skills ?? [],
+        xp: chat.xp ?? 0,
+        level: chat.level ?? 1,
+        conditions: chat.conditions ?? [],
+      }
+    : null;
 
   // Resolve the preset: chat's selected preset first, then the default preset
   let activePreset: Preset | null = null;
@@ -369,6 +383,11 @@ function startStream(
       void (async () => {
         const persona = chat ? await resolveChatPersona(chat) : null;
         const finalText = await processGameResponse(persona, text, chat?.id);
+        // processGameResponse may have mutated the chat's inventory/skills/
+        // conditions/xp/level in the DB directly (bypassing this store) —
+        // refresh so InventoryPanel and any other live-state UI re-render
+        // instead of showing a stale snapshot.
+        if (chat?.id) void refreshChatState(chat.id);
         void finalize(finalText, false);
       })();
     },
@@ -1089,6 +1108,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setSelectedSpeaker: (id) => set({ selectedSpeakerId: id }),
 }));
+
+/** Re-fetches the whole chat row and updates the in-memory store so
+ *  components reading `chat.inventory`/`chat.skills`/`chat.conditions`/
+ *  `chat.xp`/`chat.level` (e.g. InventoryPanel) re-render with fresh data
+ *  after a DB write that bypassed the store (game-tag processing, or an
+ *  async illustration write landing later). Since this re-fetches the full
+ *  row via `getChat`, it covers every chat-scoped live-gameplay field at
+ *  once — no need for a field-specific refresh. Guards against a stale
+ *  refresh landing after the user has switched to a different chat. */
+async function refreshChatState(chatId: string): Promise<void> {
+  if (useChatStore.getState().chatId !== chatId) return;
+  const freshChat = await getChat(chatId);
+  if (freshChat && useChatStore.getState().chatId === chatId) {
+    useChatStore.setState({ chat: freshChat });
+  }
+}
+
+// Wired here (a runtime registration) rather than a static import of
+// useChatStore inside imageGenQueue.ts, to avoid a circular import:
+// chatStore already depends on imageGenQueue transitively via memoryEngine.
+setOnInventoryImageWritten(refreshChatState);
 
 /** Extracts up to 3 suggestion strings from the model's reply. Prefers the
  * requested JSON array (tolerating markdown fences / surrounding prose);

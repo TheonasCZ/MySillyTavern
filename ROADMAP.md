@@ -544,6 +544,34 @@ licenci.
   řešit přednostně před dalším milníkem.
 - **Dokumentační hygiena** — u nových milníků držet číslování z tohoto
   souboru; commity značit `M<n>` jen podle této roadmapy.
+- **Nápad (2026-07-18): stárnutí postavy s herním kalendářem** — persona
+  má věk, chat má kalendář (dny/roky), ale nejsou propojené. Při postupu
+  herního času by věk mohl reálně stárnout (přepočet z data narození +
+  aktuálního herního data), volitelně s dopadem na staty po určitém věku,
+  a s hákem pro nesmrtelnost/prodloužení života (flag co přepočet zastaví
+  nebo zpomalí). Věk i staty jsou teď (po M-inventář/M-skilly migraci)
+  chat-scoped, takže tohle na ně může navázat přirozeně. Nezačínat dokud
+  neběží M-skilly agent v inventoryProcessor.ts/chatStore.ts (kolize).
+- **Nápad (2026-07-18): vizuální herní datum/čas v UI** — kalendář
+  (`calendarDate` v ChatScreen) se dnes ukazuje jen jako textový popisek
+  (`formatCalendarDateShort`, `SEASON_EFFECTS`). Chtělo by to výraznější
+  vizuál: ikona podle sezóny (jaro/léto/podzim/zima), ikona podle denní
+  doby (svítání/den/soumrak/noc — [TIME:+1d] zatím dny neposouvá po
+  hodinách, jen kalendářně, viz M32 poznámka o [TIME:14:00] bez hodin
+  v kalendáři — tohle by dalo smysl řešit spolu s hodinovou granularitou).
+  Umístění: pravděpodobně hlavička chatu vedle ostatních ikon panelů.
+- **Nápad (2026-07-18): panel "Postava" — přehled stavu vedle Inventáře
+  a Questů** — nová ikona v hlavičce chatu (mozek pro paměť, batoh pro
+  inventář, svitek pro questy — sem by patřila postava/štít). Obsah:
+  věk, HP/zranění, buffy a debuffy (kondice — `[COND:...]` tag už
+  existuje a je od dneška chat-scoped, takže data jsou po ruce), tělesné
+  modifikace (protézy, mutace, runové implantáty — herní svět to má),
+  a hlavně **seznam dovedností** s úrovněmi — hráč se potřebuje kdykoli
+  rychle podívat "co vlastně umím a v jakém jsem stavu", ne to hledat
+  zpětně v historii chatu. Datově navazuje přímo na dnešní migraci
+  skills/xp/level/conditions na chat — ty samé zdroje dat (`chat.skills`,
+  `chat.conditions`, `chat.xp`/`chat.level`), jen chybí UI panel a tag
+  pro tělesné modifikace (nejspíš nový `[MOD:+popis]` v duchu `[COND:...]`).
 
 ## Doporučené pořadí a velikost (zbývající práce)
 

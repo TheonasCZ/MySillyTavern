@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { InventoryEntry, Persona } from "../../db/repositories/personasRepo";
+import type { InventoryEntry } from "../../db/repositories/personasRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 
 interface Props {
-  persona: Persona;
+  /** The chat's live gameplay inventory (chat-scoped, not the persona's
+   *  starting-gear template — see chatsRepo.Chat.inventory). */
+  inventory: InventoryEntry[];
+  /** Persona race, only used to pick the background silhouette. */
+  race?: string;
   onClose: () => void;
   onGenerateImage?: (item: InventoryEntry, index: number) => void;
 }
@@ -29,12 +33,12 @@ function getSilhouette(race?: string): string {
 
 const SLOT_COUNT = 8;
 
-export function InventoryPanel({ persona, onClose, onGenerateImage }: Props) {
+export function InventoryPanel({ inventory, race, onClose, onGenerateImage }: Props) {
   const { t } = useTranslation("chat");
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; index: number } | null>(null);
 
-  const items = persona.inventory ?? [];
+  const items = inventory ?? [];
   const slots: (InventoryEntry | null)[] = [];
   for (let i = 0; i < SLOT_COUNT; i++) {
     slots.push(items[i] ?? null);
@@ -64,7 +68,7 @@ export function InventoryPanel({ persona, onClose, onGenerateImage }: Props) {
           fill="currentColor"
           style={{ color: "var(--color-text)" }}
         >
-          <path d={getSilhouette(persona.race)} />
+          <path d={getSilhouette(race)} />
         </svg>
 
         {/* Slots grid */}

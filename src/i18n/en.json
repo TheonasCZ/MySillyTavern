@@ -114,8 +114,22 @@
       "ttsStop": "Stop",
       "inventoryTooltip": "Inventory and gear",
       "questsTooltip": "Quest journal",
+      "characterTooltip": "Character — status overview",
       "memoryTooltip": "Memory and recollections",
       "exportTooltip": "Export chronicle"
+    },
+    "character": {
+      "title": "Character",
+      "age": "Age",
+      "ageUnknown": "?",
+      "level": "Level",
+      "xp": "Experience",
+      "skills": "Skills",
+      "skillsEmpty": "No skills yet.",
+      "conditions": "Conditions and injuries",
+      "conditionsEmpty": "No active conditions.",
+      "modifications": "Body modifications",
+      "modificationsEmpty": "No body modifications."
     },
     "group": {
       "title": "Group members",

@@ -17,8 +17,8 @@ import {
   listConnections,
 } from "../db/repositories/connectionsRepo";
 import { setFactImage } from "../db/repositories/ledgerRepo";
-import { setInventoryItemImage } from "../db/repositories/personasRepo";
-import type { Persona } from "../db/repositories/personasRepo";
+import { setChatInventoryItemImage } from "../db/repositories/chatsRepo";
+import type { Chat } from "../db/repositories/chatsRepo";
 import { toConnectionDto } from "../providers/dto";
 import type { ConnectionConfig } from "../providers/types";
 
@@ -26,16 +26,26 @@ import type { ConnectionConfig } from "../providers/types";
 
 interface QueueItem {
   type: "fact" | "inventory";
-  /** fact.id or persona.id */
+  /** fact.id or chat.id */
   targetId: string;
   prompt: string;
-  /** Only for inventory items — which item within the persona's inventory. */
+  /** Only for inventory items — which item within the chat's live inventory. */
   itemName?: string;
 }
 
 const queue: QueueItem[] = [];
 let processing = false;
 let timerId: ReturnType<typeof setTimeout> | null = null;
+
+/** Notified with a chat id whenever an inventory item image is written, so
+ *  a live chat store (which may be holding a stale in-memory copy of
+ *  `chat.inventory`) can refresh itself. Wired from `stores/chatStore.ts`
+ *  to avoid a static import cycle (chatStore already pulls in this module
+ *  transitively via memoryEngine). */
+let onInventoryImageWritten: ((chatId: string) => void) | null = null;
+export function setOnInventoryImageWritten(cb: ((chatId: string) => void) | null): void {
+  onInventoryImageWritten = cb;
+}
 
 // ---- daily rate limiting --------------------------------------------------
 
@@ -118,7 +128,8 @@ async function processQueue(): Promise<void> {
         if (item.type === "fact") {
           await setFactImage(item.targetId, imagePath);
         } else if (item.itemName) {
-          await setInventoryItemImage(item.targetId, item.itemName, imagePath);
+          await setChatInventoryItemImage(item.targetId, item.itemName, imagePath);
+          onInventoryImageWritten?.(item.targetId);
         }
       } catch (err) {
         console.warn("imageGenQueue: generation failed for", item.type, item.targetId, err);
@@ -145,8 +156,8 @@ function scheduleProcess(): void {
 /**
  * Enqueue an illustration request.
  *
- * @param type      `"fact"` for a ledger fact, `"inventory"` for a persona inventory item.
- * @param targetId  `fact.id` or `persona.id`.
+ * @param type      `"fact"` for a ledger fact, `"inventory"` for a chat's live inventory item.
+ * @param targetId  `fact.id` or `chat.id`.
  * @param prompt    The image-generation prompt.
  * @param itemName  Required for `"inventory"` — the `item` field of the inventory entry.
  */
@@ -174,18 +185,18 @@ export function enqueueIllustration(
 
 /**
  * One-shot backfill: enqueue any inventory item that doesn't have an image
- * yet. Safe to call every time a chat/persona is opened — items that
- * already got an image (or are already queued) are naturally skipped, so
- * repeated calls are idempotent and don't regenerate anything twice.
+ * yet. Safe to call every time a chat is opened — items that already got
+ * an image (or are already queued) are naturally skipped, so repeated
+ * calls are idempotent and don't regenerate anything twice.
  * Covers items that predate the auto-illustration trigger (added before
  * it existed, or via a DB import/restore) and never got enqueued.
  */
-export async function backfillMissingInventoryImages(persona: Persona): Promise<void> {
+export async function backfillMissingInventoryImages(chat: Chat): Promise<void> {
   const enabled = await getSetting("image_gen_enabled");
   if (enabled === "0") return;
-  for (const entry of persona.inventory ?? []) {
+  for (const entry of chat.inventory ?? []) {
     if (!entry.image_path) {
-      enqueueIllustration("inventory", persona.id, `Fantasy game item icon: ${entry.item}`, entry.item);
+      enqueueIllustration("inventory", chat.id, `Fantasy game item icon: ${entry.item}`, entry.item);
     }
   }
 }

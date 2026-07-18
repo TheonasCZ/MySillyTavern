@@ -1,5 +1,17 @@
 import type { Persona } from "../db/repositories/personasRepo";
-import { updatePersona, updatePersonaXpLevel } from "../db/repositories/personasRepo";
+import { updatePersona } from "../db/repositories/personasRepo";
+import {
+  getChatConditions,
+  getChatInventory,
+  getChatModifications,
+  getChatSkills,
+  getChatXpLevel,
+  setChatConditions,
+  setChatInventory,
+  setChatModifications,
+  setChatSkills,
+  setChatXpLevel,
+} from "../db/repositories/chatsRepo";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
 import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
 import { advanceAndPersistCalendar } from "../memory/memoryEngine";
@@ -20,8 +32,8 @@ export async function processGameResponse(
   chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations, timeMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0) return text;
 
   // Apply time mutations: [TIME:+Nd] advances the calendar by N days each.
   if (chatId) {
@@ -56,72 +68,102 @@ export async function processGameResponse(
   }
 
   // Apply condition mutations: [COND:+name] / [COND:+name:duration] / [COND:-name]
-  const conditions = persona.conditions ? [...persona.conditions.map((c) => ({ ...c }))] : [];
-  for (const cm of conditionMutations) {
-    const idx = conditions.findIndex((c) => c.name.toLowerCase() === cm.name.toLowerCase());
-    if (cm.op === "add") {
-      if (idx === -1) {
-        conditions.push({
-          name: cm.name,
-          description: [cm.description, cm.duration].filter(Boolean).join(" — "),
-          expiresAt: null,
-        });
+  // Chat-scoped, mirrors inventory — conditions live on the chat/campaign
+  // now, not the persona. Without a chatId there's nowhere to apply them.
+  const conditions = chatId ? (await getChatConditions(chatId)).map((c) => ({ ...c })) : [];
+  if (chatId) {
+    for (const cm of conditionMutations) {
+      const idx = conditions.findIndex((c) => c.name.toLowerCase() === cm.name.toLowerCase());
+      if (cm.op === "add") {
+        if (idx === -1) {
+          conditions.push({
+            name: cm.name,
+            description: [cm.description, cm.duration].filter(Boolean).join(" — "),
+            expiresAt: null,
+          });
+        }
+      } else if (idx !== -1) {
+        conditions.splice(idx, 1);
       }
-    } else if (idx !== -1) {
-      conditions.splice(idx, 1);
     }
   }
 
-  // Apply inventory mutations
-  const inv = persona.inventory ? [...persona.inventory.map((i) => ({ ...i }))] : [];
+  // Apply body modification mutations: [MOD:+popis] / [MOD:-popis] —
+  // chat-scoped, mirrors conditions above. Always campaign-specific — no
+  // persona template equivalent, so without a chatId there's nowhere to
+  // apply them.
+  const modifications = chatId ? (await getChatModifications(chatId)).map((m) => ({ ...m })) : [];
+  if (chatId) {
+    for (const mm of modMutations) {
+      const idx = modifications.findIndex((m) => m.name.toLowerCase() === mm.name.toLowerCase());
+      if (mm.op === "add") {
+        if (idx === -1) {
+          modifications.push({ name: mm.name, description: mm.name });
+        }
+      } else if (idx !== -1) {
+        modifications.splice(idx, 1);
+      }
+    }
+  }
+
+  // Apply inventory mutations — chat-scoped, mirrors quests (inventory
+  // lives on the chat/campaign now, not the persona). Without a chatId
+  // there's nowhere to apply them, so inventory/craft tags are simply
+  // skipped (same as the previous no-op-without-persona behaviour).
+  const inv = chatId ? (await getChatInventory(chatId)).map((i) => ({ ...i })) : [];
   const newlyAddedItems: string[] = [];
-  for (const m of mutations) {
-    const existing = inv.find((i) => i.item.toLowerCase() === m.item.toLowerCase());
-    if (m.op === "add") {
-      if (existing) {
-        existing.qty += m.qty;
+  if (chatId) {
+    for (const m of mutations) {
+      const existing = inv.find((i) => i.item.toLowerCase() === m.item.toLowerCase());
+      if (m.op === "add") {
+        if (existing) {
+          existing.qty += m.qty;
+        } else {
+          inv.push({ item: m.item, qty: m.qty });
+          newlyAddedItems.push(m.item);
+        }
       } else {
-        inv.push({ item: m.item, qty: m.qty });
-        newlyAddedItems.push(m.item);
-      }
-    } else {
-      if (existing) {
-        existing.qty -= m.qty;
-        if (existing.qty <= 0) inv.splice(inv.indexOf(existing), 1);
+        if (existing) {
+          existing.qty -= m.qty;
+          if (existing.qty <= 0) inv.splice(inv.indexOf(existing), 1);
+        }
       }
     }
   }
 
-  // Apply skill mutations
-  const skills = persona.skills ? [...persona.skills.map((s) => ({ ...s }))] : [];
-  for (const s of skillChanges) {
-    const existing = skills.find((sk) => sk.name.toLowerCase() === s.name.toLowerCase());
-    if (s.absolute !== null) {
-      // Absolute set: [SKILL:+name:3]
-      if (existing) {
-        existing.level = s.absolute;
+  // Apply skill mutations — chat-scoped, mirrors inventory/conditions.
+  const skills = chatId ? (await getChatSkills(chatId)).map((s) => ({ ...s })) : [];
+  if (chatId) {
+    for (const s of skillChanges) {
+      const existing = skills.find((sk) => sk.name.toLowerCase() === s.name.toLowerCase());
+      if (s.absolute !== null) {
+        // Absolute set: [SKILL:+name:3]
+        if (existing) {
+          existing.level = s.absolute;
+        } else {
+          skills.push({ name: s.name, level: s.absolute });
+        }
+      } else if (s.delta > 0) {
+        // Relative increase: [SKILL:name+2] or [SKILL:+name]
+        if (existing) {
+          existing.level += s.delta;
+        } else {
+          skills.push({ name: s.name, level: s.delta });
+        }
       } else {
-        skills.push({ name: s.name, level: s.absolute });
-      }
-    } else if (s.delta > 0) {
-      // Relative increase: [SKILL:name+2] or [SKILL:+name]
-      if (existing) {
-        existing.level += s.delta;
-      } else {
-        skills.push({ name: s.name, level: s.delta });
-      }
-    } else {
-      // Decrease: [SKILL:name-1] — remove if <= 0
-      if (existing) {
-        existing.level = Math.max(0, existing.level + s.delta);
-        if (existing.level <= 0) skills.splice(skills.indexOf(existing), 1);
+        // Decrease: [SKILL:name-1] — remove if <= 0
+        if (existing) {
+          existing.level = Math.max(0, existing.level + s.delta);
+          if (existing.level <= 0) skills.splice(skills.indexOf(existing), 1);
+        }
       }
     }
   }
 
-  // Apply level mutations
-  let xp = persona.xp ?? 0;
-  let level = persona.level ?? 1;
+  // Apply level mutations — chat-scoped, mirrors inventory/skills.
+  const chatXpLevel = chatId ? await getChatXpLevel(chatId) : { xp: 0, level: 1 };
+  let xp = chatXpLevel.xp;
+  let level = chatXpLevel.level;
   let hasLevelChanges = false;
   for (const lc of levelChanges) {
     if (lc.xpDelta > 0) { xp += lc.xpDelta; hasLevelChanges = true; }
@@ -153,7 +195,7 @@ export async function processGameResponse(
       const existing = await getRecipeByResult(persona.id, cm.resultItem);
       if (!existing) {
         // Determine tier based on skill level (AI may set later, default 0)
-        const relatedSkill = persona.skills?.find(
+        const relatedSkill = skills.find(
           (s) => cm.ingredients.some((ing) =>
             ing.toLowerCase().includes(s.name.toLowerCase().slice(0, 4)) ||
             s.name.toLowerCase().includes("alchymie")
@@ -208,6 +250,9 @@ export async function processGameResponse(
   }
 
   try {
+    // Note: persona.inventory/skills/conditions/xp/level are the character
+    // sheet templates and are left untouched here — live gameplay state
+    // (inventory, skills, conditions, xp/level) all live on the chat now.
     await updatePersona(persona.id, {
       name: persona.name,
       gender: persona.gender,
@@ -215,12 +260,18 @@ export async function processGameResponse(
       race: persona.race,
       appearance: persona.appearance,
       progression: persona.progression,
-      skills,
-      inventory: inv,
-      conditions,
+      skills: persona.skills,
+      inventory: persona.inventory,
+      conditions: persona.conditions,
     });
-    if (hasLevelChanges) {
-      await updatePersonaXpLevel(persona.id, xp, level);
+    if (chatId) {
+      await setChatInventory(chatId, inv);
+      await setChatSkills(chatId, skills);
+      await setChatConditions(chatId, conditions);
+      await setChatModifications(chatId, modifications);
+      if (hasLevelChanges) {
+        await setChatXpLevel(chatId, xp, level);
+      }
     }
   } catch {
     // Non-critical
@@ -228,11 +279,11 @@ export async function processGameResponse(
 
   // Auto-illustration trigger: enqueue newly added inventory items that
   // don't have an image yet (queue itself checks image_gen_enabled/limit).
-  if (newlyAddedItems.length > 0) {
+  if (chatId && newlyAddedItems.length > 0) {
     try {
       const { enqueueIllustration } = await import("../memory/imageGenQueue");
       for (const itemName of newlyAddedItems) {
-        enqueueIllustration("inventory", persona.id, `Fantasy game item icon: ${itemName}`, itemName);
+        enqueueIllustration("inventory", chatId, `Fantasy game item icon: ${itemName}`, itemName);
       }
     } catch {
       // Non-critical
@@ -242,7 +293,7 @@ export async function processGameResponse(
   // Tag validation: warn about excessive or malformed tags in next prompt
   const totalTags = mutations.length + skillChanges.length + levelChanges.length +
     factionMutations.length + craftMutations.length + craftedMutations.length +
-    conditionMutations.length + questMutations.length;
+    conditionMutations.length + modMutations.length + questMutations.length;
   lastTagErrors = [];
   if (totalTags > 5) {
     lastTagErrors.push(`Příliš mnoho tagů v jedné odpovědi (${totalTags}). Maximum je 3–5. Rozděl změny do více odpovědí.`);

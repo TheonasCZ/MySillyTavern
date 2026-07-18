@@ -20,6 +20,15 @@ export interface ConditionEntry {
   modifiers?: { stat: string; value: number }[];
 }
 
+/** A lasting body modification (e.g. a scar, a magical mark, a prosthetic).
+ *  Chat-scoped only (see chatsRepo.Chat.modifications) — unlike inventory/
+ *  skills/conditions there is no persona template counterpart: modifications
+ *  are always campaign-specific and never seeded from a persona. */
+export interface ModificationEntry {
+  name: string;
+  description: string;
+}
+
 export interface Persona {
   id: string;
   name: string;

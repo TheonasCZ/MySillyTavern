@@ -1,5 +1,6 @@
 import { execute, newId, nowIso, query } from "../database";
 import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
+import { getPersona, type ConditionEntry, type InventoryEntry, type ModificationEntry, type SkillEntry } from "./personasRepo";
 
 export interface Chat {
   id: string;
@@ -16,6 +17,22 @@ export interface Chat {
   autoReply: boolean;
   /** Language the AI writes in (e.g. 'cs', 'en') — per-chat (M28). */
   gameLanguage: string;
+  /** Live gameplay inventory, scoped to this chat/campaign (not the persona).
+   *  Seeded from the persona's template inventory at chat creation time,
+   *  then evolves independently for the life of the chat. */
+  inventory: InventoryEntry[];
+  /** Live gameplay skills/conditions/xp/level, scoped to this chat/campaign
+   *  (not the persona). Seeded from the persona's template at chat creation
+   *  time, then evolve independently for the life of the chat — mirrors
+   *  `inventory` above. */
+  skills: SkillEntry[];
+  conditions: ConditionEntry[];
+  xp: number;
+  level: number;
+  /** Live gameplay body modifications, scoped to this chat/campaign. Always
+   *  campaign-specific — unlike inventory/skills/conditions, there is no
+   *  persona template to seed from; new chats always start with `[]`. */
+  modifications: ModificationEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -43,8 +60,46 @@ interface ChatRow {
   preset_id: string | null;
   auto_reply: number;
   game_language: string;
+  inventory: string; // JSON
+  skills: string; // JSON
+  conditions: string; // JSON
+  xp: number;
+  level: number;
+  modifications: string; // JSON
   created_at: string;
   updated_at: string;
+}
+
+function parseInventory(raw: string | null | undefined): InventoryEntry[] {
+  try {
+    return raw ? (JSON.parse(raw) as InventoryEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseSkills(raw: string | null | undefined): SkillEntry[] {
+  try {
+    return raw ? (JSON.parse(raw) as SkillEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseConditions(raw: string | null | undefined): ConditionEntry[] {
+  try {
+    return raw ? (JSON.parse(raw) as ConditionEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseModifications(raw: string | null | undefined): ModificationEntry[] {
+  try {
+    return raw ? (JSON.parse(raw) as ModificationEntry[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function toChat(row: ChatRow): Chat {
@@ -60,6 +115,12 @@ function toChat(row: ChatRow): Chat {
     presetId: row.preset_id,
     autoReply: !!row.auto_reply,
     gameLanguage: row.game_language ?? "cs",
+    inventory: parseInventory(row.inventory),
+    skills: parseSkills(row.skills),
+    conditions: parseConditions(row.conditions),
+    xp: row.xp ?? 0,
+    level: row.level ?? 1,
+    modifications: parseModifications(row.modifications),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -79,10 +140,44 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   const id = newId();
   const now = nowIso();
   const primaryCharacterId = draft.characterIds[0];
+
+  // Seed the chat's live inventory/skills/conditions/xp/level as a copy of
+  // the persona's template at chat-creation time ("new campaign = clean
+  // start using your character's starting gear/skills"). Purely a snapshot —
+  // the chat's state evolves independently from here on and never reads the
+  // persona again.
+  let inventory: InventoryEntry[] = [];
+  let skills: SkillEntry[] = [];
+  let conditions: ConditionEntry[] = [];
+  let xp = 0;
+  let level = 1;
+  if (draft.personaId) {
+    const persona = await getPersona(draft.personaId);
+    inventory = persona ? persona.inventory.map((i) => ({ ...i })) : [];
+    skills = persona ? persona.skills.map((s) => ({ ...s })) : [];
+    conditions = persona ? persona.conditions.map((c) => ({ ...c })) : [];
+    xp = persona?.xp ?? 0;
+    level = persona?.level ?? 1;
+  }
+
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $7)`,
-    [id, draft.title, primaryCharacterId, draft.personaId, draft.connectionId, draft.gameLanguage ?? "cs", now],
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+    [
+      id,
+      draft.title,
+      primaryCharacterId,
+      draft.personaId,
+      draft.connectionId,
+      draft.gameLanguage ?? "cs",
+      JSON.stringify(inventory),
+      JSON.stringify(skills),
+      JSON.stringify(conditions),
+      xp,
+      level,
+      JSON.stringify([]),
+      now,
+    ],
   );
   for (let i = 0; i < draft.characterIds.length; i++) {
     await execute(
@@ -103,6 +198,12 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
     presetId: null,
     autoReply: false,
     gameLanguage: draft.gameLanguage ?? "cs",
+    inventory,
+    skills,
+    conditions,
+    xp,
+    level,
+    modifications: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -172,6 +273,138 @@ export async function setChatPreset(id: string, presetId: string | null): Promis
     now,
   ]);
   journalEntityWrite("chat", { id, preset_id: presetId, updated_at: now });
+}
+
+/** Reads the chat's live gameplay inventory. */
+export async function getChatInventory(chatId: string): Promise<InventoryEntry[]> {
+  const rows = await query<{ inventory: string }>(
+    "SELECT inventory FROM chats WHERE id = $1",
+    [chatId],
+  );
+  return rows[0] ? parseInventory(rows[0].inventory) : [];
+}
+
+/** Overwrites the chat's live gameplay inventory (used by inventory/craft
+ *  tag processing — mirrors the quest/faction chat-scoped pattern). */
+export async function setChatInventory(
+  chatId: string,
+  inventory: InventoryEntry[],
+): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET inventory = $2, updated_at = $3 WHERE id = $1", [
+    chatId,
+    JSON.stringify(inventory),
+    now,
+  ]);
+  journalEntityWrite("chat", { id: chatId, inventory: JSON.stringify(inventory), updated_at: now });
+}
+
+/** Sets image_path on a specific inventory item by name within a chat's
+ *  live inventory JSON — chat-scoped equivalent of personasRepo's
+ *  setInventoryItemImage (used for the persona template only). */
+export async function setChatInventoryItemImage(
+  chatId: string,
+  itemName: string,
+  imagePath: string,
+): Promise<void> {
+  const rows = await query<{ inventory: string }>(
+    "SELECT inventory FROM chats WHERE id = $1",
+    [chatId],
+  );
+  if (!rows[0]) return;
+  const inventory = parseInventory(rows[0].inventory);
+  const item = inventory.find((i) => i.item.toLowerCase() === itemName.toLowerCase());
+  if (!item) return;
+  item.image_path = imagePath;
+  await execute("UPDATE chats SET inventory = $2, updated_at = $3 WHERE id = $1", [
+    chatId,
+    JSON.stringify(inventory),
+    nowIso(),
+  ]);
+}
+
+/** Reads the chat's live gameplay skills. */
+export async function getChatSkills(chatId: string): Promise<SkillEntry[]> {
+  const rows = await query<{ skills: string }>("SELECT skills FROM chats WHERE id = $1", [chatId]);
+  return rows[0] ? parseSkills(rows[0].skills) : [];
+}
+
+/** Overwrites the chat's live gameplay skills — mirrors setChatInventory. */
+export async function setChatSkills(chatId: string, skills: SkillEntry[]): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET skills = $2, updated_at = $3 WHERE id = $1", [
+    chatId,
+    JSON.stringify(skills),
+    now,
+  ]);
+  journalEntityWrite("chat", { id: chatId, skills: JSON.stringify(skills), updated_at: now });
+}
+
+/** Reads the chat's live gameplay conditions/status effects. */
+export async function getChatConditions(chatId: string): Promise<ConditionEntry[]> {
+  const rows = await query<{ conditions: string }>("SELECT conditions FROM chats WHERE id = $1", [chatId]);
+  return rows[0] ? parseConditions(rows[0].conditions) : [];
+}
+
+/** Overwrites the chat's live gameplay conditions — mirrors setChatInventory. */
+export async function setChatConditions(chatId: string, conditions: ConditionEntry[]): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET conditions = $2, updated_at = $3 WHERE id = $1", [
+    chatId,
+    JSON.stringify(conditions),
+    now,
+  ]);
+  journalEntityWrite("chat", { id: chatId, conditions: JSON.stringify(conditions), updated_at: now });
+}
+
+/** Reads the chat's live body modifications. Always campaign-specific — no
+ *  persona template equivalent (mirrors setChatConditions otherwise). */
+export async function getChatModifications(chatId: string): Promise<ModificationEntry[]> {
+  const rows = await query<{ modifications: string }>(
+    "SELECT modifications FROM chats WHERE id = $1",
+    [chatId],
+  );
+  return rows[0] ? parseModifications(rows[0].modifications) : [];
+}
+
+/** Overwrites the chat's live body modifications — mirrors setChatConditions. */
+export async function setChatModifications(
+  chatId: string,
+  modifications: ModificationEntry[],
+): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET modifications = $2, updated_at = $3 WHERE id = $1", [
+    chatId,
+    JSON.stringify(modifications),
+    now,
+  ]);
+  journalEntityWrite("chat", {
+    id: chatId,
+    modifications: JSON.stringify(modifications),
+    updated_at: now,
+  });
+}
+
+/** Reads the chat's live xp/level. */
+export async function getChatXpLevel(chatId: string): Promise<{ xp: number; level: number }> {
+  const rows = await query<{ xp: number; level: number }>(
+    "SELECT xp, level FROM chats WHERE id = $1",
+    [chatId],
+  );
+  return rows[0] ? { xp: rows[0].xp ?? 0, level: rows[0].level ?? 1 } : { xp: 0, level: 1 };
+}
+
+/** Overwrites the chat's live xp/level — chat-scoped equivalent of
+ *  personasRepo's updatePersonaXpLevel (used for the persona template only). */
+export async function setChatXpLevel(chatId: string, xp: number, level: number): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET xp = $2, level = $3, updated_at = $4 WHERE id = $1", [
+    chatId,
+    xp,
+    level,
+    now,
+  ]);
+  journalEntityWrite("chat", { id: chatId, xp, level, updated_at: now });
 }
 
 export async function touchChat(id: string): Promise<void> {
@@ -252,8 +485,8 @@ export async function branchChat(
   const now = nowIso();
   const title = `${source.title} ${titleSuffix}`.trim();
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)`,
     [
       id,
       title,
@@ -264,6 +497,12 @@ export async function branchChat(
       source.presetId,
       source.autoReply ? 1 : 0,
       source.gameLanguage ?? "cs",
+      JSON.stringify(source.inventory.map((i) => ({ ...i }))),
+      JSON.stringify(source.skills.map((s) => ({ ...s }))),
+      JSON.stringify(source.conditions.map((c) => ({ ...c }))),
+      source.xp,
+      source.level,
+      JSON.stringify(source.modifications.map((m) => ({ ...m }))),
       now,
     ],
   );

@@ -155,6 +155,24 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_025,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 26,
+            description: "chats: add inventory — live gameplay inventory scoped to the chat/campaign instead of the persona",
+            sql: MIGRATION_026,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 27,
+            description: "chats: add skills, conditions, xp, level — live gameplay progression scoped to the chat/campaign instead of the persona",
+            sql: MIGRATION_027,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 28,
+            description: "chats: add modifications — body modifications tracked via [MOD:...] tags, always campaign-specific (no persona template)",
+            sql: MIGRATION_028,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -496,6 +514,24 @@ ALTER TABLE lore_entries ADD COLUMN timed_json TEXT;
 ALTER TABLE lore_entries ADD COLUMN vector_threshold REAL;
 ALTER TABLE lore_entries ADD COLUMN vector_budget INTEGER NOT NULL DEFAULT 2;
 "#;
+
+const MIGRATION_026: &str = r#"ALTER TABLE chats ADD COLUMN inventory TEXT NOT NULL DEFAULT '[]';"#;
+
+/// Same root bug as migration 26, for skills/xp/level/conditions: these lived
+/// on `personas` (shared globally across every campaign reusing a persona),
+/// so a second campaign would inherit progression from an unrelated one.
+/// Moved to the chat, seeded from the persona template at chat-creation time.
+const MIGRATION_027: &str = r#"
+ALTER TABLE chats ADD COLUMN skills TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE chats ADD COLUMN conditions TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE chats ADD COLUMN xp INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chats ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
+"#;
+
+/// Body modifications: always campaign-specific, never inherited from a
+/// persona template (unlike inventory/skills/conditions above), so this is
+/// just a new chat column with no persona-seeding counterpart.
+const MIGRATION_028: &str = r#"ALTER TABLE chats ADD COLUMN modifications TEXT NOT NULL DEFAULT '[]';"#;
 
 const MIGRATION_020: &str = r#"
 CREATE TABLE tts_voice_profiles (

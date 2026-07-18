@@ -10,6 +10,7 @@ import { createMessage } from "../../db/repositories/messagesRepo";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
+import { CharacterPanel } from "./CharacterPanel";
 import { InventoryPanel } from "./InventoryPanel";
 import { QuestPanel } from "./QuestPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
@@ -114,15 +115,35 @@ export function ChatScreen() {
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { setPersona } = useChatListStore();
-  const [memoryOpen, setMemoryOpen] = useState(false);
-  const [directorOpen, setDirectorOpen] = useState(false);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [questsOpen, setQuestsOpen] = useState(false);
-  const [groupOpen, setGroupOpen] = useState(false);
+  // Header panels (memory/director/inventory/quests/group/export) are
+  // mutually exclusive — opening one closes any other that was open.
+  const [openPanel, setOpenPanel] = useState<
+    "memory" | "director" | "inventory" | "quests" | "character" | "group" | "export" | null
+  >(null);
+  const memoryOpen = openPanel === "memory";
+  const setMemoryOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "memory") : v) ? "memory" : null));
+  const directorOpen = openPanel === "director";
+  const setDirectorOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "director") : v) ? "director" : null));
+  const inventoryOpen = openPanel === "inventory";
+  const setInventoryOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "inventory") : v) ? "inventory" : null));
+  const questsOpen = openPanel === "quests";
+  const setQuestsOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "quests") : v) ? "quests" : null));
+  const characterOpen = openPanel === "character";
+  const setCharacterOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "character") : v) ? "character" : null));
+  const groupOpen = openPanel === "group";
+  const setGroupOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "group") : v) ? "group" : null));
   const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const exportOpen = openPanel === "export";
+  const setExportOpen = (v: boolean | ((prev: boolean) => boolean)) =>
+    setOpenPanel((p) => ((typeof v === "function" ? v(p === "export") : v) ? "export" : null));
   const [exportConnectionId, setExportConnectionId] = useState("");
   const [exportTheme, setExportTheme] = useState<ChronicleTheme>("fantasy");
   const [exportFormat, setExportFormat] = useState<ChronicleFormat>("html");
@@ -131,7 +152,7 @@ export function ChatScreen() {
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
 
   // Android back button: close panels first, then navigate back
-  const hasOpenPanel = memoryOpen || inventoryOpen || questsOpen || directorOpen || groupOpen || exportOpen;
+  const hasOpenPanel = memoryOpen || inventoryOpen || questsOpen || characterOpen || directorOpen || groupOpen || exportOpen;
   useAndroidBack(
     { hasOpenPanel },
     () => {
@@ -139,6 +160,7 @@ export function ChatScreen() {
       else if (memoryOpen) setMemoryOpen(false);
       else if (inventoryOpen) setInventoryOpen(false);
       else if (questsOpen) setQuestsOpen(false);
+      else if (characterOpen) setCharacterOpen(false);
       else if (directorOpen) setDirectorOpen(false);
       else if (groupOpen) setGroupOpen(false);
       else navigate(-1);
@@ -339,22 +361,20 @@ export function ChatScreen() {
   }, [id]);
 
   // One-shot backfill: generate illustrations for inventory items that
-  // predate the auto-illustration trigger (e.g. imported/restored personas).
+  // predate the auto-illustration trigger (e.g. imported/restored chats).
   // Idempotent — safe to run on every chat open.
   useEffect(() => {
-    const personaId = chat?.personaId;
-    if (!personaId) return;
+    if (!chat?.id) return;
+    const currentChat = chat;
     void (async () => {
       try {
-        const p = usePersonasStore.getState().personas.find((x) => x.id === personaId);
-        if (!p) return;
         const { backfillMissingInventoryImages } = await import("../../memory/imageGenQueue");
-        await backfillMissingInventoryImages(p);
+        await backfillMissingInventoryImages(currentChat);
       } catch {
         // Non-critical
       }
     })();
-  }, [chat?.personaId]);
+  }, [chat?.id]);
 
   // Filter connections for the export dropdown: gemini provider OR purpose=chat
   const exportConnections = connections.filter(
@@ -598,6 +618,20 @@ export function ChatScreen() {
           </button>
           <button
             type="button"
+            onClick={() => setCharacterOpen((v) => !v)}
+            aria-pressed={characterOpen}
+            title={t("room.characterTooltip")}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: characterOpen ? "var(--color-accent)" : "transparent",
+              color: characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            🧍
+          </button>
+          <button
+            type="button"
             onClick={() => setDirectorOpen((v) => !v)}
             aria-pressed={directorOpen}
             title={t("director.title")}
@@ -758,7 +792,7 @@ export function ChatScreen() {
             </aside>
           </>
         )}
-        {inventoryOpen && persona && (
+        {inventoryOpen && chat && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
@@ -769,7 +803,7 @@ export function ChatScreen() {
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
               style={{ borderColor: "var(--color-border)" }}
             >
-              <InventoryPanel persona={persona} onClose={() => setInventoryOpen(false)} />
+              <InventoryPanel inventory={chat.inventory} race={persona?.race} onClose={() => setInventoryOpen(false)} />
             </aside>
           </>
         )}
@@ -785,6 +819,29 @@ export function ChatScreen() {
               style={{ borderColor: "var(--color-border)" }}
             >
               <QuestPanel chatId={id} onClose={() => setQuestsOpen(false)} />
+            </aside>
+          </>
+        )}
+        {characterOpen && chat && (
+          <>
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => setCharacterOpen(false)}
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <CharacterPanel
+                age={persona?.age ?? null}
+                level={chat.level}
+                xp={chat.xp}
+                conditions={chat.conditions}
+                modifications={chat.modifications}
+                skills={chat.skills}
+                onClose={() => setCharacterOpen(false)}
+              />
             </aside>
           </>
         )}

@@ -114,8 +114,22 @@
       "ttsStop": "Zastavit",
       "inventoryTooltip": "Inventář a vybavení",
       "questsTooltip": "Deník questů",
+      "characterTooltip": "Postava — přehled stavu",
       "memoryTooltip": "Paměť a vzpomínky",
       "exportTooltip": "Export kroniky"
+    },
+    "character": {
+      "title": "Postava",
+      "age": "Věk",
+      "ageUnknown": "?",
+      "level": "Úroveň",
+      "xp": "Zkušenosti",
+      "skills": "Dovednosti",
+      "skillsEmpty": "Zatím žádné dovednosti.",
+      "conditions": "Kondice a zranění",
+      "conditionsEmpty": "Žádné aktivní kondice.",
+      "modifications": "Tělesné modifikace",
+      "modificationsEmpty": "Žádné tělesné modifikace."
     },
     "group": {
       "title": "Členové skupiny",

@@ -18,6 +18,10 @@
  *   [LEVEL:+xp]                   — add XP (e.g. [LEVEL:+50])
  *   [LEVEL:+level]                — increase level by 1 (e.g. [LEVEL:+1])
  * 
+ * Body modification tags:
+ *   [MOD:+popis]                  — add a body modification
+ *   [MOD:-popis]                  — remove a body modification
+ *
  * Faction tags:
  *   [FACTION:+name:delta]         — adjust reputation by delta (or create at delta)
  *   [FACTION:name]                — show current reputation (no-op in parsing)
@@ -48,6 +52,10 @@ export interface LevelMutation {
 }
 
 export interface ConditionMutation { op: "add" | "remove"; name: string; description?: string; duration?: string; }
+
+/** Body modifications — same shape as ConditionMutation but simpler (no
+ *  duration concept: a modification is a lasting change, not a timed effect). */
+export interface ModMutation { op: "add" | "remove"; name: string; }
 
 export interface CraftMutation {
   /** Result item name (what this recipe produces). */
@@ -94,6 +102,7 @@ interface ParsedTags {
   craftMutations: CraftMutation[];
   craftedMutations: CraftedMutation[];
   conditionMutations: ConditionMutation[];
+  modMutations: ModMutation[];
   questMutations: QuestMutation[];
   timeMutations: TimeMutation[];
 }
@@ -106,6 +115,7 @@ export function parseGameTags(text: string): ParsedTags {
   const craftMutations: CraftMutation[] = [];
   const craftedMutations: CraftedMutation[] = [];
   const conditionMutations: ConditionMutation[] = [];
+  const modMutations: ModMutation[] = [];
   const questMutations: QuestMutation[] = [];
   const timeMutations: TimeMutation[] = [];
 
@@ -251,6 +261,16 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
+  // Parse body modification tags: [MOD:+popis], [MOD:-popis] — same shape as
+  // [COND:...] but no duration variant (modifications are permanent changes).
+  cleanText = cleanText.replace(/\[MOD:\s*([+-])\s*([^\]]+)\]/gi, (_m, op: string, name: string) => {
+    modMutations.push({
+      op: op === "+" ? "add" : "remove",
+      name: name.trim(),
+    });
+    return "";
+  });
+
   // Parse time tags: [TIME:+Nd] advances the calendar by N days. Any other
   // [TIME:...] content (e.g. an absolute clock time like "14:00", which the
   // day-only calendar can't represent) is stripped but produces no mutation.
@@ -260,5 +280,5 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, questMutations, timeMutations };
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations };
 }

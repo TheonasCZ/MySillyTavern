@@ -51,6 +51,22 @@ describe("parseGameTags — condition tags", () => {
   });
 });
 
+describe("parseGameTags — body modification tags", () => {
+  it("parses add and remove", () => {
+    expect(parseGameTags("[MOD:+Jizva přes tvář]").modMutations).toEqual([
+      { op: "add", name: "Jizva přes tvář" },
+    ]);
+    expect(parseGameTags("[MOD:-Jizva přes tvář]").modMutations).toEqual([
+      { op: "remove", name: "Jizva přes tvář" },
+    ]);
+  });
+
+  it("strips modification tags from the visible text", () => {
+    const { cleanText } = parseGameTags("Rána se zahojila do jizvy. [MOD:+Jizva na paži]");
+    expect(cleanText.trim()).toBe("Rána se zahojila do jizvy.");
+  });
+});
+
 describe("parseGameTags — skill tags", () => {
   it("parses the documented +/- forms", () => {
     expect(parseGameTags("[SKILL:+Pěst]").skillChanges).toEqual([
