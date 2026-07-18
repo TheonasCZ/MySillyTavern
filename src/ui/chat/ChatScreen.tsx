@@ -338,6 +338,24 @@ export function ChatScreen() {
     return () => { cancelled = true; };
   }, [id]);
 
+  // One-shot backfill: generate illustrations for inventory items that
+  // predate the auto-illustration trigger (e.g. imported/restored personas).
+  // Idempotent — safe to run on every chat open.
+  useEffect(() => {
+    const personaId = chat?.personaId;
+    if (!personaId) return;
+    void (async () => {
+      try {
+        const p = usePersonasStore.getState().personas.find((x) => x.id === personaId);
+        if (!p) return;
+        const { backfillMissingInventoryImages } = await import("../../memory/imageGenQueue");
+        await backfillMissingInventoryImages(p);
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, [chat?.personaId]);
+
   // Filter connections for the export dropdown: gemini provider OR purpose=chat
   const exportConnections = connections.filter(
     (c) =>

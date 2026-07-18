@@ -18,6 +18,7 @@ import {
 } from "../db/repositories/connectionsRepo";
 import { setFactImage } from "../db/repositories/ledgerRepo";
 import { setInventoryItemImage } from "../db/repositories/personasRepo";
+import type { Persona } from "../db/repositories/personasRepo";
 import { toConnectionDto } from "../providers/dto";
 import type { ConnectionConfig } from "../providers/types";
 
@@ -169,4 +170,22 @@ export function enqueueIllustration(
 
   queue.push({ type, targetId, prompt, itemName });
   scheduleProcess();
+}
+
+/**
+ * One-shot backfill: enqueue any inventory item that doesn't have an image
+ * yet. Safe to call every time a chat/persona is opened — items that
+ * already got an image (or are already queued) are naturally skipped, so
+ * repeated calls are idempotent and don't regenerate anything twice.
+ * Covers items that predate the auto-illustration trigger (added before
+ * it existed, or via a DB import/restore) and never got enqueued.
+ */
+export async function backfillMissingInventoryImages(persona: Persona): Promise<void> {
+  const enabled = await getSetting("image_gen_enabled");
+  if (enabled === "0") return;
+  for (const entry of persona.inventory ?? []) {
+    if (!entry.image_path) {
+      enqueueIllustration("inventory", persona.id, `Fantasy game item icon: ${entry.item}`, entry.item);
+    }
+  }
 }
