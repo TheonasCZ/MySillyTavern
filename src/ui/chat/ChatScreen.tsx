@@ -851,6 +851,7 @@ export function ChatScreen() {
         )}
 
         <ChatInput
+          chatId={id}
           disabled={loading || !connection}
           streaming={streaming}
           onSend={(content) => void sendMessage(content)}

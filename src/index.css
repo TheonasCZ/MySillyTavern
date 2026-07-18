@@ -83,6 +83,15 @@ select option {
   color: var(--color-text);
 }
 
+/* Native checkboxes/radios default to a fixed browser pixel size that
+   ignores the app's font-scale setting (which only affects rem). Sizing
+   them in em ties them to the surrounding text size instead. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1em;
+  height: 1em;
+}
+
 ::selection {
   background-color: var(--color-accent);
   color: var(--color-accent-contrast);

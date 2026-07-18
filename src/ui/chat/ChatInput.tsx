@@ -14,6 +14,9 @@ const chipMarkdownComponents = {
 };
 
 interface Props {
+  /** Scopes the auto-saved draft to this chat, so an unsent draft never
+   *  leaks into a different (or newly created) chat. */
+  chatId: string;
   disabled: boolean;
   streaming: boolean;
   onSend: (content: string) => void;
@@ -33,6 +36,7 @@ interface Props {
 }
 
 export function ChatInput({
+  chatId,
   disabled,
   streaming,
   onSend,
@@ -81,18 +85,19 @@ export function ChatInput({
     };
   }, []);
 
-  // Auto-save draft — restore on mount, save on change
-  const draftKey = "chat_draft";
+  // Auto-save draft — per chat, so switching chats doesn't leak an unsent
+  // draft from one chat into another (or into a freshly created one).
+  const draftKey = `chat_draft_${chatId}`;
   useEffect(() => {
-    if (draftKey) {
-      const saved = localStorage.getItem(draftKey);
-      if (saved) setValue(saved);
-    }
+    // Always overwrite, even to "" — otherwise a leftover draft from the
+    // previous chat stays visible (and could get sent) in a chat that has
+    // no saved draft of its own.
+    setValue(localStorage.getItem(draftKey) ?? "");
   }, [draftKey]);
 
   const handleChange = (val: string) => {
     setValue(val);
-    if (draftKey) localStorage.setItem(draftKey, val);
+    localStorage.setItem(draftKey, val);
   };
 
   // Expose insertText via a global callback — InventoryPanel calls this
