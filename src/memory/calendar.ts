@@ -173,12 +173,19 @@ export function weatherIcon(weather: string): string {
 
 // ---- Formatting ------------------------------------------------------------
 
-/** Formats a CalendarDate for display: "15. Jarního větru, Rok 847". */
-export function formatCalendarDate(date: CalendarDate): string {
-  return `${date.day}. ${date.month}, Rok ${date.year}`;
+/** Formats a CalendarDate for display: "15. Jarního větru, Rok 847"
+ * (or "15. dubna, Rok 847" in real mode). */
+export function formatCalendarDate(date: CalendarDate, mode: CalendarMode = "fantasy"): string {
+  return `${date.day}. ${monthDisplayName(date.month, mode)}, Rok ${date.year}`;
 }
 
-/** Maps fantasy month genitives to real-world month equivalents. */
+/** Whether dates are displayed with the fantasy month names ("Jarního
+ * větru") or their real-world equivalents ("dubna") — a global player
+ * preference (Settings → Hraní), not per-chat. */
+export type CalendarMode = "fantasy" | "real";
+
+/** Maps fantasy month genitives to real-world month equivalents (nominative,
+ * e.g. "Duben" — used as a parenthetical hint). */
 const REAL_MONTH_GENITIVE: Record<string, string> = {
   // Jaro
   "Měsíce probuzení": "Březen",
@@ -198,23 +205,56 @@ const REAL_MONTH_GENITIVE: Record<string, string> = {
   "Měsíce temnoty": "Únor",
 };
 
-/** Short format for UI header: compact, mobile-friendly, with real month. */
-export function formatCalendarDateShort(date: CalendarDate): string {
+/** Real-world month names in genitive form ("15. dubna"), aligned index-for-
+ * index with `MONTHS` — used when `CalendarMode` is `"real"`. */
+const REAL_MONTH_GENITIVE_FORM: Record<string, string> = {
+  "Měsíce probuzení": "března",
+  "Jarního větru": "dubna",
+  "Měsíce květů": "května",
+  "Měsíce slunce": "června",
+  "Měsíce žáru": "července",
+  "Měsíce bouří": "srpna",
+  "Měsíce sklizně": "září",
+  "Měsíce listí": "října",
+  "Měsíce mlh": "listopadu",
+  "Měsíce mrazu": "prosince",
+  "Měsíce sněhu": "ledna",
+  "Měsíce temnoty": "února",
+};
+
+/** Returns the display name for a month according to the player's
+ * fantasy/real preference. `monthGenitive` is always the fantasy genitive
+ * form (how it's stored, e.g. in `CalendarDate.month` or event records) —
+ * this only affects what's shown to the player. */
+export function monthDisplayName(monthGenitive: string, mode: CalendarMode = "fantasy"): string {
+  if (mode === "fantasy") return monthGenitive;
+  return REAL_MONTH_GENITIVE_FORM[monthGenitive] ?? monthGenitive;
+}
+
+/** Short format for UI header: compact, mobile-friendly. In fantasy mode,
+ * shows the real month as a parenthetical hint; in real mode, shows only
+ * the real month name (no fantasy name to hint at). */
+export function formatCalendarDateShort(date: CalendarDate, mode: CalendarMode = "fantasy"): string {
   const hour = date.hourOfDay ?? 6;
-  const real = REAL_MONTH_GENITIVE[date.month] ?? "";
-  const realSuffix = real ? ` (${real})` : "";
   const pad = String(hour).padStart(2, "0");
-  return `🕐${pad}:00 ${timeIcon(hour)} ${date.day}. ${date.month}${realSuffix}, ${date.year} ${seasonIcon(date.season)}`;
+  const monthPart =
+    mode === "real"
+      ? monthDisplayName(date.month, "real")
+      : (() => {
+          const real = REAL_MONTH_GENITIVE[date.month] ?? "";
+          return real ? `${date.month} (${real})` : date.month;
+        })();
+  return `🕐${pad}:00 ${timeIcon(hour)} ${date.day}. ${monthPart}, ${date.year} ${seasonIcon(date.season)}`;
 }
 
 /** Produces the full prompt block for the current date including season effects
  * and the `[TIME:+1d]` / `[TIME:+1h]` tag instructions for advancing time. */
-export function calendarDescription(date: CalendarDate): string {
+export function calendarDescription(date: CalendarDate, mode: CalendarMode = "fantasy"): string {
   const effects = SEASON_EFFECTS[date.season] ?? "";
   const period = dayPeriod(date.hourOfDay ?? 6);
   const hour = date.hourOfDay ?? 6;
   const tagNote = `Pro posun času použij tag [TIME:+1d] (den) nebo [TIME:+1h] (hodina). Aktuálně je ${hour}h (${period}).`;
-  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date)} (${date.season}, ${hour}h — ${period})\n${effects}\n${tagNote}`;
+  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${hour}h — ${period})\n${effects}\n${tagNote}`;
 }
 
 // ---- Serialization ---------------------------------------------------------

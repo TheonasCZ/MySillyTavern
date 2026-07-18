@@ -17,10 +17,12 @@ import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { useUnreadStore } from "../../stores/unreadStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { humanizeProviderError } from "../../providers/humanizeError";
 import {
   calendarFromJSON,
   type CalendarDate,
+  monthDisplayName,
   seasonIcon,
   weatherIcon,
 } from "../../memory/calendar";
@@ -116,6 +118,7 @@ export function ChatScreen() {
     setAutoReplyMode,
     setSelectedSpeaker,
   } = useChatStore();
+  const calendarMode = useSettingsStore((s) => s.calendarMode);
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
@@ -366,7 +369,7 @@ export function ChatScreen() {
         {calendarDate ? (
           <div className="flex flex-col items-center text-center leading-tight">
             <span className="text-xs whitespace-nowrap" style={{ color: "var(--color-text-muted)" }}>
-              {calendarDate.day}. {calendarDate.month}, {calendarDate.year} {seasonIcon(calendarDate.season)}
+              {calendarDate.day}. {monthDisplayName(calendarDate.month, calendarMode)}, {calendarDate.year} {seasonIcon(calendarDate.season)}
             </span>
             <span className="text-xs whitespace-nowrap" style={{ color: "var(--color-text-faint)" }}>
               {String(calendarDate.hourOfDay ?? 6).padStart(2, "0")}:00 · {weatherIcon(weather)} {weather}
@@ -578,6 +581,7 @@ export function ChatScreen() {
             >
               <CalendarPanel
                 calendarDate={calendarDate}
+                calendarMode={calendarMode}
                 weather={weather}
                 events={calendarEvents}
                 onClose={() => panels.setCalendarOpen(false)}

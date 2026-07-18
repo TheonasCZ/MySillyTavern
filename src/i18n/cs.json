@@ -481,7 +481,8 @@
       "sound": "Zvuk",
       "backup": "Data a záloha",
       "usage": "Statistiky",
-      "diagnostics": "Diagnostika"
+      "diagnostics": "Diagnostika",
+      "calendar": "Kalendář"
     },
     "usage": {
       "title": "Statistiky spotřeby",
@@ -746,6 +747,14 @@
       "testOk": "✅ Funguje (Edge-TTS)",
       "testFallback": "⚠️ Záložní (Web Speech)",
       "testFail": "❌ Nedostupné"
+    },
+    "calendar": {
+      "title": "Kalendář",
+      "subtitle": "Jak se zobrazují data ve hře — fantasy názvy měsíců, nebo reálné (leden–prosinec).",
+      "fantasy": "Fantasy měsíce",
+      "fantasyHelp": "Datum se zobrazuje s vymyšlenými fantasy názvy měsíců (např. \"Jarního větru\").",
+      "real": "Reálné měsíce",
+      "realHelp": "Datum se zobrazuje s běžnými měsíci (leden–prosinec) místo fantasy názvů."
     }
   }
 }

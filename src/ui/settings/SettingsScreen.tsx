@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { resetAllSettings } from "../../db/repositories/settingsRepo";
 import { AppearancePanel } from "./AppearancePanel";
 import { BackupPanel } from "./BackupPanel";
+import { CalendarSettingsPanel } from "./CalendarSettingsPanel";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { MemorySettingsPanel } from "./MemorySettingsPanel";
@@ -159,6 +160,7 @@ export function SettingsScreen() {
         <>
           <PresetsPanel />
           <MemorySettingsPanel />
+          <CalendarSettingsPanel />
         </>
       )}
 

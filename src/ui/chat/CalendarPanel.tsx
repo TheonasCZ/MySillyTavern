@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { CalendarDate } from "../../memory/calendar";
+import type { CalendarDate, CalendarMode } from "../../memory/calendar";
 import {
   formatCalendarDate,
+  monthDisplayName,
   timeIcon as timeIconFn,
   seasonIcon,
   weatherIcon,
@@ -21,6 +22,7 @@ export interface CalendarEventDraft {
 
 interface Props {
   calendarDate: CalendarDate;
+  calendarMode: CalendarMode;
   weather: string;
   events: CalendarEvent[];
   onClose: () => void;
@@ -63,6 +65,7 @@ function MiniMonthGrid({
 
 export function CalendarPanel({
   calendarDate,
+  calendarMode,
   weather,
   events,
   onClose,
@@ -131,7 +134,7 @@ export function CalendarPanel({
               {calendarDate.hourOfDay}h — {period}
             </div>
             <div className="text-sm mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-              {formatCalendarDate(calendarDate)}
+              {formatCalendarDate(calendarDate, calendarMode)}
             </div>
             <div className="text-xs mt-1">
               {sIcon} {calendarDate.season}
@@ -151,7 +154,7 @@ export function CalendarPanel({
         </div>
 
         {/* Mini month calendar */}
-        <MiniMonthGrid currentDay={calendarDate.day} monthName={calendarDate.month} />
+        <MiniMonthGrid currentDay={calendarDate.day} monthName={monthDisplayName(calendarDate.month, calendarMode)} />
 
         {/* Upcoming events */}
         <div>
@@ -197,7 +200,9 @@ export function CalendarPanel({
                   style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
                 >
                   {MONTHS.map((m) => (
-                    <option key={m.genitive} value={m.genitive}>{m.name}</option>
+                    <option key={m.genitive} value={m.genitive}>
+                      {calendarMode === "real" ? monthDisplayName(m.genitive, "real") : m.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -261,7 +266,7 @@ export function CalendarPanel({
                       </button>
                     </div>
                     <div className="text-[0.65rem]" style={{ color: "var(--color-text-faint)" }}>
-                      {ev.day}. {ev.monthName}
+                      {ev.day}. {monthDisplayName(ev.monthName, calendarMode)}
                     </div>
                     {ev.description && (
                       <div className="text-[0.65rem] mt-0.5" style={{ color: "var(--color-text-muted)" }}>

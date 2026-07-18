@@ -481,7 +481,8 @@
       "sound": "Sound",
       "backup": "Data & backup",
       "usage": "Usage",
-      "diagnostics": "Diagnostics"
+      "diagnostics": "Diagnostics",
+      "calendar": "Calendar"
     },
     "usage": {
       "title": "Usage statistics",
@@ -746,6 +747,14 @@
       "testOk": "✅ Working (Edge-TTS)",
       "testFallback": "⚠️ Fallback (Web Speech)",
       "testFail": "❌ Not available"
+    },
+    "calendar": {
+      "title": "Calendar",
+      "subtitle": "How in-game dates are displayed — fantasy month names, or real-world ones (January–December).",
+      "fantasy": "Fantasy months",
+      "fantasyHelp": "Dates are shown with the made-up fantasy month names (e.g. \"Windmonth\").",
+      "real": "Real months",
+      "realHelp": "Dates are shown with ordinary months (January–December) instead of fantasy names."
     }
   }
 }

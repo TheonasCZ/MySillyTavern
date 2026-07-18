@@ -26,6 +26,7 @@ import { ensureCalendarInitialized } from "../memory/memoryEngine";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { logUsage } from "../db/repositories/usageRepo";
 import { useConnectionsStore } from "./connectionsStore";
+import { useSettingsStore } from "./settingsStore";
 import i18n from "../i18n";
 import { useSamplerToastStore } from "../ui/useSamplerToast";
 import { appendLog } from "../logging";
@@ -143,7 +144,7 @@ export async function buildApiMessages(
   let calendarDateDescription: string | undefined;
   try {
     const cal = await ensureCalendarInitialized(chat.id);
-    calendarDateDescription = calendarDescription(cal);
+    calendarDateDescription = calendarDescription(cal, useSettingsStore.getState().calendarMode);
   } catch (err) {
     console.warn("chatStore: calendar loading failed for chat", chat.id, err);
   }
