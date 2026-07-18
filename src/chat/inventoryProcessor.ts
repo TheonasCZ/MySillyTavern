@@ -1,5 +1,4 @@
 import type { Persona } from "../db/repositories/personasRepo";
-import { updatePersona } from "../db/repositories/personasRepo";
 import {
   getChatConditions,
   getChatInventory,
@@ -277,22 +276,10 @@ export async function processGameResponse(
     }
   }
 
-  try {
-    // Note: persona.inventory/skills/conditions/xp/level are the character
-    // sheet templates and are left untouched here — live gameplay state
-    // (inventory, skills, conditions, xp/level) all live on the chat now.
-    await updatePersona(persona.id, {
-      name: persona.name,
-      gender: persona.gender,
-      age: persona.age,
-      race: persona.race,
-      appearance: persona.appearance,
-      progression: persona.progression,
-      skills: persona.skills,
-      inventory: persona.inventory,
-      conditions: persona.conditions,
-    });
-    if (chatId) {
+  // Persona is a template — never update during gameplay. Live state lives on
+  // the chat (inventory/skills/conditions/xp/level/mods all chat-scoped).
+  if (chatId) {
+    try {
       await setChatInventory(chatId, inv);
       await setChatSkills(chatId, skills);
       await setChatConditions(chatId, conditions);
@@ -300,9 +287,9 @@ export async function processGameResponse(
       if (hasLevelChanges) {
         await setChatXpLevel(chatId, xp, level);
       }
+    } catch {
+      // Non-critical
     }
-  } catch {
-    // Non-critical
   }
 
   // Auto-illustration trigger: enqueue newly added inventory items that
