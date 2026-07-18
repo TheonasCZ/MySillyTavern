@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useLocation } from "react-router-dom";
 import { getVersion } from "@tauri-apps/api/app";
+import { useContextUsageStore } from "../../stores/contextUsageStore";
 
 type NavItem = {
   to: string;
@@ -22,6 +23,7 @@ export function Sidebar() {
   const { t } = useTranslation("common");
   const location = useLocation();
   const [version, setVersion] = useState<string | null>(null);
+  const contextUsage = useContextUsageStore((s) => s.value);
   const [collapsed, setCollapsed] = useState(location.pathname.startsWith("/chat/"));
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -146,11 +148,44 @@ export function Sidebar() {
           </span>
         </button>
 
-        {/* ---- Settings + version (pinned to bottom) ---- */}
+        {/* ---- Context usage (only while a chat is open) + Settings + version ---- */}
         <div
           className="mt-auto border-t pt-3"
           style={{ borderColor: "var(--color-border)" }}
         >
+          {contextUsage !== null && (
+            <div
+              className={["mb-2", collapsed ? "flex justify-center" : "px-3"].join(" ")}
+              title={`${t("nav.context")}: ${Math.round(contextUsage * 100)}%`}
+            >
+              {collapsed ? (
+                <div
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor:
+                      contextUsage > 0.8 ? "var(--color-danger)" : contextUsage > 0.5 ? "var(--color-brass)" : "var(--color-success)",
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "var(--color-text-faint)" }}>
+                    <span>{t("nav.context")}</span>
+                    <span>{Math.round(contextUsage * 100)}%</span>
+                  </div>
+                  <div className="h-1 overflow-hidden rounded-full" style={{ backgroundColor: "var(--color-surface-2)" }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(contextUsage * 100, 100)}%`,
+                        backgroundColor:
+                          contextUsage > 0.8 ? "var(--color-danger)" : contextUsage > 0.5 ? "var(--color-brass)" : "var(--color-success)",
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <NavLink
             to="/settings"
             onClick={() => setMobileOpen(false)}

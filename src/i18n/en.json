@@ -8,7 +8,8 @@
       "personas": "Personas",
       "personasSub": "Your character — who you are in the story",
       "lorebooks": "Lorebooks",
-      "settings": "Settings"
+      "settings": "Settings",
+      "context": "Context"
     },
     "actions": {
       "save": "Save",

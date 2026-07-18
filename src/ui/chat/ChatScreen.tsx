@@ -14,6 +14,7 @@ import { QuestPanel } from "./QuestPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useContextUsageStore } from "../../stores/contextUsageStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { useUnreadStore } from "../../stores/unreadStore";
@@ -123,6 +124,7 @@ export function ChatScreen() {
 
   // ── Panel state ────────────────────────────────────────────────────
   const panels = useChatPanels();
+  const setContextUsage = useContextUsageStore((s) => s.setValue);
   const [personaSwitcherOpen, setPersonaSwitcherOpen] = useState(false);
 
   // Calendar state
@@ -170,6 +172,14 @@ export function ChatScreen() {
   const lastMessage = messages[messages.length - 1];
 
   // ── Effects ────────────────────────────────────────────────────────
+  // Mirror contextUsage into the global store so the main app Sidebar
+  // (outside this component's tree) can render the compact indicator.
+  // Cleared on unmount so it doesn't linger on non-chat routes.
+  useEffect(() => {
+    setContextUsage(actions.contextUsage);
+    return () => setContextUsage(null);
+  }, [actions.contextUsage, setContextUsage]);
+
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
   }, [connectionsLoaded, loadConnections]);
@@ -394,34 +404,6 @@ export function ChatScreen() {
             />
           )}
 
-          {isGroup && (
-            <SpeakerPicker
-              members={memberCharacters}
-              selectedSpeakerId={selectedSpeakerId}
-              predictedSpeakerId={actions.predictedSpeakerId}
-              autoReply={autoReply}
-              streaming={streaming}
-              onSelect={setSelectedSpeaker}
-              onReplyNow={(speakerId) => void triggerSpeaker(speakerId)}
-            />
-          )}
-
-          <ChatInput
-            disabled={loading || !connection}
-            streaming={streaming}
-            onSend={(content) => void sendMessage(content)}
-            onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
-            onStop={() => void stop()}
-            suggestions={combinedSuggestions}
-            suggesting={suggesting}
-            showSuggestButton={actions.inlineSuggestions.length === 0}
-            onSuggest={() => void suggestReplies()}
-            onClearSuggestions={() => {
-              clearSuggestions();
-              if (lastMessage?.role === "assistant") actions.setDismissedSuggestionsMsgId(lastMessage.id);
-            }}
-            contextUsage={actions.contextUsage}
-          />
         </div>
 
         {panels.memoryOpen && (
@@ -697,12 +679,34 @@ export function ChatScreen() {
         >
           {(
             [
-              { icon: "📅", open: panels.calendarOpen, onToggle: () => panels.setCalendarOpen((v) => !v), title: t("room.calendarTooltip") },
+              { icon: "🧍", open: panels.characterOpen, onToggle: () => panels.setCharacterOpen((v) => !v), title: t("room.characterTooltip") },
               { icon: "🎒", open: panels.inventoryOpen, onToggle: () => panels.setInventoryOpen((v) => !v), title: t("room.inventoryTooltip") },
               { icon: "📜", open: panels.questsOpen, onToggle: () => panels.setQuestsOpen((v) => !v), title: t("room.questsTooltip") },
-              { icon: "🧍", open: panels.characterOpen, onToggle: () => panels.setCharacterOpen((v) => !v), title: t("room.characterTooltip") },
-              { icon: "🎬", open: panels.directorOpen, onToggle: () => panels.setDirectorOpen((v) => !v), title: t("director.title") },
+              { icon: "📅", open: panels.calendarOpen, onToggle: () => panels.setCalendarOpen((v) => !v), title: t("room.calendarTooltip") },
+            ] satisfies { icon: string; open: boolean; onToggle: () => void; title: string }[]
+          ).map(({ icon, open, onToggle, title }) => (
+            <button
+              key={icon}
+              type="button"
+              onClick={onToggle}
+              title={title}
+              aria-pressed={open}
+              className="flex w-full items-center justify-center rounded-[var(--radius-sm)] py-2 text-base transition-colors"
+              style={{
+                backgroundColor: open ? "var(--color-accent)" : "var(--color-surface)",
+                color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              }}
+            >
+              {icon}
+            </button>
+          ))}
+
+          <div className="my-1 w-8 border-t" style={{ borderColor: "var(--color-border)" }} />
+
+          {(
+            [
               { icon: "🧠", open: panels.memoryOpen, onToggle: () => panels.setMemoryOpen((v) => !v), title: t("room.memoryTooltip") },
+              { icon: "🎬", open: panels.directorOpen, onToggle: () => panels.setDirectorOpen((v) => !v), title: t("director.title") },
               { icon: "📖", open: panels.exportOpen, onToggle: () => panels.setExportOpen((v) => !v), title: t("room.exportTooltip") },
             ] satisfies { icon: string; open: boolean; onToggle: () => void; title: string }[]
           ).map(({ icon, open, onToggle, title }) => (
@@ -714,7 +718,7 @@ export function ChatScreen() {
               aria-pressed={open}
               className="flex w-full items-center justify-center rounded-[var(--radius-sm)] py-2 text-base transition-colors"
               style={{
-                backgroundColor: open ? "var(--color-accent)" : "transparent",
+                backgroundColor: open ? "var(--color-accent)" : "var(--color-surface)",
                 color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
               }}
             >
@@ -807,6 +811,38 @@ export function ChatScreen() {
           </div>
         </nav>
 
+      </div>
+
+      {/* Full-width footer input — sibling of <header>, spans the whole
+          window like it does, instead of stopping at the right sidebar. */}
+      <div className="shrink-0 border-t px-4 sm:px-8" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
+        {isGroup && (
+          <SpeakerPicker
+            members={memberCharacters}
+            selectedSpeakerId={selectedSpeakerId}
+            predictedSpeakerId={actions.predictedSpeakerId}
+            autoReply={autoReply}
+            streaming={streaming}
+            onSelect={setSelectedSpeaker}
+            onReplyNow={(speakerId) => void triggerSpeaker(speakerId)}
+          />
+        )}
+
+        <ChatInput
+          disabled={loading || !connection}
+          streaming={streaming}
+          onSend={(content) => void sendMessage(content)}
+          onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
+          onStop={() => void stop()}
+          suggestions={combinedSuggestions}
+          suggesting={suggesting}
+          showSuggestButton={actions.inlineSuggestions.length === 0}
+          onSuggest={() => void suggestReplies()}
+          onClearSuggestions={() => {
+            clearSuggestions();
+            if (lastMessage?.role === "assistant") actions.setDismissedSuggestionsMsgId(lastMessage.id);
+          }}
+        />
       </div>
 
       {/* Bottom bar: group members (persona switcher moved to the right tools sidebar) */}

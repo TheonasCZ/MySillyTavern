@@ -8,7 +8,8 @@
       "personas": "Persony",
       "personasSub": "Tvoje postava — kým jsi ve hře ty",
       "lorebooks": "Lorebooky",
-      "settings": "Nastavení"
+      "settings": "Nastavení",
+      "context": "Kontext"
     },
     "actions": {
       "save": "Uložit",
