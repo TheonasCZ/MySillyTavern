@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -462,7 +463,7 @@ export function ChatListScreen() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(t("list.deleteConfirm") ?? "")) void remove(chat.id);
+                    void (async () => { if (await showConfirm(t("list.deleteConfirm") ?? "")) void remove(chat.id); })();
                   }}
                   className="rounded-[var(--radius-sm)] px-2 py-1"
                   style={{ color: "var(--color-danger)" }}

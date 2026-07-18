@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -434,7 +435,7 @@ export function ChatScreen() {
     suggestions && suggestions.length > 0 ? suggestions : inlineSuggestions.length > 0 ? inlineSuggestions : null;
 
   const handleBranch = async (messageId: string) => {
-    if (!confirm(t("room.branchConfirm") ?? "")) return;
+    if (!await showConfirm(t("room.branchConfirm") ?? "")) return;
     const branched = await branchChat(id, messageId, t("room.branchSuffix"));
     if (branched) navigate(`/chat/${branched.id}`);
   };

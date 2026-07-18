@@ -30,6 +30,19 @@ async function getDialog(): Promise<DialogModule> {
   }
 }
 
+/**
+ * Show a confirmation dialog. On Tauri desktop, uses the native dialog plugin
+ * (async, returns boolean). On Android / fallback, uses browser confirm().
+ */
+export async function showConfirm(message: string): Promise<boolean> {
+  const dialog = await getDialog();
+  if (dialog?.confirm) {
+    return dialog.confirm(message);
+  }
+  // Fallback: native browser confirm (synchronous, but wrapped in Promise)
+  return typeof window !== "undefined" ? window.confirm(message) : false;
+}
+
 /** Open a file/folder picker. Returns null on Android (not supported). */
 export async function openDialog(opts?: Record<string, unknown>): Promise<string | null> {
   const dialog = await getDialog();

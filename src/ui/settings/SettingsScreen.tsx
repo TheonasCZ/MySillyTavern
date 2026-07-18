@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -32,7 +33,7 @@ export function SettingsScreen() {
         <button
           type="button"
           onClick={async () => {
-            if (confirm(t("resetConfirm") ?? "Obnovit výchozí nastavení?")) {
+            if (await showConfirm(t("resetConfirm") ?? "Obnovit výchozí nastavení?")) {
               await resetAllSettings();
               setResetDone(true);
               setTimeout(() => setResetDone(false), 2000);

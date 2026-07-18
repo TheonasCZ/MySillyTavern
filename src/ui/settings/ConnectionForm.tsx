@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -468,7 +469,7 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
             <button
               type="button"
               onClick={() => {
-                if (confirm(t("connections.deleteConfirm") ?? "")) void onDelete();
+                void (async () => { if (await showConfirm(t("connections.deleteConfirm") ?? "")) void onDelete(); })();
               }}
               className="ml-auto rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
               style={{ color: "var(--color-danger)" }}

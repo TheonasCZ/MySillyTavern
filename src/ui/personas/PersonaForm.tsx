@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { openDialog } from "../../platform";
+import { openDialog, showConfirm } from "../../platform";
 
 import type { Persona, PersonaDraft, PersonaUpdate, SkillEntry, InventoryEntry } from "../../db/repositories/personasRepo";
 import type { FactionRep } from "../../db/repositories/factionsRepo";
@@ -433,7 +433,7 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
           <button
             type="button"
             onClick={() => {
-              if (confirm(t("form.deleteConfirm") ?? "")) void onDelete();
+              void (async () => { if (await showConfirm(t("form.deleteConfirm") ?? "")) void onDelete(); })();
             }}
             className="ml-auto rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
             style={{ color: "var(--color-danger)" }}

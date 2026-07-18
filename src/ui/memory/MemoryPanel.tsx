@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -78,17 +79,17 @@ function FactRow({
 
   // The user is the admin (M25.5): everything stays possible, but touching
   // canon gets a gentle "are you sure" nudge first.
-  const handleToggleLock = () => {
-    if (fact.locked && !confirm(t("facts.canonUnlockWarn") ?? "")) return;
+  const handleToggleLock = async () => {
+    if (fact.locked && !await showConfirm(t("facts.canonUnlockWarn") ?? "")) return;
     void onToggleLock();
   };
-  const handleToggleCanon = () => {
-    if (fact.canon && !confirm(t("facts.canonDemoteWarn") ?? "")) return;
+  const handleToggleCanon = async () => {
+    if (fact.canon && !await showConfirm(t("facts.canonDemoteWarn") ?? "")) return;
     void onToggleCanon();
   };
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const msg = isCanon ? t("facts.canonDeleteWarn") : t("facts.deleteConfirm");
-    if (confirm(msg ?? "")) void onDelete();
+    if (await showConfirm(msg ?? "")) void onDelete();
   };
 
   return (

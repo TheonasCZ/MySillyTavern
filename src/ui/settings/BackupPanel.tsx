@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -114,7 +115,7 @@ export function BackupPanel() {
     // destructive-action confirmation belongs right here, not at the file
     // picker (plan §7 M6: "confirmation dialog before import, warn that it
     // overwrites data").
-    if (!confirm(t("backup.importWarning") ?? "")) return;
+    if (!await showConfirm(t("backup.importWarning") ?? "")) return;
     await restartApp();
   };
 

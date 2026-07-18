@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -457,7 +458,7 @@ export function LorebookEditor() {
   };
 
   const handleDelete = async () => {
-    if (!confirm(t("editor.deleteConfirm") ?? "")) return;
+    if (!await showConfirm(t("editor.deleteConfirm") ?? "")) return;
     await removeLorebook(id);
     navigate("/lorebooks");
   };

@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -278,7 +279,7 @@ function PresetEditor({
           <button
             type="button"
             onClick={() => {
-              if (confirm(t("presets.deleteConfirm") ?? "")) void onDelete();
+              void (async () => { if (await showConfirm(t("presets.deleteConfirm") ?? "")) void onDelete(); })();
             }}
             className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
             style={{ color: "var(--color-danger)" }}
@@ -366,7 +367,7 @@ export function PresetsPanel() {
                   setEditingId(null);
                 }}
                 onDelete={async () => {
-                  if (confirm(t("presets.deleteConfirm") ?? "")) {
+                  if (await showConfirm(t("presets.deleteConfirm") ?? "")) {
                     await remove(preset.id);
                     setEditingId(null);
                   }

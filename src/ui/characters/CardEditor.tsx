@@ -1,3 +1,4 @@
+import { showConfirm } from "../../platform";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -209,7 +210,7 @@ export function CardEditor() {
   };
 
   const handleDelete = async () => {
-    if (!confirm(t("editor.deleteConfirm") ?? "")) return;
+    if (!await showConfirm(t("editor.deleteConfirm") ?? "")) return;
     await remove(id);
     navigate("/characters");
   };
