@@ -87,6 +87,7 @@ export function initErrorLogging(): void {
 
   const originalError = console.error.bind(console);
   const originalWarn = console.warn.bind(console);
+  const originalInfo = console.info.bind(console);
 
   console.error = (...args: unknown[]) => {
     originalError(...args);
@@ -96,6 +97,15 @@ export function initErrorLogging(): void {
   console.warn = (...args: unknown[]) => {
     originalWarn(...args);
     logLine(buildLine("warn", args));
+  };
+
+  // console.info is for deliberate, low-volume diagnostic breadcrumbs a
+  // user might want to review later (e.g. the function-calling prototype's
+  // round-trip log) — unlike error/warn it's opt-in per call site, so it's
+  // wrapped the same way but expected to be used sparingly.
+  console.info = (...args: unknown[]) => {
+    originalInfo(...args);
+    logLine(buildLine("info", args));
   };
 
   window.addEventListener("error", (event: ErrorEvent) => {

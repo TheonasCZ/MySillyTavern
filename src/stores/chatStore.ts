@@ -438,7 +438,7 @@ function startStream(
         const chat = get().chat;
         const startedAt = performance.now();
         if (import.meta.env.DEV) {
-          console.log(`[toolCalling] model called ${name}(${JSON.stringify(args)}) — round trip ${functionCallDepth + 1}/${MAX_FUNCTION_CALL_ROUND_TRIPS}`);
+          console.info(`[toolCalling] model called ${name}(${JSON.stringify(args)}) — round trip ${functionCallDepth + 1}/${MAX_FUNCTION_CALL_ROUND_TRIPS}`);
         }
         void (async () => {
           const argName =
@@ -458,7 +458,7 @@ function startStream(
           }
 
           if (import.meta.env.DEV) {
-            console.log(`[toolCalling] lookup for "${argName}" resolved in ${(performance.now() - startedAt).toFixed(0)}ms: ${result}`);
+            console.info(`[toolCalling] lookup for "${argName}" resolved in ${(performance.now() - startedAt).toFixed(0)}ms: ${result}`);
           }
 
           const nextMessages: ChatMessage[] = [
