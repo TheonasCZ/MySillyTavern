@@ -25,6 +25,7 @@ import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useLorebooksStore } from "../../stores/lorebooksStore";
 import { FieldHelp } from "../common/FieldHelp";
+import { useUndoToast } from "../useUndoToast";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -397,6 +398,7 @@ export function LorebookEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation(["lorebooks", "common"]);
+  const { toastUndo } = useUndoToast();
   const { remove: removeLorebook, update: updateLorebook } = useLorebooksStore();
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { chats, loaded: chatsLoaded, load: loadChats } = useChatListStore();
@@ -474,8 +476,29 @@ export function LorebookEditor() {
   };
 
   const handleDeleteEntry = async (entryId: string) => {
+    const deleted = entries.find((e) => e.id === entryId);
     await deleteEntry(entryId);
     setEntries(entries.filter((e) => e.id !== entryId));
+    if (deleted) {
+      const entryLabel = deleted.keys?.[0] ?? deleted.comment ?? entryId.slice(0, 8);
+      toastUndo(
+        `${t("deleted", { ns: "common" })}: ${entryLabel}`,
+        async () => {
+          const restored = await createEntry(id, {
+            keys: deleted.keys,
+            secondaryKeys: deleted.secondaryKeys ?? [],
+            content: deleted.content,
+            comment: deleted.comment ?? "",
+            selectiveKeys: deleted.selectiveKeys ?? [], recursiveActivation: deleted.recursiveActivation ?? false, activationDepth: deleted.activationDepth ?? 1, timed: deleted.timed ?? null, vectorThreshold: deleted.vectorThreshold ?? null, vectorBudget: deleted.vectorBudget ?? 2,
+            priority: deleted.priority ?? 100,
+            alwaysOn: deleted.alwaysOn ?? false,
+            caseSensitive: deleted.caseSensitive ?? false,
+            enabled: deleted.enabled ?? true,
+          });
+          setEntries([...entries, restored]);
+        },
+      );
+    }
   };
 
   const handleAddLink = async () => {

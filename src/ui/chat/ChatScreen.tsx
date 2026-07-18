@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ChronicleTheme, ChronicleFormat, ExportStatus } from "../../chat/chronicleTypes";
 import { THEMES } from "../../chat/chronicleThemes";
 import { branchChat } from "../../db/repositories/chatsRepo";
-import { createMessage } from "../../db/repositories/messagesRepo";
+import { createMessage, countMessages } from "../../db/repositories/messagesRepo";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
@@ -19,6 +19,7 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
+import { useUnreadStore } from "../../stores/unreadStore";
 import { humanizeProviderError } from "../../providers/humanizeError";
 import { formatDiceSystemMessage } from "../../chat/diceCommand";
 import { pickNextSpeaker } from "../../chat/groupSpeaker";
@@ -341,6 +342,11 @@ export function ChatScreen() {
   useEffect(() => {
     if (!id) return;
     void openChat(id);
+    // Mark chat as read when opened
+    void (async () => {
+      const count = await countMessages(id);
+      useUnreadStore.getState().markRead(id, count);
+    })();
     return () => {
       void closeChat();
     };

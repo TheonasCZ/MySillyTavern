@@ -28,6 +28,8 @@
     },
     "comingSoon": "Tato obrazovka bude hotová v dalším milníku.",
     "offline": "Jsi offline. Zprávy se odešlou, jakmile se připojení obnoví.",
+    "undo": "Zpět",
+    "deleted": "Smazáno",
     "update": {
       "available": "Nová verze {{version}} je k dispozici",
       "installNow": "Aktualizovat",
@@ -184,6 +186,15 @@
   "characters": {
     "title": "Postavy",
     "empty": "Zatím žádné postavy.",
+    "importPreview": {
+      "title": "Náhled importované karty",
+      "name": "Jméno",
+      "description": "Popis",
+      "firstMessage": "První zpráva",
+      "version": "Verze karty",
+      "import": "Importovat",
+      "cancel": "Zrušit"
+    },
     "gallery": {
       "importPng": "Import PNG karty",
       "importJson": "Import JSON karty",
@@ -651,6 +662,12 @@
       "deleteConfirm": "Smazat tento preset?",
       "noPreset": "Bez presetu"
     },
+    "shortcuts": {
+      "title": "Klávesové zkratky",
+      "regenerate": "Přegenerovat poslední odpověď",
+      "send": "Odeslat zprávu",
+      "close": "Zavřít panel / popover"
+    },
     "resetButton": "Obnovit výchozí hodnoty",
     "resetConfirm": "Opravdu obnovit všechna nastavení?",
     "resetDone": "Obnoveno!",
@@ -688,7 +705,11 @@
       "pitchHelp": "Posun výšky hlasu v Hz",
       "profile": "Hlasový profil",
       "noVoices": "Žádné hlasy nejsou k dispozici.",
-      "saved": "Uloženo."
+      "saved": "Uloženo.",
+      "testButton": "Test",
+      "testOk": "✅ Funguje (Edge-TTS)",
+      "testFallback": "⚠️ Záložní (Web Speech)",
+      "testFail": "❌ Nedostupné"
     }
   }
 }

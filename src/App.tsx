@@ -8,15 +8,18 @@ import { CardEditor } from "./ui/characters/CardEditor";
 import { GalleryScreen } from "./ui/characters/GalleryScreen";
 import { ChatListScreen } from "./ui/chat/ChatListScreen";
 import { ChatScreen } from "./ui/chat/ChatScreen";
+import { UndoToast } from "./ui/common/UndoToast";
 import { AppShell } from "./ui/layout/AppShell";
 import { LorebookEditor } from "./ui/lorebooks/LorebookEditor";
 import { LorebooksListScreen } from "./ui/lorebooks/LorebooksListScreen";
 import { PersonasScreen } from "./ui/personas/PersonasScreen";
 import { SettingsScreen } from "./ui/settings/SettingsScreen";
 import { UpdateBanner } from "./ui/UpdateBanner";
+import { useKeyboardShortcuts } from "./ui/useKeyboardShortcuts";
 
 function App() {
   const { hydrated, hydrate } = useSettingsStore();
+  useKeyboardShortcuts();
 
   useEffect(() => {
     void hydrate();
@@ -67,6 +70,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <UpdateBanner />
+        <UndoToast />
       </AppShell>
     </HashRouter>
   );

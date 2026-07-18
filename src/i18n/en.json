@@ -28,6 +28,8 @@
     },
     "comingSoon": "This screen ships in a later milestone.",
     "offline": "You're offline. Messages will send once the connection is back.",
+    "undo": "Undo",
+    "deleted": "Deleted",
     "update": {
       "available": "New version {{version}} is available",
       "installNow": "Update now",
@@ -184,6 +186,15 @@
   "characters": {
     "title": "Characters",
     "empty": "No characters yet.",
+    "importPreview": {
+      "title": "Preview imported card",
+      "name": "Name",
+      "description": "Description",
+      "firstMessage": "First message",
+      "version": "Card version",
+      "import": "Import",
+      "cancel": "Cancel"
+    },
     "gallery": {
       "importPng": "Import PNG card",
       "importJson": "Import JSON card",
@@ -651,6 +662,12 @@
       "deleteConfirm": "Delete this preset?",
       "noPreset": "No preset"
     },
+    "shortcuts": {
+      "title": "Keyboard shortcuts",
+      "regenerate": "Regenerate last reply",
+      "send": "Send message",
+      "close": "Close panel / popover"
+    },
     "resetButton": "Reset to defaults",
     "resetConfirm": "Reset all settings to defaults?",
     "resetDone": "Settings reset!",
@@ -688,7 +705,11 @@
       "pitchHelp": "Shift voice pitch in Hz",
       "profile": "Voice profile",
       "noVoices": "No voices available.",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "testButton": "Test",
+      "testOk": "✅ Working (Edge-TTS)",
+      "testFallback": "⚠️ Fallback (Web Speech)",
+      "testFail": "❌ Not available"
     }
   }
 }

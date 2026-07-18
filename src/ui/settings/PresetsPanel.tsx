@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { applyRegexRules } from "../../chat/regexTransform";
 import { usePresetsStore } from "../../stores/presetsStore";
+import { useUndoToast } from "../useUndoToast";
 import type { Preset, PresetDraft, PresetUpdate } from "../../db/repositories/presetsRepo";
 
 const inputStyle = {
@@ -303,6 +304,7 @@ function PresetEditor({
 export function PresetsPanel() {
   const { t } = useTranslation(["settings", "personas"]);
   const { presets, loaded, load, create, update, remove } = usePresetsStore();
+  const { toastUndo } = useUndoToast();
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
   useEffect(() => {
@@ -368,8 +370,26 @@ export function PresetsPanel() {
                 }}
                 onDelete={async () => {
                   if (await showConfirm(t("presets.deleteConfirm") ?? "")) {
+                    const deleted = preset;
                     await remove(preset.id);
                     setEditingId(null);
+                    toastUndo(
+                      `${t("deleted", { ns: "common" })}: ${deleted.name}`,
+                      async () => {
+                        await create({
+                          name: deleted.name,
+                          extraSystemPrompt: deleted.extraSystemPrompt,
+                          authorNote: deleted.authorNote,
+                          temperature: deleted.temperature,
+                          topP: deleted.topP,
+                          frequencyPenalty: deleted.frequencyPenalty,
+                          presencePenalty: deleted.presencePenalty,
+                          maxTokens: deleted.maxTokens,
+                          regexRules: deleted.regexRules,
+                          isDefault: deleted.isDefault,
+                        });
+                      },
+                    );
                   }
                 }}
                 onCancel={() => setEditingId(null)}

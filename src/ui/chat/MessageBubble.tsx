@@ -208,11 +208,11 @@ export function MessageBubble({
               {content || " "}
             </ReactMarkdown>
             {isStreaming && (
-              <span
-                aria-hidden
-                className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse align-middle"
-                style={{ backgroundColor: "var(--color-accent)" }}
-              />
+              <span className="streaming-dots ml-1" aria-label="AI is typing" role="status">
+                <span />
+                <span />
+                <span />
+              </span>
             )}
           </div>
         )}

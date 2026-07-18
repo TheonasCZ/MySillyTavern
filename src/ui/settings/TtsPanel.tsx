@@ -37,6 +37,8 @@ export function TtsPanel() {
   const [backend, setBackend] = useState("0");
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<"ok" | "fallback" | "fail" | null>(null);
+  const [testRunning, setTestRunning] = useState(false);
 
   // Load persisted settings
   useEffect(() => {
@@ -72,6 +74,25 @@ export function TtsPanel() {
   useEffect(() => {
     manager.setPreferredIndex(Number(backend) || 0);
   }, [backend, manager]);
+
+  const handleTest = useCallback(async () => {
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      const result = await manager.testSpeak("Hello");
+      if (!result) {
+        setTestResult("fail");
+      } else if (result.backend === "edge-tts") {
+        setTestResult("ok");
+      } else {
+        setTestResult("fallback");
+      }
+    } catch {
+      setTestResult("fail");
+    } finally {
+      setTestRunning(false);
+    }
+  }, [manager]);
 
   const handleSave = useCallback(async () => {
     const speedNum = Number(speed);
@@ -225,6 +246,37 @@ export function TtsPanel() {
         {saved && (
           <span className="text-xs" style={{ color: "var(--color-success)" }}>
             {t("tts.saved")}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void handleTest()}
+          disabled={testRunning}
+          className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-sm"
+          style={{
+            borderColor: "var(--color-border-strong)",
+            color: "var(--color-text)",
+            backgroundColor: "var(--color-surface-2)",
+          }}
+        >
+          {testRunning ? "…" : t("tts.testButton")}
+        </button>
+        {testResult === "ok" && (
+          <span className="text-xs" style={{ color: "var(--color-success)" }}>
+            {t("tts.testOk")}
+          </span>
+        )}
+        {testResult === "fallback" && (
+          <span className="text-xs" style={{ color: "var(--color-warning)" }}>
+            {t("tts.testFallback")}
+          </span>
+        )}
+        {testResult === "fail" && (
+          <span className="text-xs" style={{ color: "var(--color-danger)" }}>
+            {t("tts.testFail")}
           </span>
         )}
       </div>

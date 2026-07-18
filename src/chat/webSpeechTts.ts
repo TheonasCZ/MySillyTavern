@@ -21,13 +21,21 @@ export class WebSpeechTts implements TtsBackend {
 
   async speak(text: string, options?: TtsSpeakOptions): Promise<void> {
     const synth = this.synth;
-    if (!synth) return;
+    if (!synth) {
+      console.warn("[WebSpeechTts] window.speechSynthesis not available — TTS cannot work");
+      throw new Error("Web Speech API not available (window.speechSynthesis is null)");
+    }
 
     // Stop any current speech
     synth.cancel();
 
     const cleaned = prepareForTts(text);
-    if (!cleaned) return;
+    if (!cleaned) {
+      console.warn("[WebSpeechTts] Text empty after cleaning, nothing to speak");
+      throw new Error("Text empty after TTS preparation");
+    }
+
+    console.log("[WebSpeechTts] Speaking:", cleaned.slice(0, 60) + (cleaned.length > 60 ? "…" : ""));
 
     const utterance = new SpeechSynthesisUtterance(cleaned);
 
@@ -54,17 +62,40 @@ export class WebSpeechTts implements TtsBackend {
       if (match) utterance.voice = match;
     }
 
-    return new Promise<void>((resolve) => {
+    const SAFETY_TIMEOUT_MS = 30_000;
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+
+      const safetyTimer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          this._isSpeaking = false;
+          synth.cancel();
+          console.warn("[WebSpeechTts] Timed out after " + SAFETY_TIMEOUT_MS + " ms — no onend/onerror fired");
+          reject(new Error("Web Speech timed out"));
+        }
+      }, SAFETY_TIMEOUT_MS);
+
       utterance.onstart = () => {
         this._isSpeaking = true;
+        console.log("[WebSpeechTts] Utterance started");
       };
       utterance.onend = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
         this._isSpeaking = false;
+        console.log("[WebSpeechTts] Utterance ended");
         resolve();
       };
-      utterance.onerror = () => {
+      utterance.onerror = (event) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
         this._isSpeaking = false;
-        resolve();
+        console.warn("[WebSpeechTts] Utterance error:", event.error);
+        reject(new Error("Web Speech error: " + (event.error || "unknown")));
       };
 
       synth.speak(utterance);

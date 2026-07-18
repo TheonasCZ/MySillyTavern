@@ -32,6 +32,7 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { PromptInspector } from "./PromptInspector";
+import { useUndoToast } from "../useUndoToast";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -187,6 +188,7 @@ function FactRow({
 
 function FactsTab({ chatId }: { chatId: string }) {
   const { t } = useTranslation(["memory", "common"]);
+  const { toastUndo } = useUndoToast();
   const [facts, setFacts] = useState<LedgerFact[]>([]);
   const [filter, setFilter] = useState<LedgerCategory | "all">("all");
   const [newSubject, setNewSubject] = useState("");
@@ -269,8 +271,16 @@ function FactsTab({ chatId }: { chatId: string }) {
                 await reload();
               }}
               onDelete={async () => {
+                const deleted = f;
                 await deleteFact(f.id);
                 await reload();
+                toastUndo(
+                  `${t("deleted", { ns: "common" })}: ${deleted.subject}`,
+                  async () => {
+                    await createFact(chatId, { category: deleted.category, subject: deleted.subject, fact: deleted.fact });
+                    await reload();
+                  },
+                );
               }}
             />
           ))}
@@ -299,8 +309,16 @@ function FactsTab({ chatId }: { chatId: string }) {
               await reload();
             }}
             onDelete={async () => {
+              const deleted = f;
               await deleteFact(f.id);
               await reload();
+              toastUndo(
+                `${t("deleted", { ns: "common" })}: ${deleted.subject}`,
+                async () => {
+                  await createFact(chatId, { category: deleted.category, subject: deleted.subject, fact: deleted.fact });
+                  await reload();
+                },
+              );
             }}
           />
         ))}

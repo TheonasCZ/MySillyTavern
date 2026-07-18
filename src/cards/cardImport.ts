@@ -95,6 +95,38 @@ async function updateCharacterTtsVoice(id: string, ttsVoice: string | null): Pro
   );
 }
 
+/** Preview data extracted from a card before import. */
+export interface CardPreview {
+  name: string;
+  description: string;
+  firstMessage: string;
+  specVersion: string;
+}
+
+/** Extracts a preview from a parsed card without importing it. */
+export function previewCardFromJson(cardJsonText: string): CardPreview {
+  const card = parseCardJson(cardJsonText);
+  const normalized = normalizeCard(card);
+  return {
+    name: normalized.name ?? "",
+    description: (normalized.description ?? "").slice(0, 200),
+    firstMessage: (normalized.firstMes ?? "").slice(0, 200),
+    specVersion: normalized.specVersion ?? "unknown",
+  };
+}
+
+/** Reads a PNG card from disk and returns its preview data. */
+export async function previewCardFromPng(path: string): Promise<CardPreview> {
+  const result = await invoke<ImportPngResult>("import_card_png", { path });
+  return previewCardFromJson(result.card_json);
+}
+
+/** Reads a JSON card from disk and returns its preview data. */
+export async function previewCardFromJsonFile(path: string): Promise<CardPreview> {
+  const text = await invoke<string>("read_card_json_file", { path });
+  return previewCardFromJson(text);
+}
+
 /** Opens a native file picker restricted to `.png` and imports the chosen
  * card, or returns null if the user cancelled. */
 export async function pickAndImportPngCard(): Promise<Character | null> {

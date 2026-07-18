@@ -38,7 +38,7 @@ import {
   stripSpeakerPrefix,
   type SpeakerCandidate,
 } from "../chat/groupSpeaker";
-import { selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
+import { loadTimedState, saveTimedState, selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { buildDirectorNote, getDirectorSettings } from "../chat/director";
 import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
 import { runCanonSeed } from "../memory/canonSeed";
@@ -197,6 +197,7 @@ async function buildApiMessages(
       getSetting("lore_token_budget"),
     ]);
     activatableLore = activatable;
+    const timedState = loadTimedState(chat.id);
     const activationResult = selectActiveEntries(
       activatable,
       history.map((m) => m.content),
@@ -204,7 +205,10 @@ async function buildApiMessages(
         scanDepth: scanDepthSetting ? Number(scanDepthSetting) : undefined,
         tokenBudget: tokenBudgetSetting ? Number(tokenBudgetSetting) : undefined,
       },
+      timedState,
+      history.length,
     );
+    saveTimedState(chat.id, timedState);
     loreEntries = activationResult.entries;
   } catch (err) {
     console.warn("chatStore: lorebook activation failed for chat", chat.id, err);

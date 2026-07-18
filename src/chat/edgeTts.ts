@@ -64,12 +64,15 @@ export class EdgeTts implements TtsBackend {
   }
 
   async speak(text: string, options?: TtsSpeakOptions): Promise<void> {
+    console.log("[EdgeTts] speak() called with text:", text.slice(0, 60) + (text.length > 60 ? "…" : ""));
+
     if (typeof window === "undefined") {
       throw new Error("Edge-TTS requires a browser environment");
     }
 
     // 1. Dynamically load the package
     const pkg = await loadEdgeTtsPackage();
+    console.log("[EdgeTts] msedge-tts package loaded successfully");
     const { MsEdgeTTS, OUTPUT_FORMAT } = pkg;
 
     // 2. Create and configure TTS instance

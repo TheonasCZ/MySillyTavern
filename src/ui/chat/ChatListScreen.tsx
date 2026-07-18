@@ -14,6 +14,9 @@ import { useChatListStore } from "../../stores/chatListStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { usePresetsStore } from "../../stores/presetsStore";
+import { useUndoToast } from "../useUndoToast";
+import { useUnreadStore } from "../../stores/unreadStore";
+import { countMessages } from "../../db/repositories/messagesRepo";
 
 const inputStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -33,6 +36,7 @@ export function ChatListScreen() {
   const { t } = useTranslation(["chat", "common"]);
   const navigate = useNavigate();
   const { chats, loaded, load, create, rename, setConnection, setPersona, setPreset, remove } = useChatListStore();
+  const { toastUndo } = useUndoToast();
   const { connections, loaded: connectionsLoaded, load: loadConnections } = useConnectionsStore();
   const {
     characters,
@@ -57,6 +61,8 @@ export function ChatListScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchHits, setSearchHits] = useState<MessageSearchHit[] | null>(null);
   const [allMembers, setAllMembers] = useState<ChatMember[]>([]);
+  const [messageCounts, setMessageCounts] = useState<Record<string, number>>({});
+  const { getUnread } = useUnreadStore();
 
   // Debounced fulltext search across all chats' messages; cleared below
   // two characters so casual typing doesn't fire queries.
@@ -79,6 +85,20 @@ export function ChatListScreen() {
   useEffect(() => {
     if (loaded) void listAllChatMembers().then(setAllMembers);
   }, [loaded]);
+
+  // Load message counts for unread badges
+  useEffect(() => {
+    if (!loaded || chats.length === 0) return;
+    void (async () => {
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        chats.map(async (c) => {
+          counts[c.id] = await countMessages(c.id);
+        }),
+      );
+      setMessageCounts(counts);
+    })();
+  }, [loaded, chats]);
 
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
@@ -444,6 +464,20 @@ export function ChatListScreen() {
                   onClick={() => navigate(`/chat/${chat.id}`)}
                 >
                   {chat.title}
+                  {(() => {
+                    const count = messageCounts[chat.id];
+                    if (count === undefined) return null;
+                    const unread = getUnread(chat.id, count);
+                    if (!unread) return null;
+                    return (
+                      <span
+                        className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold"
+                        style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
+                      >
+                        {unread}
+                      </span>
+                    );
+                  })()}
                 </button>
               )}
 
@@ -463,7 +497,29 @@ export function ChatListScreen() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void (async () => { if (await showConfirm(t("list.deleteConfirm") ?? "")) void remove(chat.id); })();
+                    void (async () => {
+                      if (!await showConfirm(t("list.deleteConfirm") ?? "")) return;
+                      const deletedChat = chats.find((c) => c.id === chat.id);
+                      await remove(chat.id);
+                      if (deletedChat) {
+                        toastUndo(
+                          `${t("deleted", { ns: "common" })}: ${deletedChat.title}`,
+                          async () => {
+                            // Re-create the chat with its original properties
+                            const { createChat } = await import("../../db/repositories/chatsRepo");
+                            await createChat({
+                              title: deletedChat.title,
+                              characterIds: [deletedChat.characterId],
+                              connectionId: deletedChat.connectionId,
+                              personaId: deletedChat.personaId,
+                              
+                              gameLanguage: undefined,
+                            });
+                            await load();
+                          },
+                        );
+                      }
+                    })();
                   }}
                   className="rounded-[var(--radius-sm)] px-2 py-1"
                   style={{ color: "var(--color-danger)" }}

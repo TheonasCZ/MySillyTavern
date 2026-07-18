@@ -197,6 +197,45 @@ export function recordActivation(
   }
 }
 
+// ---- TimedState persistence -------------------------------------------------
+
+const TIMED_STATE_PREFIX = "mst_timed_";
+
+function emptyTimedState(): TimedState {
+  return { lastActivated: {}, cooldownUntil: {}, delayedUntil: {} };
+}
+
+/** Reads persisted TimedState from localStorage for the given chat.
+ *  Returns an empty state when no data exists or when the JSON is corrupted. */
+export function loadTimedState(chatId: string): TimedState {
+  try {
+    const raw = localStorage.getItem(`${TIMED_STATE_PREFIX}${chatId}`);
+    if (raw === null) return emptyTimedState();
+    const parsed = JSON.parse(raw);
+    // Defensive: ensure the parsed object has the expected shape.
+    return {
+      lastActivated: typeof parsed.lastActivated === "object" && parsed.lastActivated !== null ? parsed.lastActivated : {},
+      cooldownUntil: typeof parsed.cooldownUntil === "object" && parsed.cooldownUntil !== null ? parsed.cooldownUntil : {},
+      delayedUntil: typeof parsed.delayedUntil === "object" && parsed.delayedUntil !== null ? parsed.delayedUntil : {},
+    };
+  } catch {
+    return emptyTimedState();
+  }
+}
+
+/** Persists TimedState to localStorage for the given chat. */
+export function saveTimedState(chatId: string, state: TimedState): void {
+  try {
+    localStorage.setItem(
+      `${TIMED_STATE_PREFIX}${chatId}`,
+      JSON.stringify(state),
+    );
+  } catch {
+    // Storage full or unavailable — silently ignore; timed effects degrade
+    // gracefully without persistence.
+  }
+}
+
 // ---- Recursive activation --------------------------------------------------
 
 /** Recursively activates entries: after an entry fires, if it has
