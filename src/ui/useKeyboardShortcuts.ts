@@ -40,6 +40,13 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ctrl+B / Cmd+B — toggle sidebar
+      if (mod && e.key === "b" && !e.shiftKey) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("toggle-sidebar"));
+        return;
+      }
+
       // Escape — only when not editing text; panels handle their own Escape
       // through local key handlers. This is a catch-all for unhandled Escapes.
     }

@@ -35,6 +35,13 @@ export function Sidebar() {
     void getVersion().then(setVersion).catch(() => {});
   }, []);
 
+  // Ctrl+B keyboard shortcut to toggle sidebar
+  useEffect(() => {
+    const handler = () => setCollapsed((c) => !c);
+    window.addEventListener("toggle-sidebar", handler);
+    return () => window.removeEventListener("toggle-sidebar", handler);
+  }, []);
+
   const primaryItems = navItems.filter((i) => !i.secondary);
   const secondaryItems = navItems.filter((i) => i.secondary);
 
@@ -164,8 +171,9 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 rounded-full border p-0.5 text-xs transition-colors hover:opacity-70 sm:block"
+          className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 rounded-full border text-xs leading-none transition-colors hover:opacity-70 sm:flex sm:items-center sm:justify-center"
           style={{
+            width: 20, height: 20,
             color: "var(--color-text-muted)",
             backgroundColor: "var(--color-bg-elevated)",
             borderColor: "var(--color-border)",

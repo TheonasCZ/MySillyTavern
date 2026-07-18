@@ -672,6 +672,7 @@
     "shortcuts": {
       "title": "Klávesové zkratky",
       "regenerate": "Přegenerovat poslední odpověď",
+      "toggleSidebar": "Sbalit/rozbalit sidebar",
       "send": "Odeslat zprávu",
       "close": "Zavřít panel / popover"
     },

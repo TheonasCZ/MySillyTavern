@@ -35,6 +35,15 @@ export function ShortcutsPanel() {
           </kbd>
         </li>
         <li className="flex items-center justify-between">
+          <span>{t("shortcuts.toggleSidebar")}</span>
+          <kbd
+            className="rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-mono"
+            style={shortcutStyle}
+          >
+            {mod}+B
+          </kbd>
+        </li>
+        <li className="flex items-center justify-between">
           <span>{t("shortcuts.close")}</span>
           <kbd
             className="rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-mono"

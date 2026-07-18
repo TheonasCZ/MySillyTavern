@@ -672,6 +672,7 @@
     "shortcuts": {
       "title": "Keyboard shortcuts",
       "regenerate": "Regenerate last reply",
+      "toggleSidebar": "Toggle sidebar",
       "send": "Send message",
       "close": "Close panel / popover"
     },
