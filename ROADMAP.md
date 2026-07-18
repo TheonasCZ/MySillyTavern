@@ -544,6 +544,19 @@ licenci.
   řešit přednostně před dalším milníkem.
 - **Dokumentační hygiena** — u nových milníků držet číslování z tohoto
   souboru; commity značit `M<n>` jen podle této roadmapy.
+- **Nápad (2026-07-18): centrální crash/error reporting (Sentry) — až
+  bude víc uživatelů než vývojář sám.** Analog Crashlytics pro Tauri:
+  `tauri-plugin-sentry` (Rust strana) + oficiální Sentry browser SDK
+  (JS strana), oboje do jednoho projektu — agregovaný přehled pádů
+  napříč uživateli, ne jen lokální `app.log` na jednom disku. Zásadní
+  rozdíl od dnešního lokálního logování: data odcházejí MIMO zařízení
+  uživatele. Před nasazením nutně vyřešit: (1) explicitní opt-in
+  souhlas, nikdy tiše zapnuté ve výchozím stavu, (2) sanitizace —
+  posílat jen strukturální info (typ chyby, provider, verze aplikace),
+  NIKDY syrový text zprávy/kampaně (soukromý obsah hráčova příběhu).
+  Technická integrace samotná je otázka hodin, návrh "co smí a nesmí
+  uniknout" je práce navíc. Nemá smysl řešit, dokud je uživatel = vývojář
+  a lokální app.log (+ nadcházející úrovňové logování) stačí.
 - **Nápad (2026-07-18): stárnutí postavy s herním kalendářem** — persona
   má věk, chat má kalendář (dny/roky), ale nejsou propojené. Při postupu
   herního času by věk mohl reálně stárnout (přepočet z data narození +
