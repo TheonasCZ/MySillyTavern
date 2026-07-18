@@ -22,8 +22,6 @@ import {
   calendarFromJSON,
   type CalendarDate,
   formatCalendarDateShort,
-  seasonIcon,
-  timeIcon,
   weatherIcon,
 } from "../../memory/calendar";
 import { CalendarPanel } from "./CalendarPanel";
@@ -265,33 +263,28 @@ export function ChatScreen() {
         className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-8"
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
       >
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-sm"
-          style={{ color: "var(--color-text-muted)", backgroundColor: "var(--color-surface-2)" }}
-          title={t("room.backToList")}
-        >
-          ←
-        </button>
-        <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
+        <div className="flex items-center gap-3 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="shrink-0 text-sm"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            ← {t("room.backToList")}
+          </button>
+          <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
+          {calendarDate && (
+            <span className="text-xs whitespace-nowrap shrink-0" style={{ color: "var(--color-text-muted)" }}>
+              {formatCalendarDateShort(calendarDate)} | {weatherIcon(weather)} {weather}
+            </span>
+          )}
+        </div>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
             {connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
           </span>
         </div>
       </header>
-
-      {calendarDate && (
-        <div className="text-center border-b px-3 py-1" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg)" }}>
-          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            {seasonIcon(calendarDate.season)} {calendarDate.day}. {calendarDate.month}, Rok {calendarDate.year} ({calendarDate.season})
-            {" "}🕐 {String(calendarDate.hourOfDay ?? 6).padStart(2, "0")}:00 {timeIcon(calendarDate.hourOfDay ?? 6)}
-            {" "}|{" "}{weatherIcon(weather)} {weather}
-          </span>
-        </div>
-      )}
-
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           {error && (
