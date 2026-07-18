@@ -77,11 +77,13 @@ export interface QuestMutation {
   note?: string;
 }
 
-/** Only day-level advancement is modeled — the calendar has no clock. An
+/** Relative time advancement only — [TIME:+Nd] / [TIME:+Nh] / [TIME:+Nm].
+ *  All three normalize to whole minutes here so callers just sum them. An
  *  absolute-time tag like `[TIME: 14:00]` is still stripped from the
- *  visible text but produces no mutation (nothing to apply it to). */
+ *  visible text but produces no mutation (nothing to apply it to — we have
+ *  no notion of "set the clock to X", only "advance by X"). */
 export interface TimeMutation {
-  days: number;
+  minutes: number;
 }
 
 export interface FactionMutation {
@@ -271,12 +273,18 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  // Parse time tags: [TIME:+Nd] advances the calendar by N days. Any other
-  // [TIME:...] content (e.g. an absolute clock time like "14:00", which the
-  // day-only calendar can't represent) is stripped but produces no mutation.
+  // Parse time tags: [TIME:+Nd] / [TIME:+Nh] / [TIME:+Nm] advance the
+  // calendar by N days/hours/minutes. Any other [TIME:...] content (e.g. an
+  // absolute clock time like "14:00", which we have no way to "set to") is
+  // stripped but produces no mutation.
   cleanText = cleanText.replace(/\[TIME:\s*([^\]]*)\]/gi, (_m, inner: string) => {
-    const m = inner.match(/^\+(\d+)\s*d$/i);
-    if (m) timeMutations.push({ days: parseInt(m[1], 10) });
+    const trimmed = inner.trim();
+    const dMatch = trimmed.match(/^\+(\d+)\s*d$/i);
+    const hMatch = trimmed.match(/^\+(\d+)\s*h$/i);
+    const mMatch = trimmed.match(/^\+(\d+)\s*m$/i);
+    if (dMatch) timeMutations.push({ minutes: parseInt(dMatch[1], 10) * 1440 });
+    else if (hMatch) timeMutations.push({ minutes: parseInt(hMatch[1], 10) * 60 });
+    else if (mMatch) timeMutations.push({ minutes: parseInt(mMatch[1], 10) });
     return "";
   });
 

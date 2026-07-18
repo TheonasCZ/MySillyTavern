@@ -33,7 +33,7 @@ import {
   type GameTimeState,
 } from "./gameTime";
 import {
-  advanceDay,
+  advanceMinutes,
   calendarToJSON,
   calendarFromJSON,
   defaultCalendarDate,
@@ -320,12 +320,14 @@ export async function advanceAndPersistTime(
 
 const CALENDAR_SETTING_PREFIX = "game_calendar_";
 
-/** Advances the fantasy calendar for a chat by one day and persists it.
- * Companion to `advanceAndPersistTime` — the calendar tracks named days,
- * months and seasons separately from the real-time game clock. Never throws:
- * on any failure the default calendar (Rok 847, day 1) is returned. */
+/** Advances the fantasy calendar for a chat by `minutes` (one day, 1440, by
+ * default) and persists it. Companion to `advanceAndPersistTime` — the
+ * calendar tracks named days, months and seasons separately from the
+ * real-time game clock. Never throws: on any failure the default calendar
+ * (Rok 847, day 1) is returned. */
 export async function advanceAndPersistCalendar(
   chatId: string,
+  minutes = 1440,
 ): Promise<CalendarDate> {
   try {
     const key = `${CALENDAR_SETTING_PREFIX}${chatId}`;
@@ -336,7 +338,7 @@ export async function advanceAndPersistCalendar(
     } else {
       cal = defaultCalendarDate();
     }
-    const next = advanceDay(cal);
+    const next = advanceMinutes(cal, minutes);
     await setSetting(key, JSON.stringify(calendarToJSON(next)));
     return next;
   } catch (err) {

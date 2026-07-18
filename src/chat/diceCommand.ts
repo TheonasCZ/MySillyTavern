@@ -39,7 +39,7 @@ export function getHelpText(): string {
 \`[FACTION:+jméno:10]\` — změnit reputaci frakce
 \`[COND:+jméno:popis]\` — přidat stav (efekt)
 \`[CRAFT:výsledek:ingredience1+ingredience2]\` — objevit recept
-\`[TIME:+1d]\` — posunout herní čas o 1 den`;
+\`[TIME:+1d]\` / \`[TIME:+1h]\` / \`[TIME:+15m]\` — posunout herní čas (den/hodina/minuty)`;
 }
 
 /** Formats a dice roll result for the chat as a system message content.

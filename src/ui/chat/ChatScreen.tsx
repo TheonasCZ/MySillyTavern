@@ -22,6 +22,7 @@ import { humanizeProviderError } from "../../providers/humanizeError";
 import {
   calendarFromJSON,
   type CalendarDate,
+  formatTimeHHMM,
   monthDisplayName,
   seasonIcon,
   weatherIcon,
@@ -372,7 +373,7 @@ export function ChatScreen() {
               {calendarDate.day}. {monthDisplayName(calendarDate.month, calendarMode)}, {calendarDate.year} {seasonIcon(calendarDate.season)}
             </span>
             <span className="text-xs whitespace-nowrap" style={{ color: "var(--color-text-faint)" }}>
-              {String(calendarDate.hourOfDay ?? 6).padStart(2, "0")}:00 · {weatherIcon(weather)} {weather}
+              {formatTimeHHMM(calendarDate.hourOfDay ?? 6, calendarDate.minuteOfHour ?? 0)} · {weatherIcon(weather)} {weather}
             </span>
           </div>
         ) : (

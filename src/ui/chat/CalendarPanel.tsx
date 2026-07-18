@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { CalendarDate, CalendarMode } from "../../memory/calendar";
 import {
   formatCalendarDate,
+  formatTimeHHMM,
   monthDisplayName,
   timeIcon as timeIconFn,
   seasonIcon,
@@ -30,35 +31,112 @@ interface Props {
   onDeleteEvent: (id: string) => void;
 }
 
-/** Mini month calendar: 6×5 grid of 30 days. */
+/** Mini month calendar: 6×5 grid of 30 days, browsable month-to-month, with
+ * a small dot marking days that have an event. Clicking a marked day shows
+ * its event(s) below the grid — browsing is purely a viewer, it never
+ * changes the actual game date. */
 function MiniMonthGrid({
-  currentDay,
-  monthName,
+  monthLabel,
+  todayDay,
+  isCurrentMonth,
+  eventsByDay,
+  selectedDay,
+  onSelectDay,
+  onPrevMonth,
+  onNextMonth,
 }: {
-  currentDay: number;
-  monthName: string;
+  monthLabel: string;
+  todayDay: number;
+  isCurrentMonth: boolean;
+  eventsByDay: Map<number, CalendarEvent[]>;
+  selectedDay: number | null;
+  onSelectDay: (day: number) => void;
+  onPrevMonth: () => void;
+  onNextMonth: () => void;
 }) {
+  const { t } = useTranslation("chat");
   const days = Array.from({ length: 30 }, (_, i) => i + 1);
+  const selectedEvents = selectedDay != null ? eventsByDay.get(selectedDay) : undefined;
+
   return (
     <div className="mt-2">
-      <div className="mb-1 text-center text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>
-        {monthName}
+      <div className="mb-1 flex items-center justify-between gap-1">
+        <button
+          type="button"
+          onClick={onPrevMonth}
+          aria-label={t("calendar.prevMonth", "Předchozí měsíc") ?? ""}
+          className="shrink-0 px-1 text-xs"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          ‹
+        </button>
+        <div className="truncate text-center text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>
+          {t("calendar.monthEvents", { month: monthLabel, defaultValue: `Události ${monthLabel}` })}
+        </div>
+        <button
+          type="button"
+          onClick={onNextMonth}
+          aria-label={t("calendar.nextMonth", "Další měsíc") ?? ""}
+          className="shrink-0 px-1 text-xs"
+          style={{ color: "var(--color-text-muted)" }}
+        >
+          ›
+        </button>
       </div>
       <div className="grid grid-cols-6 gap-0.5">
-        {days.map((d) => (
-          <div
-            key={d}
-            className="flex h-6 w-6 items-center justify-center rounded text-[0.65rem]"
-            style={{
-              backgroundColor: d === currentDay ? "var(--color-accent)" : "transparent",
-              color: d === currentDay ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-              fontWeight: d === currentDay ? 700 : 400,
-            }}
-          >
-            {d}
-          </div>
-        ))}
+        {days.map((d) => {
+          const isToday = isCurrentMonth && d === todayDay;
+          const hasEvents = eventsByDay.has(d);
+          return (
+            <button
+              key={d}
+              type="button"
+              disabled={!hasEvents}
+              onClick={() => onSelectDay(d)}
+              className="relative flex h-6 w-6 items-center justify-center rounded text-[0.625em]"
+              style={{
+                backgroundColor: isToday
+                  ? "var(--color-accent)"
+                  : selectedDay === d
+                    ? "var(--color-surface-2)"
+                    : "transparent",
+                color: isToday ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+                fontWeight: isToday ? 700 : 400,
+                cursor: hasEvents ? "pointer" : "default",
+              }}
+            >
+              {d}
+              {hasEvents && (
+                <span
+                  className="absolute bottom-0.5 h-1 w-1 rounded-full"
+                  style={{ backgroundColor: isToday ? "var(--color-accent-contrast)" : "var(--color-accent)" }}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
+      {selectedEvents && selectedEvents.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {selectedEvents.map((ev) => (
+            <div
+              key={ev.id}
+              className="flex items-start gap-2 rounded-[var(--radius-sm)] p-1.5"
+              style={{ backgroundColor: "var(--color-surface-2)" }}
+            >
+              <span className="text-lg shrink-0">{ev.icon}</span>
+              <div className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">{ev.title}</span>
+                {ev.description && (
+                  <div className="mt-0.5 text-[0.625em]" style={{ color: "var(--color-text-muted)" }}>
+                    {ev.description}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -83,6 +161,45 @@ export function CalendarPanel({
   const tIcon = timeIconFn(calendarDate.hourOfDay);
   const sIcon = seasonIcon(calendarDate.season);
 
+  const currentMonthIdx = MONTHS.findIndex((m) => m.genitive === calendarDate.month);
+
+  // Which month the mini calendar is currently showing — a pure viewer,
+  // starts on the actual current month but never mutates it.
+  const [browseMonthIdx, setBrowseMonthIdx] = useState(currentMonthIdx);
+  const [browseYear, setBrowseYear] = useState(calendarDate.year);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  const goPrevMonth = () => {
+    setSelectedDay(null);
+    setBrowseMonthIdx((idx) => {
+      if (idx === 0) {
+        setBrowseYear((y) => y - 1);
+        return MONTHS.length - 1;
+      }
+      return idx - 1;
+    });
+  };
+  const goNextMonth = () => {
+    setSelectedDay(null);
+    setBrowseMonthIdx((idx) => {
+      if (idx === MONTHS.length - 1) {
+        setBrowseYear((y) => y + 1);
+        return 0;
+      }
+      return idx + 1;
+    });
+  };
+
+  const browsedMonth = MONTHS[browseMonthIdx];
+  const eventsByDay = new Map<number, CalendarEvent[]>();
+  for (const ev of events) {
+    if (ev.monthName === browsedMonth.genitive && ev.year === browseYear) {
+      const list = eventsByDay.get(ev.day) ?? [];
+      list.push(ev);
+      eventsByDay.set(ev.day, list);
+    }
+  }
+
   const handleAdd = () => {
     if (!draftTitle.trim()) return;
     onAddEvent({
@@ -97,7 +214,6 @@ export function CalendarPanel({
   };
 
   // Filter events for current month + next month
-  const currentMonthIdx = MONTHS.findIndex((m) => m.genitive === calendarDate.month);
   const nextMonthIdx = (currentMonthIdx + 1) % MONTHS.length;
   const upcomingEvents = events.filter((e) => {
     if (e.monthName === calendarDate.month && e.day >= calendarDate.day) return true;
@@ -131,7 +247,7 @@ export function CalendarPanel({
           <div className="text-center">
             <span className="text-3xl">{tIcon}</span>
             <div className="text-lg font-[var(--font-display)] mt-1">
-              {calendarDate.hourOfDay}h — {period}
+              {formatTimeHHMM(calendarDate.hourOfDay, calendarDate.minuteOfHour)} — {t(`calendar.period.${period}`, period)}
             </div>
             <div className="text-sm mt-0.5" style={{ color: "var(--color-text-muted)" }}>
               {formatCalendarDate(calendarDate, calendarMode)}
@@ -153,8 +269,17 @@ export function CalendarPanel({
           </div>
         </div>
 
-        {/* Mini month calendar */}
-        <MiniMonthGrid currentDay={calendarDate.day} monthName={monthDisplayName(calendarDate.month, calendarMode)} />
+        {/* Mini month calendar — browsable, marks days with events */}
+        <MiniMonthGrid
+          monthLabel={monthDisplayName(browsedMonth.genitive, calendarMode)}
+          todayDay={calendarDate.day}
+          isCurrentMonth={browseMonthIdx === currentMonthIdx && browseYear === calendarDate.year}
+          eventsByDay={eventsByDay}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          onPrevMonth={goPrevMonth}
+          onNextMonth={goNextMonth}
+        />
 
         {/* Upcoming events */}
         <div>

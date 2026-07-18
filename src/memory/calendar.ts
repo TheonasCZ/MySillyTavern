@@ -5,8 +5,9 @@
  * Each year has exactly 360 days: 12 months × 30 days.
  * Each season spans 90 days (3 months).
  *
- * Time-of-day is tracked as hourOfDay (0–23) alongside the date. Hours
- * advance independently; wrapping at 24h also advances the calendar day.
+ * Time-of-day is tracked as hourOfDay (0–23) and minuteOfHour (0–59)
+ * alongside the date. Minutes advance independently; wrapping at 60m
+ * advances the hour, which in turn wraps at 24h into the next day.
  *
  * Month names use Czech genitive forms for date formatting
  * (e.g. "15. Jarního větru, Rok 847"). */
@@ -21,6 +22,8 @@ export interface CalendarDate {
   season: string;
   /** Hour of day (0–23). */
   hourOfDay: number;
+  /** Minute within the hour (0–59). */
+  minuteOfHour: number;
 }
 
 // ---- Month definitions ---------------------------------------------------
@@ -76,8 +79,8 @@ export function getSeason(dayOfYear: number): string {
   return "Zima";
 }
 
-/** Builds a CalendarDate from a year, day-of-year, and optional hour. */
-export function calendarDateFromDays(year: number, dayOfYear: number, hourOfDay = 6): CalendarDate {
+/** Builds a CalendarDate from a year, day-of-year, and optional hour/minute. */
+export function calendarDateFromDays(year: number, dayOfYear: number, hourOfDay = 6, minuteOfHour = 0): CalendarDate {
   const d = Math.max(1, Math.min(DAYS_PER_YEAR, Math.floor(dayOfYear)));
   let remaining = d;
   let monthIdx = 0;
@@ -96,30 +99,43 @@ export function calendarDateFromDays(year: number, dayOfYear: number, hourOfDay 
     day: remaining,
     season: month.season,
     hourOfDay: Math.max(0, Math.min(23, Math.floor(hourOfDay))),
+    minuteOfHour: Math.max(0, Math.min(59, Math.floor(minuteOfHour))),
   };
 }
 
 /** Default calendar start: 1. Měsíce probuzení, Rok 847, 6h (dawn). */
 export function defaultCalendarDate(): CalendarDate {
-  return calendarDateFromDays(847, 1, 6);
+  return calendarDateFromDays(847, 1, 6, 0);
 }
 
-/** Advances the calendar by one day, wrapping year boundaries. Preserves hourOfDay. */
+/** Advances the calendar by a number of whole minutes (may be more than an
+ * hour or a day — wraps hours/days/years as needed). This is the one
+ * primitive all other `advance*` helpers are built on. */
+export function advanceMinutes(current: CalendarDate, minutes: number): CalendarDate {
+  const totalMinutes =
+    current.dayOfYear * 1440 + current.hourOfDay * 60 + current.minuteOfHour + Math.floor(minutes);
+  const dayOfYearRaw = Math.floor(totalMinutes / 1440);
+  const minuteOfDay = ((totalMinutes % 1440) + 1440) % 1440;
+  const hourOfDay = Math.floor(minuteOfDay / 60);
+  const minuteOfHour = minuteOfDay % 60;
+
+  // Roll dayOfYear/year the same way advanceDay always did: wrap 1..DAYS_PER_YEAR.
+  let dayOfYear = ((dayOfYearRaw - 1) % DAYS_PER_YEAR + DAYS_PER_YEAR) % DAYS_PER_YEAR + 1;
+  const yearsElapsed = Math.floor((dayOfYearRaw - 1) / DAYS_PER_YEAR);
+  const year = current.year + yearsElapsed;
+  if (dayOfYear < 1) dayOfYear += DAYS_PER_YEAR;
+
+  return calendarDateFromDays(year, dayOfYear, hourOfDay, minuteOfHour);
+}
+
+/** Advances the calendar by one day, wrapping year boundaries. Preserves the time of day. */
 export function advanceDay(current: CalendarDate): CalendarDate {
-  const nextDay = current.dayOfYear >= DAYS_PER_YEAR ? 1 : current.dayOfYear + 1;
-  const nextYear = current.dayOfYear >= DAYS_PER_YEAR ? current.year + 1 : current.year;
-  return calendarDateFromDays(nextYear, nextDay, current.hourOfDay);
+  return advanceMinutes(current, 1440);
 }
 
 /** Advances the calendar by one hour. Wraps at 24h, advancing the day. */
 export function advanceHour(current: CalendarDate): CalendarDate {
-  const nextHour = current.hourOfDay + 1;
-  if (nextHour >= 24) {
-    const nextDayOfYear = current.dayOfYear >= DAYS_PER_YEAR ? 1 : current.dayOfYear + 1;
-    const nextYear = current.dayOfYear >= DAYS_PER_YEAR ? current.year + 1 : current.year;
-    return calendarDateFromDays(nextYear, nextDayOfYear, 0);
-  }
-  return { ...current, hourOfDay: nextHour };
+  return advanceMinutes(current, 60);
 }
 
 // ---- Time-of-day helpers -------------------------------------------------
@@ -231,12 +247,17 @@ export function monthDisplayName(monthGenitive: string, mode: CalendarMode = "fa
   return REAL_MONTH_GENITIVE_FORM[monthGenitive] ?? monthGenitive;
 }
 
+/** Formats a time as "HH:mm", e.g. "07:05". */
+export function formatTimeHHMM(hourOfDay: number, minuteOfHour: number): string {
+  return `${String(hourOfDay).padStart(2, "0")}:${String(minuteOfHour).padStart(2, "0")}`;
+}
+
 /** Short format for UI header: compact, mobile-friendly. In fantasy mode,
  * shows the real month as a parenthetical hint; in real mode, shows only
  * the real month name (no fantasy name to hint at). */
 export function formatCalendarDateShort(date: CalendarDate, mode: CalendarMode = "fantasy"): string {
   const hour = date.hourOfDay ?? 6;
-  const pad = String(hour).padStart(2, "0");
+  const minute = date.minuteOfHour ?? 0;
   const monthPart =
     mode === "real"
       ? monthDisplayName(date.month, "real")
@@ -244,24 +265,29 @@ export function formatCalendarDateShort(date: CalendarDate, mode: CalendarMode =
           const real = REAL_MONTH_GENITIVE[date.month] ?? "";
           return real ? `${date.month} (${real})` : date.month;
         })();
-  return `🕐${pad}:00 ${timeIcon(hour)} ${date.day}. ${monthPart}, ${date.year} ${seasonIcon(date.season)}`;
+  return `🕐${formatTimeHHMM(hour, minute)} ${timeIcon(hour)} ${date.day}. ${monthPart}, ${date.year} ${seasonIcon(date.season)}`;
 }
 
 /** Produces the full prompt block for the current date including season effects
- * and the `[TIME:+1d]` / `[TIME:+1h]` tag instructions for advancing time. */
+ * and the `[TIME:+1d]` / `[TIME:+1h]` / `[TIME:+15m]` tag instructions for
+ * advancing time. */
 export function calendarDescription(date: CalendarDate, mode: CalendarMode = "fantasy"): string {
   const effects = SEASON_EFFECTS[date.season] ?? "";
-  const period = dayPeriod(date.hourOfDay ?? 6);
   const hour = date.hourOfDay ?? 6;
-  const tagNote = `Pro posun času použij tag [TIME:+1d] (den) nebo [TIME:+1h] (hodina). Aktuálně je ${hour}h (${period}).`;
-  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${hour}h — ${period})\n${effects}\n${tagNote}`;
+  const minute = date.minuteOfHour ?? 0;
+  const period = dayPeriod(hour);
+  const time = formatTimeHHMM(hour, minute);
+  const tagNote = `Pro posun času použij tag [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}).`;
+  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${time} — ${period})\n${effects}\n${tagNote}`;
 }
 
 // ---- Serialization ---------------------------------------------------------
 
 /** Serializes calendar state to a storable JSON object. */
-export function calendarToJSON(date: CalendarDate): { year: number; dayOfYear: number; hourOfDay: number } {
-  return { year: date.year, dayOfYear: date.dayOfYear, hourOfDay: date.hourOfDay };
+export function calendarToJSON(
+  date: CalendarDate,
+): { year: number; dayOfYear: number; hourOfDay: number; minuteOfHour: number } {
+  return { year: date.year, dayOfYear: date.dayOfYear, hourOfDay: date.hourOfDay, minuteOfHour: date.minuteOfHour };
 }
 
 /** Deserializes calendar state from stored JSON. Falls back to default on any error. */
@@ -270,7 +296,8 @@ export function calendarFromJSON(json: unknown): CalendarDate {
     const obj = json as Record<string, unknown>;
     if (typeof obj?.year === "number" && typeof obj?.dayOfYear === "number") {
       const hour = typeof obj.hourOfDay === "number" ? obj.hourOfDay : 6;
-      return calendarDateFromDays(obj.year, obj.dayOfYear, hour);
+      const minute = typeof obj.minuteOfHour === "number" ? obj.minuteOfHour : 0;
+      return calendarDateFromDays(obj.year, obj.dayOfYear, hour, minute);
     }
   } catch {
     // fall through

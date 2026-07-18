@@ -43,11 +43,13 @@ export async function processGameResponse(
   // The underlying mutations remain safe no-ops; only this diagnostic is new.
   const staleTargetErrors: string[] = [];
 
-  // Apply time mutations: [TIME:+Nd] advances the calendar by N days each.
+  // Apply time mutations: [TIME:+Nd] / [TIME:+Nh] / [TIME:+Nm], already
+  // normalized to minutes by the parser — sum and apply in one go.
   if (chatId) {
-    for (const tm of timeMutations) {
+    const totalMinutes = timeMutations.reduce((sum, tm) => sum + tm.minutes, 0);
+    if (totalMinutes > 0) {
       try {
-        for (let i = 0; i < tm.days; i++) await advanceAndPersistCalendar(chatId);
+        await advanceAndPersistCalendar(chatId, totalMinutes);
       } catch {
         // Non-critical
       }

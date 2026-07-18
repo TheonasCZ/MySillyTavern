@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   advanceDay,
   advanceHour,
+  advanceMinutes,
   calendarDateFromDays,
   calendarDescription,
   calendarFromJSON,
@@ -11,6 +12,7 @@ import {
   defaultCalendarDate,
   formatCalendarDate,
   formatCalendarDateShort,
+  formatTimeHHMM,
   getSeason,
   MONTHS,
   seasonIcon,
@@ -199,7 +201,7 @@ describe("calendarToJSON / calendarFromJSON", () => {
   it("round-trips through JSON", () => {
     const original = calendarDateFromDays(847, 200);
     const json = calendarToJSON(original);
-    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 6 });
+    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 6, minuteOfHour: 0 });
     const restored = calendarFromJSON(json);
     expect(restored.year).toBe(847);
     expect(restored.dayOfYear).toBe(200);
@@ -331,6 +333,59 @@ describe("advanceHour", () => {
 
 // ---- dayPeriod -------------------------------------------------------------
 
+// ---- advanceMinutes --------------------------------------------------------
+
+describe("advanceMinutes", () => {
+  it("advances within the same hour", () => {
+    const d = calendarDateFromDays(847, 1, 6, 0);
+    const next = advanceMinutes(d, 15);
+    expect(next.hourOfDay).toBe(6);
+    expect(next.minuteOfHour).toBe(15);
+    expect(next.dayOfYear).toBe(1);
+  });
+
+  it("rolls minutes over into the next hour", () => {
+    const d = calendarDateFromDays(847, 1, 6, 50);
+    const next = advanceMinutes(d, 20);
+    expect(next.hourOfDay).toBe(7);
+    expect(next.minuteOfHour).toBe(10);
+  });
+
+  it("rolls hours over into the next day", () => {
+    const d = calendarDateFromDays(847, 1, 23, 50);
+    const next = advanceMinutes(d, 20);
+    expect(next.dayOfYear).toBe(2);
+    expect(next.hourOfDay).toBe(0);
+    expect(next.minuteOfHour).toBe(10);
+  });
+
+  it("rolls the year over at day 360, matching advanceDay's old boundary", () => {
+    const d = calendarDateFromDays(847, 360, 23, 59);
+    const next = advanceMinutes(d, 1);
+    expect(next.year).toBe(848);
+    expect(next.dayOfYear).toBe(1);
+    expect(next.hourOfDay).toBe(0);
+    expect(next.minuteOfHour).toBe(0);
+  });
+
+  it("advanceDay/advanceHour preserve minutes and match advanceMinutes", () => {
+    const d = calendarDateFromDays(847, 10, 8, 25);
+    expect(advanceDay(d)).toEqual(advanceMinutes(d, 1440));
+    expect(advanceHour(d)).toEqual(advanceMinutes(d, 60));
+    expect(advanceHour(d).minuteOfHour).toBe(25);
+  });
+});
+
+// ---- formatTimeHHMM ---------------------------------------------------------
+
+describe("formatTimeHHMM", () => {
+  it("pads hours and minutes to two digits", () => {
+    expect(formatTimeHHMM(7, 5)).toBe("07:05");
+    expect(formatTimeHHMM(14, 30)).toBe("14:30");
+    expect(formatTimeHHMM(0, 0)).toBe("00:00");
+  });
+});
+
 describe("dayPeriod", () => {
   it("returns dawn for 5-7", () => {
     expect(dayPeriod(5)).toBe("dawn");
@@ -410,7 +465,7 @@ describe("calendarToJSON / calendarFromJSON with hourOfDay", () => {
   it("round-trips hourOfDay through JSON", () => {
     const original = calendarDateFromDays(847, 200, 14);
     const json = calendarToJSON(original);
-    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 14 });
+    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 14, minuteOfHour: 0 });
     const restored = calendarFromJSON(json);
     expect(restored.hourOfDay).toBe(14);
     expect(restored.year).toBe(847);
@@ -429,12 +484,13 @@ describe("calendarDescription with hourOfDay", () => {
   it("includes hour and period info", () => {
     const d = calendarDateFromDays(847, 45, 14);
     const desc = calendarDescription(d);
-    // calendarDescription is the prompt-facing text block — it uses natural
-    // "14h" phrasing, distinct from formatCalendarDateShort's compact
-    // "14:00" clock-style UI badge (see the sibling describe block below).
-    expect(desc).toContain("14h");
+    // calendarDescription now shows HH:mm, same as the UI badge (minutes
+    // are tracked and both need to agree, per the AI itself trying to use
+    // minute-level [TIME:...] tags before that was actually supported).
+    expect(desc).toContain("14:00");
     expect(desc).toContain("day");
     expect(desc).toContain("[TIME:+1h]");
+    expect(desc).toContain("[TIME:+15m]");
   });
 });
 

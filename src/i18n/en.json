@@ -199,7 +199,16 @@
       "cancel": "Cancel",
       "save": "Save",
       "day": "Day",
-      "delete": "Delete"
+      "delete": "Delete",
+      "period": {
+        "dawn": "dawn",
+        "day": "day",
+        "dusk": "dusk",
+        "night": "night"
+      },
+      "monthEvents": "{{month}} events",
+      "prevMonth": "Previous month",
+      "nextMonth": "Next month"
     }
   },
   "characters": {

@@ -137,7 +137,7 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "  [FACTION:+name:delta] / [FACTION:-name:delta]\n" +
   "  [COND:+name] / [COND:+name:duration] / [COND:-name]\n" +
   "  [MOD:+popis] (add body modification) / [MOD:-popis] (remove body modification)\n" +
-  "  [TIME:+1d] (advance one day — this is the ONLY time tag; the calendar has no clock, never write a clock time like [TIME:14:00])\n" +
+  "  [TIME:+1d] (advance N days) / [TIME:+1h] (advance N hours) / [TIME:+15m] (advance N minutes) — relative only, never write an absolute clock time like [TIME:14:00]\n" +
   "IMPORTANT for [COND:...] and [MOD:...]: always reuse the exact same name for the same body part/effect " +
   "across the whole story — e.g. always \"left arm\", never switch to \"left hand\" or \"my arm\" for the same " +
   "injury. A new tag with a name that already exists REPLACES the old entry instead of adding a duplicate, " +

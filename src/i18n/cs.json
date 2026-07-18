@@ -199,7 +199,16 @@
       "cancel": "Zrušit",
       "save": "Uložit",
       "day": "Den",
-      "delete": "Smazat"
+      "delete": "Smazat",
+      "period": {
+        "dawn": "úsvit",
+        "day": "den",
+        "dusk": "soumrak",
+        "night": "noc"
+      },
+      "monthEvents": "Události {{month}}",
+      "prevMonth": "Předchozí měsíc",
+      "nextMonth": "Další měsíc"
     }
   },
   "characters": {

@@ -87,9 +87,14 @@ describe("parseGameTags — skill tags", () => {
 });
 
 describe("parseGameTags — time tags", () => {
-  it("parses [TIME:+Nd] as a day-advance mutation", () => {
-    expect(parseGameTags("[TIME:+1d]").timeMutations).toEqual([{ days: 1 }]);
-    expect(parseGameTags("[TIME:+3d]").timeMutations).toEqual([{ days: 3 }]);
+  it("parses [TIME:+Nd] as a day-advance mutation, normalized to minutes", () => {
+    expect(parseGameTags("[TIME:+1d]").timeMutations).toEqual([{ minutes: 1440 }]);
+    expect(parseGameTags("[TIME:+3d]").timeMutations).toEqual([{ minutes: 3 * 1440 }]);
+  });
+
+  it("parses [TIME:+Nh] and [TIME:+Nm] as hour/minute-advance mutations", () => {
+    expect(parseGameTags("[TIME:+2h]").timeMutations).toEqual([{ minutes: 120 }]);
+    expect(parseGameTags("[TIME:+15m]").timeMutations).toEqual([{ minutes: 15 }]);
   });
 
   it("strips an unsupported clock-time tag without producing a mutation", () => {
