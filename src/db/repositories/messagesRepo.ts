@@ -16,6 +16,15 @@ export interface Message {
    * when a member is removed from the roster. */
   characterId: string | null;
   createdAt: string;
+  /** Stylized local-only summary of what this reply's game tags actually
+   *  did ("+item, skill +1, injury..."), for the active swipe — never sent
+   *  to the model, just rendered as a small footer (see MessageBubble.tsx).
+   *  Null for user/system messages and any assistant reply with no tags. */
+  changeSummary: string | null;
+  /** Per-swipe parallel to `swipes` — `changeSummary` is always
+   *  `changeSummaries[activeSwipe] ?? null`, kept in sync by
+   *  appendSwipe/shiftActiveSwipe so switching swipes shows the right one. */
+  changeSummaries: (string | null)[];
 }
 
 interface MessageRow {
@@ -27,6 +36,17 @@ interface MessageRow {
   active_swipe: number;
   character_id: string | null;
   created_at: string;
+  change_summary: string | null;
+  change_summaries: string;
+}
+
+function parseChangeSummaries(raw: string | null | undefined, fallback: string | null): (string | null)[] {
+  try {
+    if (raw) return JSON.parse(raw) as (string | null)[];
+  } catch {
+    // fall through
+  }
+  return [fallback];
 }
 
 function toMessage(row: MessageRow): Message {
@@ -45,6 +65,8 @@ function toMessage(row: MessageRow): Message {
     activeSwipe: row.active_swipe,
     characterId: row.character_id,
     createdAt: row.created_at,
+    changeSummary: row.change_summary ?? null,
+    changeSummaries: parseChangeSummaries(row.change_summaries, row.change_summary ?? null),
   };
 }
 
@@ -133,20 +155,23 @@ export async function loadOlderMessages(
 
 /** Creates a message with a single swipe variant equal to its content.
  * `characterId` records the authoring member for group chats (M10) — omit
- * for user/system messages or legacy solo chats. */
+ * for user/system messages or legacy solo chats. `changeSummary` is the
+ * local-only game-tag diff for this reply (see Message.changeSummary). */
 export async function createMessage(
   chatId: string,
   role: MessageRole,
   content: string,
   characterId: string | null = null,
+  changeSummary: string | null = null,
 ): Promise<Message> {
   const id = newId();
   const now = nowIso();
   const swipes = JSON.stringify([content]);
+  const changeSummaries = JSON.stringify([changeSummary]);
   await execute(
-    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at)
-     VALUES ($1, $2, $3, $4, $5, 0, $6, $7)`,
-    [id, chatId, role, content, swipes, characterId, now],
+    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at, change_summary, change_summaries)
+     VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9)`,
+    [id, chatId, role, content, swipes, characterId, now, changeSummary, changeSummaries],
   );
   const msg: Message = {
     id,
@@ -157,35 +182,54 @@ export async function createMessage(
     activeSwipe: 0,
     characterId,
     createdAt: now,
+    changeSummary,
+    changeSummaries: [changeSummary],
   };
   journalEntityWrite("message", msg as unknown as Record<string, unknown>);
   return msg;
 }
 
 /** Edits the content of the currently active swipe (used for manual message
- * edits — does not create a new variant). */
-export async function updateMessageContent(message: Message, content: string): Promise<Message> {
+ * edits and "continue" — does not create a new variant). `changeSummary`
+ * is left as-is (undefined) by default, e.g. for a plain manual wording
+ * tweak; pass an explicit value (or null) to replace it, e.g. "continue"
+ * merging in whatever new tags the continuation picked up. */
+export async function updateMessageContent(
+  message: Message,
+  content: string,
+  changeSummary?: string | null,
+): Promise<Message> {
   const swipes = [...message.swipes];
   swipes[message.activeSwipe] = content;
-  await execute("UPDATE messages SET content = $2, swipes = $3 WHERE id = $1", [
-    message.id,
-    content,
-    JSON.stringify(swipes),
-  ]);
-  return { ...message, content, swipes };
+  const changeSummaries = [...message.changeSummaries];
+  if (changeSummary !== undefined) changeSummaries[message.activeSwipe] = changeSummary;
+  await execute(
+    changeSummary !== undefined
+      ? "UPDATE messages SET content = $2, swipes = $3, change_summary = $4, change_summaries = $5 WHERE id = $1"
+      : "UPDATE messages SET content = $2, swipes = $3 WHERE id = $1",
+    changeSummary !== undefined
+      ? [message.id, content, JSON.stringify(swipes), changeSummary, JSON.stringify(changeSummaries)]
+      : [message.id, content, JSON.stringify(swipes)],
+  );
+  return changeSummary !== undefined
+    ? { ...message, content, swipes, changeSummary, changeSummaries }
+    : { ...message, content, swipes };
 }
 
 /** Appends a new swipe variant (regeneration) and makes it active. */
-export async function appendSwipe(message: Message, content: string): Promise<Message> {
+export async function appendSwipe(
+  message: Message,
+  content: string,
+  changeSummary: string | null = null,
+): Promise<Message> {
   const swipes = [...message.swipes, content];
   const activeSwipe = swipes.length - 1;
-  await execute("UPDATE messages SET content = $2, swipes = $3, active_swipe = $4 WHERE id = $1", [
-    message.id,
-    content,
-    JSON.stringify(swipes),
-    activeSwipe,
-  ]);
-  return { ...message, content, swipes, activeSwipe };
+  const changeSummaries = [...message.changeSummaries, changeSummary];
+  await execute(
+    "UPDATE messages SET content = $2, swipes = $3, active_swipe = $4, change_summary = $5, change_summaries = $6 WHERE id = $1",
+    [message.id, content, JSON.stringify(swipes), activeSwipe, changeSummary, JSON.stringify(changeSummaries)],
+  );
+  return { ...message, content, swipes, activeSwipe, changeSummary, changeSummaries };
 }
 
 /** Switches the active swipe by a relative offset (-1 / +1), clamped to
@@ -197,12 +241,14 @@ export async function shiftActiveSwipe(message: Message, offset: number): Promis
     return message;
   }
   const content = message.swipes[nextIndex];
-  await execute("UPDATE messages SET content = $2, active_swipe = $3 WHERE id = $1", [
+  const changeSummary = message.changeSummaries[nextIndex] ?? null;
+  await execute("UPDATE messages SET content = $2, active_swipe = $3, change_summary = $4 WHERE id = $1", [
     message.id,
     content,
     nextIndex,
+    changeSummary,
   ]);
-  return { ...message, content, activeSwipe: nextIndex };
+  return { ...message, content, activeSwipe: nextIndex, changeSummary };
 }
 
 export async function deleteMessage(id: string): Promise<void> {

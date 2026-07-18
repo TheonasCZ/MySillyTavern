@@ -12,6 +12,8 @@
  * Month names use Czech genitive forms for date formatting
  * (e.g. "15. Jarního větru, Rok 847"). */
 
+import { timeOfDay } from "./gameTime";
+
 export interface CalendarDate {
   year: number;
   /** 1-based day of year (1..360). */
@@ -275,9 +277,12 @@ export function calendarDescription(date: CalendarDate, mode: CalendarMode = "fa
   const effects = SEASON_EFFECTS[date.season] ?? "";
   const hour = date.hourOfDay ?? 6;
   const minute = date.minuteOfHour ?? 0;
-  const period = dayPeriod(hour);
+  // Czech label ("odpoledne", not the English "day" dayPeriod() below uses
+  // for icon selection) — this is the one actually read out to the model,
+  // so it needs to read as an unambiguous, on-language fact it can't miss.
+  const period = timeOfDay(hour);
   const time = formatTimeHHMM(hour, minute);
-  const tagNote = `Pro posun času použij tag [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}).`;
+  const tagNote = `Pro posun času použij tag [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}) — nenabízej hráči noční/tmavé taktiky (schování se ve tmě, noční přesun apod.), pokud právě není noc.`;
   return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${time} — ${period})\n${effects}\n${tagNote}`;
 }
 

@@ -31,6 +31,8 @@ import { runCanonSeed } from "../memory/canonSeed";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
 import { setOnInventoryImageWritten } from "../memory/imageGenQueue";
 import { getGameOverState } from "../chat/gameOver";
+import { getPendingCheckSkill, clearPendingCheckSkill } from "../chat/pendingCheck";
+import { parseChangeSummary, serializeChangeSummary } from "../chat/changeSummary";
 import { applyRegexRules } from "../chat/regexTransform";
 import { CONTINUE_AS, CONTINUE_EXACT, CONTINUE_EXACT_SOLO, SUGGEST_PROMPT } from "../prompt/promptTexts";
 import { estimateTokens } from "../prompt/tokenEstimate";
@@ -88,6 +90,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   suggestions: null,
   suggesting: false,
   gameOver: null,
+  pendingCheckSkill: null,
 
   openChat: async (chatId) => {
     if (get().streaming) {
@@ -113,13 +116,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       suggestions: null,
       suggesting: false,
       gameOver: null,
+      pendingCheckSkill: null,
     });
-    const [messages, total, chat, { members, memberCharacters }, gameOver] = await Promise.all([
+    const [messages, total, chat, { members, memberCharacters }, gameOver, pendingCheckSkill] = await Promise.all([
       listRecentMessages(chatId, MESSAGE_PAGE_SIZE),
       countMessages(chatId),
       getChat(chatId),
       loadMembers(chatId),
       getGameOverState(chatId),
+      getPendingCheckSkill(chatId),
     ]);
     // Ignore the result if the user has already navigated to a different
     // chat while this query was in flight.
@@ -139,6 +144,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       autoReply: chat?.autoReply ?? false,
       selectedSpeakerId,
       gameOver,
+      pendingCheckSkill,
     });
 
     // Canon seeding (M25.5) — first open of a fresh chat distills 3–5 story
@@ -222,6 +228,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return;
     }
 
+    // A [CHECK:...] hint only applies to the very next message, used or not
+    // — clear it now so a stale skill name from several turns ago can't
+    // attach itself to some unrelated later roll.
+    if (get().pendingCheckSkill) {
+      set({ pendingCheckSkill: null });
+      void clearPendingCheckSkill(chatId);
+    }
+
     const speakerId = pickSpeakerId(chat, members, memberCharacters, autoReply, selectedSpeakerId, trimmed, messages);
     const speaker = await resolveSpeaker(chat, memberCharacters, speakerId);
     if (!speaker) return;
@@ -240,11 +254,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const effectiveConnection = applyPreset(connection, presetParams);
 
-    const finalize = async (text: string, interrupted: boolean) => {
+    const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
-        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
+        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id, changeSummary);
         // Guard (M11 bug sweep): the user may have switched/closed the chat
         // while this stream was finalizing (abort + persist is async) — only
         // splice the new message into `messages`/`selectedSpeakerId` if this
@@ -331,11 +345,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const effectiveConnection = applyPreset(connection, presetParams);
     set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
 
-    const finalize = async (text: string, interrupted: boolean) => {
+    const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
-        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id);
+        const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id, changeSummary);
         // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
         if (get().chatId === chatId) {
           set((s) => ({ messages: [...s.messages, assistantMessage], selectedSpeakerId: speaker.id }));
@@ -405,11 +419,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ lastPromptReport: report, streamingMessageId: messageId, streamingSpeakerId: speaker.id });
     clearInterrupted(set, messageId);
 
-    const finalize = async (text: string, interrupted: boolean) => {
+    const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       finalText = applyRegexRules(finalText, regexRules ?? "");
       if (finalText) {
-        const updated = await appendSwipe(target, finalText);
+        const updated = await appendSwipe(target, finalText, changeSummary);
         // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale;
         // `messages` here belongs to whatever chat is currently open, so
         // mapping over it after a chat switch would touch the wrong list.
@@ -471,14 +485,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
 
-    const finalize = async (text: string, interrupted: boolean) => {
+    const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       addition = applyRegexRules(addition, regexRules ?? "");
       const combined = addition ? `${target.content}${/\s$/.test(target.content) ? "" : " "}${addition}` : target.content;
       // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
       const stillCurrentChat = get().chatId === chatId;
       if (addition) {
-        const updated = await updateMessageContent(target, combined);
+        // Continuing picks up wherever the original reply's tags left off —
+        // merge rather than replace, so the footer still reflects the part
+        // that was already there.
+        const mergedSummary = serializeChangeSummary([
+          ...parseChangeSummary(target.changeSummary),
+          ...parseChangeSummary(changeSummary),
+        ]);
+        const updated = await updateMessageContent(target, combined, mergedSummary);
         if (stillCurrentChat) {
           set((s) => ({ messages: s.messages.map((m) => (m.id === messageId ? updated : m)) }));
         }
@@ -658,9 +679,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
  *  refresh landing after the user has switched to a different chat. */
 async function refreshChatState(chatId: string): Promise<void> {
   if (useChatStore.getState().chatId !== chatId) return;
-  const [freshChat, gameOver] = await Promise.all([getChat(chatId), getGameOverState(chatId)]);
+  const [freshChat, gameOver, pendingCheckSkill] = await Promise.all([
+    getChat(chatId),
+    getGameOverState(chatId),
+    getPendingCheckSkill(chatId),
+  ]);
   if (freshChat && useChatStore.getState().chatId === chatId) {
-    useChatStore.setState({ chat: freshChat, gameOver });
+    useChatStore.setState({ chat: freshChat, gameOver, pendingCheckSkill });
   }
 }
 

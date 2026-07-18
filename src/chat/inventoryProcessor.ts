@@ -16,9 +16,13 @@ import { nowIso } from "../db/database";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
 import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
 import { advanceAndPersistCalendar } from "../memory/memoryEngine";
+import { advanceAndPersistWeather } from "../memory/weather";
 import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
 import { setGameOverState } from "./gameOver";
+import { setPendingCheckSkill } from "./pendingCheck";
+import { resolveDiceNotation } from "./diceCommand";
+import { serializeChangeSummary, type ChangeSummaryEntry } from "./changeSummary";
 
 /** Tag validation feedback — stored across turns so the next prompt can
  *  warn the AI about malformed tags from the previous response. */
@@ -26,16 +30,26 @@ let lastTagErrors: string[] = [];
 export function getLastTagErrors(): string[] { return lastTagErrors; }
 export function clearTagErrors(): void { lastTagErrors = []; }
 
+export interface GameResponseResult {
+  cleanText: string;
+  /** Stylized local-only summary of what this reply's tags actually did —
+   *  see Message.changeSummary. Null when there was nothing to summarize. */
+  changeSummary: string | null;
+}
+
 /** Parses game tags (inventory + skill + level + faction) from the AI response,
- *  updates the persona in DB, and returns the cleaned text. */
+ *  updates the persona in DB, and returns the cleaned text plus a display-only
+ *  summary of what changed. */
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
   chatId?: string,
-): Promise<string> {
-  if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0 && gameOverReason === null) return text;
+): Promise<GameResponseResult> {
+  if (!persona) return { cleanText: text, changeSummary: null };
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0 && gameOverReason === null && checkSkill === null && itemNoteMutations.length === 0) {
+    return { cleanText: text, changeSummary: null };
+  }
 
   // [GAMEOVER:reason] only ever takes effect in hardcore mode — the model is
   // only told the tag exists via DIRECTOR_HARDCORE_NOTE when the chat's
@@ -53,6 +67,17 @@ export async function processGameResponse(
     }
   }
 
+  // [CHECK:skill name] — offered to the quick-roll button as a bonus
+  // source; see pendingCheck.ts. The name doesn't need to match an actual
+  // skill (see inventoryTags.ts) — matching happens where it's consumed.
+  if (checkSkill !== null && chatId) {
+    try {
+      await setPendingCheckSkill(chatId, checkSkill);
+    } catch {
+      // Non-critical
+    }
+  }
+
   // Diagnostic messages for mutations that targeted state that doesn't
   // actually exist (missing item, never-learned skill, nonexistent
   // condition/modification, quest completed without being started). These
@@ -61,13 +86,22 @@ export async function processGameResponse(
   // The underlying mutations remain safe no-ops; only this diagnostic is new.
   const staleTargetErrors: string[] = [];
 
+  // Stylized, LOCAL-ONLY summary of what actually changed — never sent back
+  // to the model (see Message.changeSummary), just rendered as a small
+  // footer under the reply. Built inline as each mutation is successfully
+  // applied below, so it can never drift from what actually happened.
+  const summaryParts: ChangeSummaryEntry[] = [];
+
   // Apply time mutations: [TIME:+Nd] / [TIME:+Nh] / [TIME:+Nm], already
   // normalized to minutes by the parser — sum and apply in one go.
   if (chatId) {
     const totalMinutes = timeMutations.reduce((sum, tm) => sum + tm.minutes, 0);
     if (totalMinutes > 0) {
       try {
-        await advanceAndPersistCalendar(chatId, totalMinutes);
+        const nextCal = await advanceAndPersistCalendar(chatId, totalMinutes);
+        // Re-roll weather alongside real time actually moving — not on
+        // every message, so it doesn't flicker within a stationary scene.
+        await advanceAndPersistWeather(chatId, nextCal.season);
       } catch {
         // Non-critical
       }
@@ -80,7 +114,10 @@ export async function processGameResponse(
       try {
         const existing = await getQuestByName(chatId, qm.name);
         if (qm.op === "start") {
-          if (!existing) await createQuest({ chatId, name: qm.name, description: qm.note });
+          if (!existing) {
+            await createQuest({ chatId, name: qm.name, description: qm.note });
+            summaryParts.push({ text: `📜 Nový úkol: ${qm.name}`, kind: "neutral" });
+          }
         } else if (qm.op === "complete" || qm.op === "fail") {
           if (!existing) {
             staleTargetErrors.push(`Tag [QUEST:${qm.op === "complete" ? "✓" : "-"}${qm.name}] se pokusil dokončit quest "${qm.name}", který nikdy nebyl založen tagem [QUEST:+${qm.name}]. Nejdřív quest založ, pak ho dokonči.`);
@@ -88,6 +125,9 @@ export async function processGameResponse(
           const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
           await updateQuestStatus(quest.id, qm.op === "complete" ? "completed" : "failed");
           if (qm.note) await addQuestNote(quest.id, qm.note);
+          summaryParts.push(qm.op === "complete"
+            ? { text: `✅ Úkol splněn: ${qm.name}`, kind: "add" }
+            : { text: `❌ Úkol selhal: ${qm.name}`, kind: "remove" });
         } else if (qm.op === "note") {
           const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
           if (qm.note) await addQuestNote(quest.id, qm.note);
@@ -107,15 +147,23 @@ export async function processGameResponse(
       const idx = conditions.findIndex((c) => c.name.toLowerCase() === cm.name.toLowerCase());
       if (cm.op === "add") {
         if (idx === -1) {
+          // The model may write unresolved dice notation into `duration`
+          // (e.g. "1d4 dny") instead of picking a number itself — resolve it
+          // locally via the actual dice engine rather than trusting an LLM
+          // to do arithmetic/randomness, and so the player sees a concrete
+          // number instead of a raw expression they can't act on.
+          const duration = cm.duration ? await resolveDiceNotation(cm.duration) : cm.duration;
           conditions.push({
             name: cm.name,
-            description: [cm.description, cm.duration].filter(Boolean).join(" — "),
+            description: [cm.description, duration].filter(Boolean).join(" — "),
             expiresAt: null,
             lastTouched: nowIso(),
           });
+          summaryParts.push({ text: `🩹 ${cm.name}${duration ? ` (${duration})` : ""}`, kind: "remove" });
         }
       } else if (idx !== -1) {
         conditions.splice(idx, 1);
+        summaryParts.push({ text: `✨ ${cm.name} pominulo`, kind: "add" });
       } else {
         staleTargetErrors.push(`Tag [COND:-${cm.name}] se pokusil odebrat stav "${cm.name}", který postava nemá. Odebírej jen stavy, které aktuálně existují.`);
       }
@@ -133,9 +181,11 @@ export async function processGameResponse(
       if (mm.op === "add") {
         if (idx === -1) {
           modifications.push({ name: mm.name, description: mm.name, lastTouched: nowIso() });
+          summaryParts.push({ text: `🩸 ${mm.name}`, kind: "remove" });
         }
       } else if (idx !== -1) {
         modifications.splice(idx, 1);
+        summaryParts.push({ text: `✨ ${mm.name} zhojeno`, kind: "add" });
       } else {
         staleTargetErrors.push(`Tag [MOD:-${mm.name}] se pokusil odebrat úpravu "${mm.name}", kterou postava nemá. Odebírej jen úpravy, které aktuálně existují.`);
       }
@@ -159,6 +209,7 @@ export async function processGameResponse(
           inv.push({ item: m.item, qty: m.qty, lastTouched: nowIso() });
           newlyAddedItems.push(m.item);
         }
+        summaryParts.push({ text: `🎒 +${m.qty > 1 ? `${m.qty} ` : ""}${m.item}`, kind: "add" });
       } else {
         if (existing) {
           if (existing.qty < m.qty) {
@@ -166,9 +217,24 @@ export async function processGameResponse(
           }
           existing.qty -= m.qty;
           if (existing.qty <= 0) inv.splice(inv.indexOf(existing), 1);
+          summaryParts.push({ text: `🎒 −${m.qty > 1 ? `${m.qty} ` : ""}${m.item}`, kind: "remove" });
         } else {
           staleTargetErrors.push(`Tag [INV:-${m.item}] se pokusil odebrat předmět "${m.item}", který hráč nemá v inventáři. Odebírej jen předměty, které tam skutečně jsou.`);
         }
+      }
+    }
+    // [ITEM:name:note] — replaces an existing item's note (its condition,
+    // e.g. wear/damage), never its quantity. This is the correct place for
+    // "the knife is now slightly damaged" — not [MOD:...], which is
+    // body-only (see TWO_ROLES_INSTRUCTIONS).
+    for (const im of itemNoteMutations) {
+      const existing = inv.find((i) => i.item.toLowerCase() === im.item.toLowerCase());
+      if (existing) {
+        existing.note = im.note;
+        existing.lastTouched = nowIso();
+        summaryParts.push({ text: `🔧 ${im.item}`, kind: "update" });
+      } else {
+        staleTargetErrors.push(`Tag [ITEM:${im.item}:...] se pokusil upravit poznámku předmětu "${im.item}", který hráč nemá v inventáři. Uprav jen předměty, které tam skutečně jsou.`);
       }
     }
   }
@@ -186,19 +252,23 @@ export async function processGameResponse(
         } else {
           skills.push({ name: s.name, level: s.absolute, lastTouched: nowIso() });
         }
+        summaryParts.push({ text: existing ? `📈 ${s.name} → úroveň ${s.absolute}` : `📈 Naučeno: ${s.name}`, kind: "add" });
       } else if (s.delta > 0) {
         // Relative increase: [SKILL:name+2] or [SKILL:+name]
         if (existing) {
           existing.level += s.delta;
           existing.lastTouched = nowIso();
+          summaryParts.push({ text: `📈 ${s.name} +${s.delta}`, kind: "add" });
         } else {
           skills.push({ name: s.name, level: s.delta, lastTouched: nowIso() });
+          summaryParts.push({ text: `📈 Naučeno: ${s.name}`, kind: "add" });
         }
       } else {
         // Decrease: [SKILL:name-1] — remove if <= 0
         if (existing) {
           existing.level = Math.max(0, existing.level + s.delta);
           if (existing.level <= 0) skills.splice(skills.indexOf(existing), 1);
+          summaryParts.push({ text: `📉 ${s.name} ${s.delta}`, kind: "remove" });
         } else {
           staleTargetErrors.push(`Tag [SKILL:${s.name}${s.delta}] se pokusil snížit dovednost "${s.name}", kterou postava nikdy neměla. Snižuj jen dovednosti, které postava skutečně má.`);
         }
@@ -211,10 +281,14 @@ export async function processGameResponse(
   let xp = chatXpLevel.xp;
   let level = chatXpLevel.level;
   let hasLevelChanges = false;
+  let totalXpDelta = 0;
+  let totalLevelDelta = 0;
   for (const lc of levelChanges) {
-    if (lc.xpDelta > 0) { xp += lc.xpDelta; hasLevelChanges = true; }
-    if (lc.levelDelta > 0) { level += lc.levelDelta; hasLevelChanges = true; }
+    if (lc.xpDelta > 0) { xp += lc.xpDelta; totalXpDelta += lc.xpDelta; hasLevelChanges = true; }
+    if (lc.levelDelta > 0) { level += lc.levelDelta; totalLevelDelta += lc.levelDelta; hasLevelChanges = true; }
   }
+  if (totalXpDelta > 0) summaryParts.push({ text: `⭐ +${totalXpDelta} XP`, kind: "add" });
+  if (totalLevelDelta > 0) summaryParts.push({ text: `⭐ Úroveň +${totalLevelDelta}`, kind: "add" });
 
   // Apply faction mutations
   for (const fm of factionMutations) {
@@ -229,6 +303,7 @@ export async function processGameResponse(
       } else {
         await createFaction(persona.id, fm.name, fm.delta);
       }
+      summaryParts.push({ text: `🤝 ${fm.name} ${fm.delta > 0 ? "+" : ""}${fm.delta}`, kind: fm.delta > 0 ? "add" : "remove" });
     } catch {
       // Non-critical
     }
@@ -286,6 +361,7 @@ export async function processGameResponse(
         inv.push({ item: cdm.resultItem, qty: 1, lastTouched: nowIso() });
         newlyAddedItems.push(cdm.resultItem);
       }
+      summaryParts.push({ text: `🔨 Vyrobeno: ${cdm.resultItem}`, kind: "add" });
       // Update the recipe's perks
       const recipe = await getRecipeByResult(persona.id, cdm.resultItem);
       if (recipe) {
@@ -337,5 +413,5 @@ export async function processGameResponse(
     lastTagErrors.push("Dlouhá odpověď bez tagů. Pokud došlo ke změně inventáře, dovedností, questů nebo frakcí, použij odpovídající tagy.");
   }
 
-  return cleanText;
+  return { cleanText, changeSummary: serializeChangeSummary(summaryParts) };
 }

@@ -71,6 +71,11 @@ export interface ChatState {
    *  `openChat` and refreshed after every stream; once set, `sendMessage`/
    *  `triggerSpeaker`/`regenerate`/`continueMessage` all refuse to run. */
   gameOver: GameOverState | null;
+  /** Skill named by the GM's last [CHECK:skill name] tag — offered to the
+   *  quick-roll button as its bonus source (see pendingCheck.ts). Loaded by
+   *  `openChat`/refreshed after every stream, cleared on the next
+   *  `sendMessage` regardless of whether it was used. */
+  pendingCheckSkill: string | null;
 
   openChat: (chatId: string) => Promise<void>;
   closeChat: () => Promise<void>;

@@ -49,3 +49,46 @@ export function getHelpText(): string {
 export function formatDiceSystemMessage(_expression: string, result: string): string {
   return `🎲 ${result}`;
 }
+
+/** Matches the quick-roll tag ChatInput appends to a player message —
+ *  `[ROLL:1d20=14]` or `[ROLL:1d20+3=17]` — see TWO_ROLES_INSTRUCTIONS
+ *  (RISK AND COST). Exported so display code and any future consumer share
+ *  one definition instead of duplicating the pattern. */
+const ROLL_TAG_RE = /\[ROLL:([^\]=]+)=(-?\d+)\]/g;
+
+/** Matches simple `NdM` dice notation (e.g. "1d4", "2d6") anywhere in a
+ *  string — used to resolve unresolved dice notation the model writes into
+ *  a [COND:+name:duration] tag (see resolveDiceNotation below). Doesn't
+ *  handle modifiers (+3) or adv/dis — those aren't meaningful for a
+ *  duration, just a plain roll total. */
+const INLINE_DICE_RE = /(\d+)\s*d\s*(\d+)/i;
+
+/** Resolves the first `NdM` dice notation found in `text` into its rolled
+ *  total, in place — e.g. "1d4 dny" → "3 dny" — via the same Rust dice
+ *  engine as the `/r` command and the quick-roll button, so there's exactly
+ *  one source of randomness in the app. Text with no dice notation (e.g.
+ *  already-resolved durations like "2 dny" or "until treated") passes
+ *  through unchanged. Never throws — falls back to the original text if the
+ *  roll fails for any reason. */
+export async function resolveDiceNotation(text: string): Promise<string> {
+  const match = text.match(INLINE_DICE_RE);
+  if (!match) return text;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const expression = `${match[1]}d${match[2]}`;
+    const result: string = await invoke("eval_dice", { expression });
+    const total = result.slice(result.lastIndexOf("=") + 1).trim();
+    if (!/^-?\d+$/.test(total)) return text;
+    return `${text.slice(0, match.index)}${total}${text.slice((match.index ?? 0) + match[0].length)}`;
+  } catch {
+    return text;
+  }
+}
+
+/** Rewrites raw `[ROLL:expr=total]` tags into a readable "🎲 expr → total"
+ *  form for display only — the stored message content (and what the model
+ *  reads) keeps the raw tag; only rendering is prettified. Safe to call on
+ *  any message content, including ones with no roll tag (no-op). */
+export function formatRollTagForDisplay(content: string): string {
+  return content.replace(ROLL_TAG_RE, (_m, expression: string, total: string) => `🎲 ${expression} → ${total}`);
+}

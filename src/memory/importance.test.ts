@@ -24,6 +24,8 @@ function msg(
     characterId: null,
     createdAt: new Date().toISOString(),
     speakerName: speakerName ?? null,
+    changeSummary: null,
+    changeSummaries: [],
   };
 }
 

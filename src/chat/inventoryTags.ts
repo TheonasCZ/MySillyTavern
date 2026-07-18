@@ -7,7 +7,13 @@
  *   [INV:-item_name]              — remove item
  *   [INV:+n:item_name]            — add n items
  *   [INV:-n:item_name]            — remove n items
- * 
+ *   [ITEM:item_name:note]         — replace an EXISTING item's note (e.g.
+ *                                    wear/damage/charge state); no-op if the
+ *                                    item isn't in the inventory. This is
+ *                                    for updating an item's own condition —
+ *                                    never use [MOD:...] for that, [MOD:...]
+ *                                    is the character's body only.
+ *
  * Skill tags:
  *   [SKILL:+name]                 — learn new skill (level 1)
  *   [SKILL:+name:level]           — learn skill at given level
@@ -33,13 +39,32 @@
  *
  * Game over tag (hardcore mode only — see DIRECTOR_HARDCORE_NOTE):
  *   [GAMEOVER:reason]             — the character has died; ends the run
- * 
+ *
+ * Roll-check tag (see RISK AND COST in TWO_ROLES_INSTRUCTIONS):
+ *   [CHECK:skill name]            — names whatever expertise is actually
+ *                                    relevant to a roll the GM just called
+ *                                    for — not restricted to skills the
+ *                                    player already has. The app applies a
+ *                                    bonus only if it happens to exactly
+ *                                    match an existing skill; otherwise the
+ *                                    tag is a harmless no-op (no bonus, no
+ *                                    new skill created). Omit entirely if
+ *                                    nothing in particular applies.
+ *
  * Returns the cleaned text (all tags removed) and parsed mutations.
  */
 export interface InvMutation {
   op: "add" | "remove";
   item: string;
   qty: number;
+}
+
+/** [ITEM:item_name:note] — replaces an existing item's note field (its
+ *  condition/description), not its quantity. No-op if the item isn't in
+ *  the inventory — see inventoryProcessor.ts. */
+export interface ItemNoteMutation {
+  item: string;
+  note: string;
 }
 
 export interface SkillMutation {
@@ -114,10 +139,16 @@ interface ParsedTags {
    *  wins if the model somehow emits more than one). Only ever acted on
    *  when hardcore mode is on — see inventoryProcessor.ts. */
   gameOverReason: string | null;
+  /** [CHECK:skill name] — null unless the response named one (last one wins).
+   *  Not validated against the actual skills list here — that's done where
+   *  it's consumed, same as other tags. */
+  checkSkill: string | null;
+  itemNoteMutations: ItemNoteMutation[];
 }
 
 export function parseGameTags(text: string): ParsedTags {
   const mutations: InvMutation[] = [];
+  const itemNoteMutations: ItemNoteMutation[] = [];
   const skillChanges: SkillMutation[] = [];
   const levelChanges: LevelMutation[] = [];
   const factionMutations: FactionMutation[] = [];
@@ -128,6 +159,7 @@ export function parseGameTags(text: string): ParsedTags {
   const questMutations: QuestMutation[] = [];
   const timeMutations: TimeMutation[] = [];
   let gameOverReason: string | null = null;
+  let checkSkill: string | null = null;
 
   let cleanText = text;
 
@@ -139,6 +171,13 @@ export function parseGameTags(text: string): ParsedTags {
       if (!isNaN(n) && n > 0) qty = n;
     }
     mutations.push({ op: op === "+" ? "add" : "remove", item: item.trim(), qty });
+    return "";
+  });
+
+  // Parse item-note tags: [ITEM:item_name:note] — updates an existing
+  // item's note (condition/wear), never its quantity. See ItemNoteMutation.
+  cleanText = cleanText.replace(/\[ITEM:([^:\]]+):([^\]]+)\]/gi, (_m, item: string, note: string) => {
+    itemNoteMutations.push({ item: item.trim(), note: note.trim() });
     return "";
   });
 
@@ -302,5 +341,11 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason };
+  // Parse the roll-check tag: [CHECK:skill name] — see RISK AND COST.
+  cleanText = cleanText.replace(/\[CHECK:([^\]]+)\]/gi, (_m, skill: string) => {
+    checkSkill = skill.trim();
+    return "";
+  });
+
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations };
 }

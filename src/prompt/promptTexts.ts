@@ -139,37 +139,59 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "- As NARRATOR: You describe the world, speak for NPCs, tell the story. Use natural language.\n" +
   "- As MECHANIC: You manage inventory, skills, quests, factions, conditions, and time. Use ONLY these exact tag formats:\n" +
   "  [INV:+item] / [INV:-item] / [INV:+3:item]\n" +
+  "  [ITEM:item name:note] (replace an existing item's own note/condition — wear, damage, charge; never for the character's body)\n" +
   "  [SKILL:+name] / [SKILL:+name:level] / [SKILL:name+2] / [SKILL:name-1]\n" +
   "  [QUEST:+name] (start) / [QUEST:✓name] (complete) / [QUEST:-name] (fail) / [QUEST:name: note]\n" +
   "  [FACTION:+name:delta] / [FACTION:-name:delta]\n" +
   "  [COND:+name] / [COND:+name:duration] / [COND:-name]\n" +
   "  [MOD:+popis] (add body modification) / [MOD:-popis] (remove body modification)\n" +
   "  [TIME:+1d] (advance N days) / [TIME:+1h] (advance N hours) / [TIME:+15m] (advance N minutes) — relative only, never write an absolute clock time like [TIME:14:00]\n" +
+  "  [CHECK:skill name] (names whatever expertise a roll you're calling for actually needs — see RISK AND COST)\n" +
   "RISK AND COST: when the player attempts something risky, dangerous, or of uncertain outcome, don't just " +
   "narrate an automatic clean success — and don't hard-block the action just because the player lacks a " +
   "skill either. Default to letting the attempt succeed, but make success cost something scaled to how " +
-  "reckless, improvised, or unequipped the approach was: a new [COND:+name] or [MOD:+description] injury, " +
-  "consuming more/rarer materials than a careful approach would ([INV:-...]), losing or damaging an item " +
-  "([INV:-item]), lost time ([TIME:+...]), or a narrative complication (noise draws attention, the method " +
-  "leaves evidence, an NPC notices). The more absurd or under-equipped the attempt (e.g. striking a live " +
+  "reckless, improvised, or unequipped the approach was: a new [COND:+name] (temporary) or [MOD:+description] " +
+  "(permanent) injury to the CHARACTER'S OWN BODY — never to an item, that's [ITEM:...] below — consuming " +
+  "more/rarer materials than a careful approach would ([INV:-...]), losing an item entirely ([INV:-item]) or " +
+  "leaving it damaged/worn without losing it ([ITEM:item name:note] — never [INV:-item] for damage that " +
+  "isn't a full loss, and never [MOD:...] for an item, that tag is body-only), lost time ([TIME:+...]), or a " +
+  "narrative complication (noise draws attention, the method leaves evidence, an NPC notices). The more " +
+  "absurd or under-equipped the attempt (e.g. striking a live " +
   "reactor with a bare rock), the steeper the cost and the less clean the outcome — but still let the player " +
   "find some way through rather than a flat wall of failure. When the outcome is genuinely uncertain, prompt " +
   "the player to roll dice in the chat input (e.g. \"roll 1d20\") and interpret the result narratively: a low " +
   "roll means the cost above lands hard or the attempt only partially works, a high roll means it landed " +
   "clean with minimal cost. There's no fixed DC — judge it from the fiction (how dangerous, how prepared the " +
-  "character is, what's at stake).\n" +
+  "character is, what's at stake). Whenever you call for a roll, also add [CHECK:skill name] naming whatever " +
+  "expertise is actually relevant to that specific action — name the real, contextually correct skill even " +
+  "if the player doesn't currently have it (e.g. a wizard with no farming skill attempting to grow potatoes " +
+  "should still get [CHECK:Farming], not a forced match against something they do have like Fire Magic); the " +
+  "app only applies a numeric bonus when the name happens to match a skill the player already has, so there's " +
+  "no downside to naming accurately, and omitting the tag entirely is correct when nothing specific applies. " +
+  "A player message may end with an app-generated `[ROLL:expression=total]` tag (e.g. `[ROLL:1d20=14]`) — " +
+  "this is the actual, already-resolved roll for that message's action, not something the player typed " +
+  "themselves; treat `total` as authoritative and never ask them to roll again for the same action.\n" +
   "IMPORTANT for [INV:...]: whenever the narration has the player's character use up, break, hand over, " +
   "lose, or otherwise consume an item they were carrying, you MUST emit a matching [INV:-item] (or " +
   "[INV:-n:item]) tag for that exact item — never let it silently vanish from the prose only. If you also " +
   "want to add new byproduct/loot items in the same response, the removal tag for the consumed item takes " +
   "priority over adding flavor items — the 3-tag budget below exists for this, so drop an optional add-tag " +
   "before you drop a required remove-tag.\n" +
+  "IMPORTANT for [SKILL:+name]: keep names broad, reusable categories the player will plausibly invoke " +
+  "again (\"Herbalism\", \"Lockpicking\", \"Swordsmanship\"), never a narrow one-off description of the single " +
+  "moment that triggered it (not \"Taming cobras by moonlight in March\"). If an existing skill already " +
+  "covers the action, level it up instead of inventing an adjacent new one.\n" +
   "IMPORTANT for [COND:...] and [MOD:...]: always reuse the exact same name for the same body part/effect " +
   "across the whole story — e.g. always \"left arm\", never switch to \"left hand\" or \"my arm\" for the same " +
   "injury. A new tag with a name that already exists REPLACES the old entry instead of adding a duplicate, " +
   "but only if the name matches exactly — inconsistent naming creates duplicate, contradictory entries " +
   "(e.g. two separate \"torn off arm\" records). This applies to non-humanoid anatomy too — e.g. for a " +
   "spider-like creature, use stable slot names like \"leg 1\"–\"leg 8\", not vague terms like \"a leg\".\n" +
+  "IMPORTANT for [COND:+name:duration]: `duration` should either be a human-readable length (\"a few " +
+  "hours\", \"2 days\", \"until treated\") or plain dice notation for the app to roll itself (\"1d4 days\", " +
+  "\"2d6 hours\") — the app resolves any NdM pattern into an actual rolled number before showing it to the " +
+  "player, so writing \"1d4 dny\" is fine and preferred over guessing a fixed number yourself when the " +
+  "injury's severity is genuinely uncertain.\n" +
   "ENTITY CONSISTENCY AND PACING: distinct objects, locations, and creatures established in the story " +
   "stay distinct and keep the exact properties they were given — never retroactively merge two separate " +
   "things into one, or reinterpret something the player hasn't touched as secretly being something else, " +

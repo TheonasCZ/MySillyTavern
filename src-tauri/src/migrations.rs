@@ -185,6 +185,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_030,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 31,
+            description: "messages: add change_summary/change_summaries — stylized per-swipe diff of game tags applied by that reply, local display only",
+            sql: MIGRATION_031,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -563,6 +569,17 @@ CREATE TABLE calendar_events (
 /// Director popover) — when on, character death is real and permanent (see
 /// DIRECTOR_HARDCORE_NOTE / the [GAMEOVER:reason] tag).
 const MIGRATION_030: &str = r#"ALTER TABLE chats ADD COLUMN hardcore_mode INTEGER NOT NULL DEFAULT 0;"#;
+
+/// Local-display-only summary of what a reply's game tags actually did
+/// ("+item, -item, skill +1, injury...") — never sent back to the model,
+/// just rendered as a small footer under the message. `change_summary` is
+/// the active swipe's summary (mirrors `content`); `change_summaries` is
+/// the per-swipe array (mirrors `swipes`), so switching swipes shows the
+/// right summary for whichever variant is active.
+const MIGRATION_031: &str = r#"
+ALTER TABLE messages ADD COLUMN change_summary TEXT;
+ALTER TABLE messages ADD COLUMN change_summaries TEXT NOT NULL DEFAULT '[]';
+"#;
 
 const MIGRATION_020: &str = r#"
 CREATE TABLE tts_voice_profiles (

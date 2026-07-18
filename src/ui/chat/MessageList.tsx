@@ -455,6 +455,8 @@ export function MessageList({
                 activeSwipe: 0,
                 createdAt: "",
                 characterId: streamingSpeakerId ?? null,
+                changeSummary: null,
+                changeSummaries: [],
               }}
               content={streamingText}
               isStreaming

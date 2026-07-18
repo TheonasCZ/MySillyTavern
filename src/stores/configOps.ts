@@ -22,6 +22,8 @@ import { consumeDriftCorrections } from "../memory/driftDetector";
 import { getLastTagErrors, clearTagErrors } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { calendarDescription } from "../memory/calendar";
+import { getWeather, toGameTimeSeason } from "../memory/weather";
+import { timeOfDay, weatherDescription } from "../memory/gameTime";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { ensureCalendarInitialized } from "../memory/memoryEngine";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
@@ -141,11 +143,19 @@ export async function buildApiMessages(
   const verbatimWindowSetting = await getSetting("verbatim_window").catch(() => null);
   const verbatimWindow = verbatimWindowSetting ? Number(verbatimWindowSetting) : DEFAULT_VERBATIM_WINDOW;
 
-  // Calendar: ensure initialized and build the description for the prompt
+  // Calendar: ensure initialized and build the description for the prompt.
   let calendarDateDescription: string | undefined;
+  // Weather (see memory/weather.ts) rendered into its own `[RIGHT NOW]`
+  // block via `gameTimeDescription` — re-rolls only when the calendar
+  // actually advances, so it can't drift out of sync with the date/time the
+  // model is told, and can't flicker within one stationary scene.
+  let gameTimeDescription: string | undefined;
   try {
     const cal = await ensureCalendarInitialized(chat.id);
     calendarDateDescription = calendarDescription(cal, useSettingsStore.getState().calendarMode);
+    const weather = await getWeather(chat.id);
+    const tod = timeOfDay(cal.hourOfDay ?? 12);
+    gameTimeDescription = weatherDescription(weather, toGameTimeSeason(cal.season), tod);
   } catch (err) {
     console.warn("chatStore: calendar loading failed for chat", chat.id, err);
   }
@@ -267,6 +277,7 @@ export async function buildApiMessages(
     retrievedMemoriesDetail,
     groupMembers,
     calendarDateDescription,
+    gameTimeDescription,
     presetExtraSystemPrompt: activePreset?.extraSystemPrompt || undefined,
     presetAuthorNote: activePreset?.authorNote || undefined,
     driftCorrections,

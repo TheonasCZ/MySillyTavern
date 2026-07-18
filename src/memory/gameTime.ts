@@ -191,7 +191,7 @@ function seasonDescription(season: Season): string {
   }
 }
 
-function weatherDescription(weather: Weather, season: Season, tod: TimeOfDay): string {
+export function weatherDescription(weather: Weather, season: Season, tod: TimeOfDay): string {
   switch (weather) {
     case "jasno":
       if (tod === "noc" || tod === "ráno") {

@@ -10,7 +10,7 @@ export function startStream(
   apiMessages: ChatMessage[],
   set: Setter,
   get: Getter,
-  finalize: (content: string, interrupted: boolean) => Promise<void>,
+  finalize: (content: string, interrupted: boolean, changeSummary?: string | null) => Promise<void>,
   retry: () => void,
   refreshChatState: (chatId: string) => Promise<void>,
   // EXPERIMENTAL: number of `get_item_detail` round trips already spent on
@@ -52,13 +52,13 @@ export function startStream(
         const chat = get().chat;
         void (async () => {
           const persona = chat ? await resolveChatPersona(chat) : null;
-          const finalText = await processGameResponse(persona, text, chat?.id);
+          const { cleanText, changeSummary } = await processGameResponse(persona, text, chat?.id);
           // processGameResponse may have mutated the chat's inventory/skills/
           // conditions/xp/level in the DB directly (bypassing this store) —
           // refresh so InventoryPanel and any other live-state UI re-render
           // instead of showing a stale snapshot.
           if (chat?.id) void refreshChatState(chat.id);
-          void finalize(finalText, false);
+          void finalize(cleanText, false, changeSummary);
         })();
       },
       onError: (err) => {

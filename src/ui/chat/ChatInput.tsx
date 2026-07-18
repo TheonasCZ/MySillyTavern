@@ -3,8 +3,11 @@ import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 
+import { invoke } from "@tauri-apps/api/core";
+
 import { isDiceCommand, extractDiceExpression } from "../../chat/diceCommand";
 import { stripEmphasis } from "../../chat/inlineSuggestions";
+import type { SkillEntry } from "../../db/repositories/personasRepo";
 
 const chipMarkdownComponents = {
   em: (props: React.HTMLAttributes<HTMLElement>) => (
@@ -21,6 +24,16 @@ interface Props {
   streaming: boolean;
   onSend: (content: string) => void;
   onDiceRoll?: (expression: string) => void;
+  /** Chat-scoped skills — matched against `pendingCheckSkill` to auto-add a
+   *  bonus to the quick roll (see `rollQuickDice`). */
+  skills?: SkillEntry[];
+  /** The skill named by the GM's last [CHECK:skill name] tag, decided by
+   *  the model itself from full scene context — not derived from local text
+   *  matching, which is too easy to fool (the player's own draft is
+   *  editable, and naive substring matching false-positives on unrelated
+   *  words, e.g. "mech" the plant matching inside "Mechanika"). Null when
+   *  the GM didn't name one (or it was already spent on a prior roll). */
+  pendingCheckSkill?: string | null;
   onStop: () => void;
   suggestions: string[] | null;
   suggesting: boolean;
@@ -41,6 +54,8 @@ export function ChatInput({
   streaming,
   onSend,
   onDiceRoll,
+  skills = [],
+  pendingCheckSkill = null,
   onStop,
   suggestions,
   suggesting,
@@ -52,6 +67,22 @@ export function ChatInput({
   const { t } = useTranslation("chat");
   const [value, setValue] = useState("");
   const [diceFlash, setDiceFlash] = useState(false);
+  /** A roll made via the 🎲 quick-roll button, held here (not yet a chat
+   *  message) until the next send — one roll per message, no re-rolling
+   *  until it's actually used, and it's silently discarded on chat switch
+   *  (see the draftKey effect above). Distinct from the free-form `/r`
+   *  command below, which still posts its own immediate system message.
+   *  `bonus`/`skillName` come from the GM's own [CHECK:...] tag via
+   *  `pendingCheckSkill` (see `rollQuickDice`) — not a manual picker and not
+   *  the player's own draft, so there's nothing for the player to edit to
+   *  cherry-pick their best skill regardless of the situation. */
+  const [pendingRoll, setPendingRoll] = useState<{
+    expression: string;
+    total: number;
+    base: number;
+    bonus: number;
+    skillName?: string;
+  } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -93,6 +124,7 @@ export function ChatInput({
     // previous chat stays visible (and could get sent) in a chat that has
     // no saved draft of its own.
     setValue(localStorage.getItem(draftKey) ?? "");
+    setPendingRoll(null);
   }, [draftKey]);
 
   const handleChange = (val: string) => {
@@ -111,7 +143,7 @@ export function ChatInput({
 
   const submit = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
+    if (disabled || (!trimmed && !pendingRoll)) return;
 
     if (isDiceCommand(trimmed) && onDiceRoll) {
       const expression = extractDiceExpression(trimmed);
@@ -128,13 +160,50 @@ export function ChatInput({
       }
     }
 
-    onSend(trimmed);
-    // Save to history (max 50 entries)
-    historyRef.current = [trimmed, ...historyRef.current.slice(0, 49)];
+    // A quick-roll (🎲 button) attaches as a trailing [ROLL:expr=total] tag
+    // on the message it's sent with — the model's contract for reading it
+    // is in TWO_ROLES_INSTRUCTIONS (RISK AND COST). Once attached, the roll
+    // is spent: it can't be re-rolled or reused for a later message.
+    const content = pendingRoll
+      ? `${trimmed}${trimmed ? "\n\n" : ""}[ROLL:${pendingRoll.expression}=${pendingRoll.total}]`
+      : trimmed;
+    onSend(content);
+    setPendingRoll(null);
+    // Save to history (max 50 entries) — the roll tag is deliberately not
+    // stored in the recall history, only the text the player actually typed.
+    if (trimmed) historyRef.current = [trimmed, ...historyRef.current.slice(0, 49)];
     setHistoryIndex(-1);
     setValue("");
     localStorage.removeItem(draftKey);
-  }, [value, disabled, onSend, onDiceRoll]);
+  }, [value, disabled, onSend, onDiceRoll, pendingRoll]);
+
+  /** Quick-roll button — rolls once and holds the result here (badge on the
+   *  button) until the player actually sends a message; see `submit()`.
+   *  Locked while a roll is pending so it can't be re-rolled away.
+   *
+   *  The skill bonus comes from `pendingCheckSkill` — the GM's own
+   *  [CHECK:skill name] tag, matched exactly (case-insensitive) against the
+   *  player's current skills. Deliberately not derived from any local text
+   *  (the player's draft is editable and easy to game; naive substring
+   *  matching on prose also false-positives on unrelated words). If the GM
+   *  didn't name a skill, or named one the player doesn't have, the roll is
+   *  plain — there's no bonus to find. */
+  const rollQuickDice = useCallback(async () => {
+    if (pendingRoll) return;
+    const matched = pendingCheckSkill
+      ? skills.find((s) => s.name.trim().toLowerCase() === pendingCheckSkill.trim().toLowerCase())
+      : undefined;
+    const bonus = matched?.level ?? 0;
+    const expression = bonus !== 0 ? `1d20+${bonus}` : "1d20";
+    try {
+      const result: string = await invoke("eval_dice", { expression: "1d20" });
+      const base = parseInt(result.slice(result.lastIndexOf("=") + 1).trim(), 10);
+      const safeBase = Number.isNaN(base) ? 0 : base;
+      setPendingRoll({ expression, total: safeBase + bonus, base: safeBase, bonus, skillName: matched?.name });
+    } catch (err) {
+      console.error("Dice roll failed:", err);
+    }
+  }, [pendingRoll, pendingCheckSkill, skills]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter or Ctrl+Enter sends
@@ -220,6 +289,36 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         rows={1}
       />
+      {onDiceRoll && (
+      <button
+        type="button"
+        onClick={() => void rollQuickDice()}
+        disabled={disabled}
+        title={
+          pendingRoll
+            ? (pendingRoll.bonus !== 0
+                ? t("room.rollDicePendingWithBonus", { base: pendingRoll.base, bonus: pendingRoll.bonus, skill: pendingRoll.skillName, total: pendingRoll.total })
+                : t("room.rollDicePending", { total: pendingRoll.total })) ?? ""
+            : t("room.rollDice") ?? ""
+        }
+        className="relative shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base disabled:opacity-50"
+        style={{
+          borderColor: pendingRoll ? "var(--color-brass)" : "var(--color-border-strong)",
+          backgroundColor: "var(--color-surface-2)",
+          color: "var(--color-text-muted)",
+        }}
+      >
+        🎲
+        {pendingRoll && (
+          <span
+            className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center whitespace-nowrap rounded-full px-1 text-xs font-bold"
+            style={{ backgroundColor: "var(--color-brass)", color: "var(--color-accent-contrast)" }}
+          >
+            {pendingRoll.bonus !== 0 ? `${pendingRoll.base} +${pendingRoll.bonus}` : pendingRoll.total}
+          </span>
+        )}
+      </button>
+      )}
       {showSuggestButton && (
       <button
         type="button"
@@ -253,7 +352,7 @@ export function ChatInput({
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || !value.trim()}
+          disabled={disabled || (!value.trim() && !pendingRoll)}
           title={t("room.send") ?? ""}
           className="shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base disabled:opacity-50"
           style={{ borderColor: "var(--color-accent)", backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}

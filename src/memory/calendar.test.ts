@@ -488,7 +488,10 @@ describe("calendarDescription with hourOfDay", () => {
     // are tracked and both need to agree, per the AI itself trying to use
     // minute-level [TIME:...] tags before that was actually supported).
     expect(desc).toContain("14:00");
-    expect(desc).toContain("day");
+    // Czech label ("odpoledne"), not the English dayPeriod() bucket used for
+    // icon selection — the model reads this text, so it must be unambiguous
+    // in-language (see calendarDescription's time-consistency note).
+    expect(desc).toContain("odpoledne");
     expect(desc).toContain("[TIME:+1h]");
     expect(desc).toContain("[TIME:+15m]");
   });

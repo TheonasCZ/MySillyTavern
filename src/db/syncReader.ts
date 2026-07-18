@@ -167,8 +167,8 @@ async function applyMessage(entry: JournalEntry): Promise<void> {
   // INSERT OR IGNORE — messages from other devices are always accepted but
   // never overwritten
   await execute(
-    `INSERT OR IGNORE INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT OR IGNORE INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at, change_summary, change_summaries)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       id,
       e.chat_id ?? e.chatId ?? "",
@@ -178,6 +178,8 @@ async function applyMessage(entry: JournalEntry): Promise<void> {
       e.active_swipe ?? 0,
       e.character_id ?? e.characterId ?? null,
       e.created_at ?? e.createdAt ?? entry.ts,
+      e.change_summary ?? e.changeSummary ?? null,
+      e.change_summaries ?? (JSON.stringify([e.change_summary ?? e.changeSummary ?? null])),
     ],
   );
 }

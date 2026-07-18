@@ -4,6 +4,15 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import type { Message } from "../../db/repositories/messagesRepo";
+import { formatRollTagForDisplay } from "../../chat/diceCommand";
+import { parseChangeSummary, type ChangeSummaryKind } from "../../chat/changeSummary";
+
+const CHANGE_SUMMARY_COLORS: Record<ChangeSummaryKind, string> = {
+  add: "var(--color-success)",
+  remove: "var(--color-danger)",
+  update: "var(--color-warning)",
+  neutral: "var(--color-text-faint)",
+};
 
 const markdownComponents = {
   em: (props: React.HTMLAttributes<HTMLElement>) => (
@@ -205,7 +214,7 @@ export function MessageBubble({
         ) : (
           <div className="text-sm leading-relaxed" style={{ color: "var(--color-text)" }}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {content || " "}
+              {formatRollTagForDisplay(content) || " "}
             </ReactMarkdown>
             {isStreaming && (
               <span className="streaming-dots ml-1" aria-label="AI is typing" role="status">
@@ -214,6 +223,19 @@ export function MessageBubble({
                 <span />
               </span>
             )}
+          </div>
+        )}
+
+        {!editing && !isStreaming && message.changeSummary && (
+          <div
+            className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs"
+            title={t("room.changeSummaryHint") ?? ""}
+          >
+            {parseChangeSummary(message.changeSummary).map((entry, i) => (
+              <span key={i} style={{ color: CHANGE_SUMMARY_COLORS[entry.kind] }}>
+                {entry.text}
+              </span>
+            ))}
           </div>
         )}
 

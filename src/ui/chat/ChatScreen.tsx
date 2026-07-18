@@ -100,6 +100,7 @@ export function ChatScreen() {
     hasOlderMessages,
     loadingOlderMessages,
     gameOver,
+    pendingCheckSkill,
     openChat,
     closeChat,
     loadOlderMessages,
@@ -883,6 +884,8 @@ export function ChatScreen() {
           streaming={streaming}
           onSend={(content) => void sendMessage(content)}
           onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
+          skills={chat?.skills}
+          pendingCheckSkill={pendingCheckSkill}
           onStop={() => void stop()}
           suggestions={combinedSuggestions}
           suggesting={suggesting}
