@@ -264,12 +264,13 @@ export function ChatScreen() {
         onClick={() => setPersonaSwitcherOpen((v) => !v)}
         title={persona ? `${t("room.personaLabel")} ${persona.name}` : t("room.noPersona")}
         aria-pressed={personaSwitcherOpen}
+        className="flex"
       >
         {persona && avatarSrc(persona.avatarPath) ? (
           <img
             src={avatarSrc(persona.avatarPath) ?? undefined}
             alt={persona.name}
-            className="h-10 w-10 rounded-full border object-cover"
+            className="h-10 w-10 rounded-full border object-cover object-top"
             style={{ borderColor: "var(--color-border-strong)" }}
           />
         ) : (
@@ -317,7 +318,7 @@ export function ChatScreen() {
                 }}
               >
                 {avatarSrc(p.avatarPath) ? (
-                  <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                  <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover object-top" />
                 ) : (
                   <span
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm"
@@ -382,12 +383,13 @@ export function ChatScreen() {
                 onClick={() => panels.setGroupOpen((v) => !v)}
                 title={`${t("room.gmLabel")} ${actions.fallbackCharacter.name}`}
                 aria-pressed={panels.groupOpen}
+                className="flex"
               >
                 {actions.fallbackCharacter.avatarUrl ? (
                   <img
                     src={actions.fallbackCharacter.avatarUrl}
                     alt={actions.fallbackCharacter.name}
-                    className="h-10 w-10 rounded-[var(--radius-md)] border object-cover"
+                    className="h-10 w-10 rounded-[var(--radius-md)] border object-cover object-top"
                     style={{ borderColor: panels.groupOpen ? "var(--color-accent)" : "var(--color-border-strong)" }}
                   />
                 ) : (
@@ -416,20 +418,6 @@ export function ChatScreen() {
               )}
             </div>
           )}
-          <div
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
-            style={{
-              borderColor: connection ? "var(--color-success)" : "var(--color-danger)",
-              backgroundColor: "var(--color-surface-2)",
-            }}
-            title={
-              connection
-                ? `${t("room.connectionLabel")} ${connection.name}\n${t("room.contextLabel")}: ${Math.round(actions.contextUsage * 100)}%`
-                : t("room.errors.noConnection")
-            }
-          >
-            {connection ? "🔌" : "⚠️"}
-          </div>
         </div>
       </header>
 
@@ -823,6 +811,22 @@ export function ChatScreen() {
             </button>
           ))}
 
+          <div className="mt-auto flex flex-col items-center pt-2">
+            <div
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
+              style={{
+                borderColor: connection ? "var(--color-success)" : "var(--color-danger)",
+                backgroundColor: "var(--color-surface-2)",
+              }}
+              title={
+                connection
+                  ? `${t("room.connectionLabel")} ${connection.name}\n${t("room.contextLabel")}: ${Math.round(actions.contextUsage * 100)}%`
+                  : t("room.errors.noConnection")
+              }
+            >
+              {connection ? "🔌" : "⚠️"}
+            </div>
+          </div>
         </nav>
 
       </div>
@@ -883,7 +887,7 @@ export function ChatScreen() {
                   src={url}
                   alt={c.name}
                   title={c.name}
-                  className="h-6 w-6 rounded-full border object-cover"
+                  className="h-6 w-6 rounded-full border object-cover object-top"
                   style={{ borderColor: "var(--color-border-strong)", marginLeft: i === 0 ? 0 : "-0.4rem" }}
                 />
               ) : (

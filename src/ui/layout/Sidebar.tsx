@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { NavLink, useLocation } from "react-router-dom";
 import { getVersion } from "@tauri-apps/api/app";
 
+import appIcon from "../../assets/app-icon.png";
+
 type NavItem = {
   to: string;
   key: string;
@@ -94,10 +96,11 @@ export function Sidebar() {
       >
         {/* ---- Header row ---- */}
         <div className={["mb-6 flex items-center gap-2", collapsed ? "justify-center" : "px-2"].join(" ")}>
-          <span
+          <img
+            src={appIcon}
+            alt=""
             aria-hidden
-            className={["inline-block h-2.5 w-2.5 rounded-full", collapsed ? "" : "shrink-0"].join(" ")}
-            style={{ backgroundColor: "var(--color-accent)" }}
+            className="h-6 w-6 shrink-0 rounded-[var(--radius-sm)]"
           />
           {!collapsed && (
             <span className="font-[var(--font-display)] text-lg tracking-tight">{t("appName")}</span>
