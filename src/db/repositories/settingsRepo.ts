@@ -27,6 +27,30 @@ export async function getAllSettings(): Promise<Record<string, string>> {
   return Object.fromEntries(rows.map((r) => [r.key, r.value]));
 }
 
+// ---- Log level (tiered logging) ------------------------------------------
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+const LOG_LEVEL_SETTING_KEY = "log_level";
+const LOG_LEVELS: readonly LogLevel[] = ["debug", "info", "warn", "error"];
+
+function isLogLevel(value: string): value is LogLevel {
+  return (LOG_LEVELS as readonly string[]).includes(value);
+}
+
+/** Reads the configured minimum log level, or `null` if never set (callers
+ *  should fall back to the default, `"info"`). */
+export async function getLogLevel(): Promise<LogLevel | null> {
+  const raw = await getSetting(LOG_LEVEL_SETTING_KEY);
+  if (raw && isLogLevel(raw)) return raw;
+  return null;
+}
+
+/** Persists the configured minimum log level. */
+export async function setLogLevel(level: LogLevel): Promise<void> {
+  await setSetting(LOG_LEVEL_SETTING_KEY, level);
+}
+
 // ---- Calendar helpers (plan M23) ----------------------------------------
 
 export const CALENDAR_SETTING_KEY = "game_calendar";

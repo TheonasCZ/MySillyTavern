@@ -54,7 +54,7 @@ export function chatStream(
         if (!firstTokenLogged) {
           firstTokenLogged = true;
           if (import.meta.env.DEV) {
-            console.log(
+            console.debug(
               `[chatStream] first token after ${(performance.now() - startedAt).toFixed(0)}ms`,
             );
           }

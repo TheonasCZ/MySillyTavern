@@ -504,7 +504,13 @@
       "updateDownloading": "Downloading and installing… the app will restart itself",
       "updateUpToDate": "You're on the latest version.",
       "updateError": "Update check failed — try again later.",
-      "updateInstall": "Update to {{version}}"
+      "updateInstall": "Update to {{version}}",
+      "logLevelLabel": "Log level",
+      "logLevelHint": "Controls what gets written to the log file (see above) — the browser console always shows everything, this only limits the file.",
+      "logLevelDebug": "Debug — very detailed, for actively hunting a bug.",
+      "logLevelInfo": "Info — routine events (default).",
+      "logLevelWarn": "Warn — only problems and warnings.",
+      "logLevelError": "Error — only major failures, recommended for normal play."
     },
     "memory": {
       "subtitle": "Default memory engine settings. The extraction connection can be overridden per chat in the Memory panel.",

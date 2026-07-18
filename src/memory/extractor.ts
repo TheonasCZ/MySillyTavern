@@ -386,6 +386,6 @@ export async function runExtraction(
       await setFactCanon(id, true);
     }
   } catch (err) {
-    console.warn("ledger extraction failed", err);
+    console.warn("extractor: ledger extraction failed for chat", chatId, err);
   }
 }

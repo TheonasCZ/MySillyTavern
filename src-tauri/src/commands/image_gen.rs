@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager};
 
+use crate::commands::logging::{log_line, LogLevel};
 use crate::commands::secrets::get_api_key;
 use crate::providers::{self, ConnectionDto};
 
@@ -26,6 +27,16 @@ pub async fn generate_illustration(
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("not available in your country") || msg.contains("FAILED_PRECONDITION") {
+                // Gemini image generation is geo-blocked for this account/
+                // region — fall back to the free Pollinations.ai backend
+                // rather than failing the request outright. Worth a log
+                // line: if this fires unexpectedly often it's a sign the
+                // configured connection can never use Gemini for images.
+                log_line(
+                    &app,
+                    LogLevel::Warn,
+                    &format!("generate_illustration: Gemini geo-blocked ({msg}), falling back to Pollinations.ai"),
+                );
                 providers::image_gen::generate_image_free(&prompt).await.map_err(|e| e.to_string())?
             } else {
                 return Err(msg);

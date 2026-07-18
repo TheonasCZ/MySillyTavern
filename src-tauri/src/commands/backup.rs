@@ -24,6 +24,8 @@ use tauri::{AppHandle, Manager};
 use zip::write::SimpleFileOptions;
 use zip::ZipArchive;
 
+use super::logging::{log_line, LogLevel};
+
 const DB_FILE_NAME: &str = "mysillytavern.db";
 const PENDING_IMPORT_FILE_NAME: &str = "pending_import.zip";
 const BACKUPS_DIR_NAME: &str = "backups";
@@ -168,7 +170,7 @@ pub fn apply_pending_import(app: &AppHandle) {
     let pending = match app_data_dir(app) {
         Ok(dir) => dir.join(PENDING_IMPORT_FILE_NAME),
         Err(e) => {
-            eprintln!("apply_pending_import: {e}");
+            log_line(app, LogLevel::Warn, &format!("apply_pending_import: {e}"));
             return;
         }
     };
@@ -177,7 +179,7 @@ pub fn apply_pending_import(app: &AppHandle) {
     }
 
     if let Err(e) = apply_pending_import_inner(app, &pending) {
-        eprintln!("apply_pending_import failed: {e}");
+        log_line(app, LogLevel::Warn, &format!("apply_pending_import failed: {e}"));
     }
     // Always remove the marker afterwards, success or failure — a failed
     // import shouldn't retry forever on every subsequent launch.
@@ -284,7 +286,7 @@ fn cleanup_old_backups(app: &AppHandle, max_count: usize) {
     let dir = match backups_dir(app) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("cleanup_old_backups: {e}");
+            log_line(app, LogLevel::Warn, &format!("cleanup_old_backups: {e}"));
             return;
         }
     };
@@ -298,7 +300,7 @@ fn cleanup_old_backups(app: &AppHandle, max_count: usize) {
             })
             .collect(),
         Err(e) => {
-            eprintln!("cleanup_old_backups: read_dir failed: {e}");
+            log_line(app, LogLevel::Warn, &format!("cleanup_old_backups: read_dir failed: {e}"));
             return;
         }
     };

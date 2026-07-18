@@ -72,6 +72,6 @@ export async function runSummarization(
     const upToMessageId = messagesToFold[messagesToFold.length - 1].id;
     await upsertSummary(chatId, upToMessageId, trimmed);
   } catch (err) {
-    console.warn("summarization failed", err);
+    console.warn("summarizer: summarization failed for chat", chatId, err);
   }
 }

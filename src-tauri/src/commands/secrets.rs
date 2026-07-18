@@ -43,7 +43,7 @@ impl FileStore {
             .map_err(|e| format!("nepodařilo se parsovat soubor s klíči: {e}"))
     }
 
-    fn save(&self, map: &HashMap<String, String>) -> Result<(), String> {
+    fn save(&self, app: Option<&AppHandle>, map: &HashMap<String, String>) -> Result<(), String> {
         let path = self.path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -55,11 +55,22 @@ impl FileStore {
             .map_err(|e| format!("nepodařilo se vytvořit soubor s klíči: {e}"))?;
         file.write_all(json.as_bytes())
             .map_err(|e| format!("nepodařilo se zapsat klíče: {e}"))?;
-        // Set permissions to 0600 (owner read/write only) on Unix
+        // Set permissions to 0600 (owner read/write only) on Unix. A failure
+        // here is security-relevant (the API-key file would stay readable
+        // by other local users) but not worth hard-failing the save over —
+        // log it so it's at least visible instead of silently swallowed.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+            if let Err(e) = file.set_permissions(fs::Permissions::from_mode(0o600)) {
+                if let Some(app) = app {
+                    crate::commands::logging::log_line(
+                        app,
+                        crate::commands::logging::LogLevel::Warn,
+                        &format!("secrets: failed to set 0600 permissions on {}: {e}", path.display()),
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -79,19 +90,19 @@ impl FileStore {
         Ok(map.get(connection_id).cloned())
     }
 
-    pub fn set(&self, connection_id: &str, key: &str) -> Result<(), String> {
+    pub fn set(&self, app: &AppHandle, connection_id: &str, key: &str) -> Result<(), String> {
         let mut map = self.get_map()?;
         map.insert(connection_id.to_string(), key.to_string());
-        self.save(&map)?;
+        self.save(Some(app), &map)?;
         // Update cache
         *self.cache.lock().unwrap() = Some(map);
         Ok(())
     }
 
-    pub fn delete(&self, connection_id: &str) -> Result<(), String> {
+    pub fn delete(&self, app: &AppHandle, connection_id: &str) -> Result<(), String> {
         let mut map = self.get_map()?;
         map.remove(connection_id);
-        self.save(&map)?;
+        self.save(Some(app), &map)?;
         *self.cache.lock().unwrap() = Some(map);
         Ok(())
     }
@@ -115,12 +126,12 @@ fn app_secrets_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn set_api_key(app: AppHandle, connection_id: String, key: String) -> Result<(), String> {
-    store_from_app(&app)?.set(&connection_id, &key)
+    store_from_app(&app)?.set(&app, &connection_id, &key)
 }
 
 #[tauri::command]
 pub fn delete_api_key(app: AppHandle, connection_id: String) -> Result<(), String> {
-    store_from_app(&app)?.delete(&connection_id)
+    store_from_app(&app)?.delete(&app, &connection_id)
 }
 
 #[tauri::command]

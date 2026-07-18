@@ -260,7 +260,9 @@ export function ChatScreen() {
           }));
         }
       } catch (err) {
-        console.warn("dice roll failed", err);
+        // No other UI feedback on this path (no toast) — error level so it's
+        // at least not invisible if a user reports "dice roll did nothing".
+        console.error("ChatScreen: dice roll failed for expression", expression, "in chat", chatId, err);
       }
     },
     [chatId],
@@ -977,7 +979,10 @@ export function ChatScreen() {
                         setExportJobId(result.jobId);
                         setExportStatus(null);
                       } catch (err) {
-                        console.warn("export start failed", err);
+                        // No other UI feedback on this path (no toast) — error
+                        // level so it's at least not invisible if a user
+                        // reports "chronicle export button did nothing".
+                        console.error("ChatScreen: chronicle export start failed for chat", id, err);
                       }
                     }}
                     disabled={!exportConnectionId}

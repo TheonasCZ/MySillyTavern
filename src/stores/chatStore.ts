@@ -207,7 +207,7 @@ async function buildApiMessages(
     );
     loreEntries = activationResult.entries;
   } catch (err) {
-    console.warn("lorebook activation failed", err);
+    console.warn("chatStore: lorebook activation failed for chat", chat.id, err);
   }
 
   let ledgerFacts: Awaited<ReturnType<typeof listActiveFacts>> = [];
@@ -217,7 +217,7 @@ async function buildApiMessages(
     ledgerFacts = facts;
     summaryText = summary?.text ?? null;
   } catch (err) {
-    console.warn("loading ledger/summary failed", err);
+    console.warn("chatStore: loading ledger/summary failed for chat", chat.id, err);
   }
 
   const connection = resolveConnection(chat.connectionId);
@@ -230,7 +230,7 @@ async function buildApiMessages(
     const cal = await ensureCalendarInitialized(chat.id);
     calendarDateDescription = calendarDescription(cal);
   } catch (err) {
-    console.warn("calendar loading failed", err);
+    console.warn("chatStore: calendar loading failed for chat", chat.id, err);
   }
 
   // Semantic retrieval (M7/M8): one embedding call over the conversation
@@ -265,7 +265,11 @@ async function buildApiMessages(
         ];
       }
     } catch (err) {
-      console.warn("semantic retrieval failed", err);
+      // Deliberately degrades to non-semantic behavior on any failure
+      // (offline, no embeddings yet, embedding-incapable connection) — see
+      // the comment above. Not warn-worthy on its own; useful when actively
+      // debugging why "relevant memories" aren't showing up.
+      console.debug("chatStore: semantic retrieval failed for chat", chat.id, err);
     }
   }
 

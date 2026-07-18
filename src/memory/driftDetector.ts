@@ -233,6 +233,6 @@ export async function runDriftCheck(
     };
     await saveDriftState(chatId, next);
   } catch (err) {
-    console.warn("drift check failed", err);
+    console.warn("driftDetector: drift check failed for chat", chatId, err);
   }
 }

@@ -227,7 +227,7 @@ async function runDueWork(chatId: string): Promise<void> {
         );
         await runDriftCheck(chatId, connection, canon, transcript, chat.gameLanguage);
       } catch (err) {
-        console.warn("drift check scheduling failed", err);
+        console.warn("memoryEngine: drift check scheduling failed for chat", chatId, err);
       }
     }
   }
@@ -269,7 +269,7 @@ async function runDueWork(chatId: string): Promise<void> {
     );
     await syncLoreEmbeddings(connection, loreEntries);
   } catch (err) {
-    console.warn("embedding sync failed", err);
+    console.warn("memoryEngine: embedding sync failed for chat", chatId, err);
   }
 }
 
@@ -279,7 +279,7 @@ async function drainQueue(chatId: string, entry: QueueEntry): Promise<void> {
   } catch (err) {
     // Belt and suspenders: extractor/summarizer already catch their own
     // errors, but a DB read/write here (e.g. getChat) could still throw.
-    console.warn("memory engine job failed", err);
+    console.warn("memoryEngine: due-work job failed for chat", chatId, err);
   } finally {
     entry.running = false;
     if (entry.pendingRerun) {
@@ -313,7 +313,7 @@ export async function advanceAndPersistTime(
     await setSetting(key, JSON.stringify(next));
     return next;
   } catch (err) {
-    console.warn("advanceAndPersistTime failed", err);
+    console.warn("memoryEngine: advanceAndPersistTime failed for chat", chatId, err);
     return defaultGameTimeState();
   }
 }
@@ -340,7 +340,7 @@ export async function advanceAndPersistCalendar(
     await setSetting(key, JSON.stringify(calendarToJSON(next)));
     return next;
   } catch (err) {
-    console.warn("advanceAndPersistCalendar failed", err);
+    console.warn("memoryEngine: advanceAndPersistCalendar failed for chat", chatId, err);
     return defaultCalendarDate();
   }
 }
@@ -359,7 +359,7 @@ export async function ensureCalendarInitialized(chatId: string): Promise<Calenda
     await setSetting(key, JSON.stringify(calendarToJSON(cal)));
     return cal;
   } catch (err) {
-    console.warn("ensureCalendarInitialized failed", err);
+    console.warn("memoryEngine: ensureCalendarInitialized failed for chat", chatId, err);
     return defaultCalendarDate();
   }
 }

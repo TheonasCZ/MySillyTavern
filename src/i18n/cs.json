@@ -504,7 +504,13 @@
       "updateDownloading": "Stahuji a instaluji… apka se pak sama restartuje",
       "updateUpToDate": "Máš nejnovější verzi.",
       "updateError": "Kontrola aktualizace se nezdařila — zkus to později.",
-      "updateInstall": "Aktualizovat na {{version}}"
+      "updateInstall": "Aktualizovat na {{version}}",
+      "logLevelLabel": "Úroveň logování",
+      "logLevelHint": "Určuje, co všechno se zapisuje do logu (viz výše) — v konzoli prohlížeče se vždy zobrazí úplně vše, tohle jen omezuje soubor.",
+      "logLevelDebug": "Debug — velmi podrobné, pro aktivní hledání chyby.",
+      "logLevelInfo": "Info — běžné události (výchozí).",
+      "logLevelWarn": "Warn — jen problémy a varování.",
+      "logLevelError": "Error — jen velké chyby, doporučeno pro běžné hraní."
     },
     "memory": {
       "subtitle": "Výchozí nastavení paměťového enginu. Extrakční připojení lze přepsat pro každý chat zvlášť v panelu Paměť.",

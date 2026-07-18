@@ -115,6 +115,6 @@ export async function runCanonSeed(
       }
     }
   } catch (err) {
-    console.warn("canon seed failed", err);
+    console.warn("canonSeed: seeding failed for chat", chatId, err);
   }
 }

@@ -51,12 +51,14 @@ fn rotate_if_needed(log_path: &Path, max_bytes: u64) -> std::io::Result<()> {
     fs::rename(log_path, &rotated)
 }
 
-/// Appends one line to the app log, rotating first if needed. Truncates
-/// `line` to `MAX_LINE_CHARS` characters (counted, not bytes, to stay on a
-/// char boundary) so a single pathological error can't blow up the file.
-#[tauri::command]
-pub fn append_log(app: AppHandle, line: String) -> Result<(), String> {
-    let dir = logs_dir(&app)?;
+/// Appends one already-formatted line to the app log, rotating first if
+/// needed. Truncates to `MAX_LINE_CHARS` characters (counted, not bytes, to
+/// stay on a char boundary) so a single pathological error can't blow up
+/// the file. This is the plain-function core shared by the `append_log`
+/// Tauri command (frontend IPC) and `log_line` (direct Rust callers, see
+/// below) — both funnel into the same `app.log`.
+fn append_log_line(app: &AppHandle, line: String) -> Result<(), String> {
+    let dir = logs_dir(app)?;
     let path = dir.join(LOG_FILE_NAME);
 
     rotate_if_needed(&path, ROTATE_AT_BYTES).map_err(|e| format!("nepodařilo se rotovat log: {e}"))?;
@@ -78,6 +80,94 @@ pub fn append_log(app: AppHandle, line: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Thin IPC wrapper over `append_log_line` for the frontend's existing
+/// `invoke("append_log", { line })` calls (see `src/logging.ts`) — the
+/// frontend pre-builds the full `{timestamp} [{level}] {message}` line
+/// itself, so this just writes it as-is.
+#[tauri::command]
+pub fn append_log(app: AppHandle, line: String) -> Result<(), String> {
+    append_log_line(&app, line)
+}
+
+/// Log levels for Rust-side call sites, mirroring the frontend's
+/// debug/info/warn/error scheme (see `src/logging.ts`). Rust-side logging
+/// does not currently respect the user-configured minimum level (that
+/// setting lives in SQLite and reading it synchronously from arbitrary
+/// command handlers isn't worth the complexity yet, given how few Rust
+/// call sites there are) — every level is always written.
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // full four-level API kept for future call sites, not all levels used yet
+pub enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
+        }
+    }
+}
+
+/// Writes one level-prefixed, timestamped line to `app.log` from Rust code
+/// that already has an `AppHandle` in scope (most command handlers do).
+/// Mirrors the exact format `buildLine` in `src/logging.ts` uses
+/// (`{ISO timestamp} [{level}] {message}`) so the file has one consistent
+/// format regardless of which side wrote a given line. Best-effort: a
+/// failure to write is silently dropped (logging must never itself cause a
+/// visible failure), matching the frontend's fire-and-forget semantics.
+pub fn log_line(app: &AppHandle, level: LogLevel, message: &str) {
+    let line = format!("{} [{}] {message}", iso_timestamp_now(), level.as_str());
+    let _ = append_log_line(app, line);
+}
+
+/// Formats the current time as `YYYY-MM-DDTHH:MM:SS.mmmZ`, matching the
+/// format `new Date().toISOString()` produces on the frontend (see
+/// `buildLine` in `src/logging.ts`) so `app.log` has one consistent
+/// timestamp format regardless of which side wrote a line. Deliberately
+/// avoids pulling in the `chrono` crate for this — same manual-ISO
+/// convention already used by `export_campaign::chrono_now`.
+fn iso_timestamp_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let secs = dur.as_secs();
+    let millis = dur.subsec_millis();
+    let days_since_epoch = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let secs_rem = time_of_day % 60;
+    let (year, month, day) = days_to_ymd(days_since_epoch as i64);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        year, month, day, hours, minutes, secs_rem, millis
+    )
+}
+
+/// Converts days-since-Unix-epoch to a (year, month, day) triple. Adapted
+/// from Howard Hinnant's algorithm — copy of
+/// `export_campaign::days_to_ymd`, duplicated rather than shared to keep
+/// this module self-contained (it's a handful of lines).
+fn days_to_ymd(days: i64) -> (i64, u32, u32) {
+    let z = days + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 /// Returns the absolute path to `app.log` (whether or not it exists yet) so
 /// the UI can show it and the "open log folder" button can reveal it.
 #[tauri::command]
@@ -92,6 +182,30 @@ mod tests {
 
     fn temp_log_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("mst_logging_test_{name}_{}", uuid::Uuid::new_v4()))
+    }
+
+    #[test]
+    fn iso_timestamp_matches_expected_shape() {
+        // e.g. "2026-07-17T10:39:14.123Z" — same shape as JS's
+        // `new Date().toISOString()`, which `buildLine` in src/logging.ts
+        // uses, so app.log has one consistent format from both sides.
+        let ts = iso_timestamp_now();
+        assert_eq!(ts.len(), 24, "unexpected length: {ts}");
+        assert!(ts.ends_with('Z'));
+        assert_eq!(&ts[4..5], "-");
+        assert_eq!(&ts[7..8], "-");
+        assert_eq!(&ts[10..11], "T");
+        assert_eq!(&ts[13..14], ":");
+        assert_eq!(&ts[16..17], ":");
+        assert_eq!(&ts[19..20], ".");
+    }
+
+    #[test]
+    fn log_level_as_str_matches_frontend_level_names() {
+        assert_eq!(LogLevel::Debug.as_str(), "debug");
+        assert_eq!(LogLevel::Info.as_str(), "info");
+        assert_eq!(LogLevel::Warn.as_str(), "warn");
+        assert_eq!(LogLevel::Error.as_str(), "error");
     }
 
     #[test]
