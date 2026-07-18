@@ -49,9 +49,9 @@ function itemIcon(item: InventoryEntry): string {
 function readViewMode(): ViewMode {
   try {
     const stored = localStorage.getItem(VIEW_STORAGE_KEY);
-    if (stored === "list") return "list";
+    if (stored === "grid") return "grid";
   } catch { /* noop */ }
-  return "grid";
+  return "list";
 }
 
 function saveViewMode(view: ViewMode) {
