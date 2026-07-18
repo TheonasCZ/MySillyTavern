@@ -290,24 +290,15 @@ export function ChatScreen() {
       </header>
 
       {/* Right icon sidebar */}
+      {/* Right icon sidebar */}
       <div className="flex shrink-0 flex-col gap-1 border-l p-1" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
-        {[ 
-          ["📅", panels.calendarOpen, () => panels.setCalendarOpen(v => !v), "Kalendář"],
-          ["🎒", panels.inventoryOpen, () => panels.setInventoryOpen(v => !v), t("room.inventoryTooltip")],
-          ["📜", panels.questsOpen, () => panels.setQuestsOpen(v => !v), t("room.questsTooltip")],
-          ["🧍", panels.characterOpen, () => panels.setCharacterOpen(v => !v), t("room.characterTooltip")],
-          ["🎬", panels.directorOpen, () => panels.setDirectorOpen(v => !v), t("director.title")],
-          ["🧠", panels.memoryOpen, () => panels.setMemoryOpen(v => !v), t("room.memoryTooltip")],
-          ["📖", panels.exportOpen, () => panels.setExportOpen(v => !v), t("room.exportTooltip")],
-        ].map(([icon, open, onClick, title]) => (
-          <button key={String(icon)} type="button" onClick={onClick} title={String(title)}
-            className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors"
-            style={{
-              backgroundColor: open ? "var(--color-accent)" : "transparent",
-              color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >{icon}</button>
-        ))}
+        <button type="button" onClick={() => panels.setCalendarOpen((v: boolean) => !v)} title="Kalendář" className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.calendarOpen ? "var(--color-accent)" : "transparent", color: panels.calendarOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>📅</button>
+        <button type="button" onClick={() => panels.setInventoryOpen((v: boolean) => !v)} title={t("room.inventoryTooltip")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.inventoryOpen ? "var(--color-accent)" : "transparent", color: panels.inventoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>🎒</button>
+        <button type="button" onClick={() => panels.setQuestsOpen((v: boolean) => !v)} title={t("room.questsTooltip")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.questsOpen ? "var(--color-accent)" : "transparent", color: panels.questsOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>📜</button>
+        <button type="button" onClick={() => panels.setCharacterOpen((v: boolean) => !v)} title={t("room.characterTooltip")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.characterOpen ? "var(--color-accent)" : "transparent", color: panels.characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>🧍</button>
+        <button type="button" onClick={() => panels.setDirectorOpen((v: boolean) => !v)} title={t("director.title")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.directorOpen ? "var(--color-accent)" : "transparent", color: panels.directorOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>🎬</button>
+        <button type="button" onClick={() => panels.setMemoryOpen((v: boolean) => !v)} title={t("room.memoryTooltip")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.memoryOpen ? "var(--color-accent)" : "transparent", color: panels.memoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>🧠</button>
+        <button type="button" onClick={() => panels.setExportOpen((v: boolean) => !v)} title={t("room.exportTooltip")} className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors" style={{ backgroundColor: panels.exportOpen ? "var(--color-accent)" : "transparent", color: panels.exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)" }}>📖</button>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
