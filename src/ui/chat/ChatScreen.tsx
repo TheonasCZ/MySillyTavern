@@ -267,12 +267,15 @@ export function ChatScreen() {
           <button
             type="button"
             onClick={() => navigate("/")}
-            className="shrink-0 text-sm"
-            style={{ color: "var(--color-text-muted)" }}
+            className="shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-sm"
+            style={{ color: "var(--color-text-muted)", backgroundColor: "var(--color-surface-2)" }}
+            title={t("room.backToList")}
           >
-            ← {t("room.backToList")}
+            ←
           </button>
           <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
           {calendarDate && (
             <span className="text-xs whitespace-nowrap shrink-0" style={{ color: "var(--color-text-muted)" }}>
               {formatCalendarDateShort(calendarDate)} | {weatherIcon(weather)} {weather}
