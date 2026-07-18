@@ -33,16 +33,19 @@ function getSilhouette(race?: string): string {
   return RACE_SILHOUETTES["člověk"];
 }
 
-/** Guess item type icon from name + note. */
+/** Guess item type icon from name + note (whole-word matching). */
 function itemIcon(item: InventoryEntry): string {
-  const text = (item.item + " " + (item.note ?? "")).toLowerCase();
-  if (/meč|meče|luk|dýka|dýky|sekera|sekery|kopí|hůl|hole|kuše|šipka|oštěp|palcát|cep|rapír|šavle|kord/.test(text)) return "⚔️";
-  if (/brnění|štít|helma|helmice|plášť|rukavice|boty|náramek|pancíř|kyrys|náholenice/.test(text)) return "🛡️";
-  if (/lektvar|lahvička|elixír|jed|flakón|ampule|olej|extrakt|tinktura/.test(text)) return "🧪";
-  if (/svitek|kniha|mapa|dopis|pergamen|deník|zápisník|manuál/.test(text)) return "📜";
-  if (/prsten|drahokam|amulet|náhrdelník|náušnice|diadém|koruna|brož|spona/.test(text)) return "💎";
-  if (/jídlo|chleba|sýr|maso|víno|pivo|med|voda|dávka|suchar|polévka|ryba/.test(text)) return "🍖";
-  if (/klíč|klíče|lano|pochodeň|svíčka|lampa|lucerna|baterka|dalekohled|kompas|lupa/.test(text)) return "🔧";
+  const words = (item.item + " " + (item.note ?? "")).toLowerCase().split(/\s+/).filter(Boolean);
+  const has = (...keywords: string[]) => words.some((w) => keywords.includes(w));
+
+  // Order matters — first match wins
+  if (has("meč", "meče", "luk", "luky", "dýka", "dýky", "sekera", "sekery", "kopí", "hůl", "hole", "kuše", "šipka", "oštěp", "palcát", "cep", "rapír", "šavle", "kord", "nůž", "nože", "dýka")) return "⚔️";
+  if (has("brnění", "štít", "helma", "helmice", "plášť", "rukavice", "boty", "náramek", "pancíř", "kyrys", "náholenice")) return "🛡️";
+  if (has("lektvar", "lahvička", "elixír", "jed", "flakón", "ampule", "olej", "extrakt", "tinktura", "sada")) return "🧪";
+  if (has("svitek", "kniha", "mapa", "dopis", "pergamen", "deník", "zápisník", "manuál")) return "📜";
+  if (has("prsten", "drahokam", "amulet", "náhrdelník", "náušnice", "diadém", "koruna", "brož", "spona", "odznak")) return "💎";
+  if (has("jídlo", "chleba", "sýr", "maso", "víno", "pivo", "med", "voda", "dávka", "suchar", "polévka", "ryba")) return "🍖";
+  if (has("klíč", "klíče", "lano", "pochodeň", "svíčka", "lampa", "lucerna", "baterka", "dalekohled", "kompas", "lupa", "nástroj", "nářadí", "souprava")) return "🔧";
   return "📦";
 }
 
@@ -141,12 +144,12 @@ export function InventoryPanel({ inventory, race, onClose, onGenerateImage }: Pr
                     ) : (
                       <span className="text-2xl">{itemIcon(item)}</span>
                     )}
-                    <span className="truncate text-[10px] leading-tight" style={{ color: "var(--color-text-muted)", maxWidth: "100%" }}>
+                    <span className="truncate text-[0.7em] leading-tight" style={{ color: "var(--color-text-muted)", maxWidth: "100%" }}>
                       {item.item}
                     </span>
                     {item.qty > 1 && (
                       <span
-                        className="absolute right-1 top-1 rounded-full px-1.5 text-[10px] font-bold"
+                        className="absolute right-1 top-1 rounded-full px-1.5 text-[0.7em] font-bold"
                         style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
                       >
                         {item.qty}
@@ -190,7 +193,7 @@ export function InventoryPanel({ inventory, race, onClose, onGenerateImage }: Pr
                     <span className="shrink-0 text-lg leading-none">{itemIcon(item)}</span>
                     <span className="flex-1 truncate">{item.item}</span>
                     {item.qty > 1 && (
-                      <span className="shrink-0 rounded-full px-1.5 text-[10px] font-bold"
+                      <span className="shrink-0 rounded-full px-1.5 text-[0.7em] font-bold"
                         style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
                         ×{item.qty}
                       </span>
