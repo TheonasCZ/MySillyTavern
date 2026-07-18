@@ -283,193 +283,29 @@ export function ChatScreen() {
           <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
             {connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
           </span>
-          <select
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
-            style={selectStyle}
-            value={chat?.personaId ?? ""}
-            onChange={async (e) => {
-              const personaId = e.target.value || null;
-              await setPersona(id, personaId);
-            }}
-            title={t("room.personaLabel") ?? ""}
-          >
-            <option value="">{t("room.noPersona")}</option>
-            {personas.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => panels.setGroupOpen((v) => !v)}
-              aria-pressed={panels.groupOpen}
-              title={t("room.groupMembers") ?? ""}
-              className="flex items-center rounded-[var(--radius-sm)] border px-1.5 py-1 transition-colors"
-              style={{
-                borderColor: "var(--color-border-strong)",
-                backgroundColor: panels.groupOpen ? "var(--color-accent)" : "transparent",
-              }}
-            >
-              {memberCharacters.slice(0, MAX_VISIBLE_AVATARS).map((c, i) => {
-                const url = avatarSrc(c.avatarPath);
-                return url ? (
-                  <img
-                    key={c.id}
-                    src={url}
-                    alt={c.name}
-                    title={c.name}
-                    className="h-6 w-6 rounded-full border object-cover"
-                    style={{ borderColor: "var(--color-border-strong)", marginLeft: i === 0 ? 0 : "-0.4rem" }}
-                  />
-                ) : (
-                  <span
-                    key={c.id}
-                    title={c.name}
-                    aria-hidden
-                    className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
-                    style={{
-                      borderColor: "var(--color-border-strong)",
-                      backgroundColor: "var(--color-surface-2)",
-                      color: "var(--color-text-muted)",
-                      marginLeft: i === 0 ? 0 : "-0.4rem",
-                    }}
-                  >
-                    {(c.name || "?").trim().charAt(0).toUpperCase() || "?"}
-                  </span>
-                );
-              })}
-              {memberCharacters.length > MAX_VISIBLE_AVATARS && (
-                <span
-                  className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
-                  style={{
-                    borderColor: "var(--color-border-strong)",
-                    backgroundColor: "var(--color-surface-2)",
-                    color: "var(--color-text-muted)",
-                    marginLeft: "-0.4rem",
-                  }}
-                >
-                  +{memberCharacters.length - MAX_VISIBLE_AVATARS}
-                </span>
-              )}
-            </button>
-            {panels.groupOpen && chat && (
-              <GroupMembersPopover
-                chatId={id}
-                chatCharacterId={chat.characterId}
-                members={members}
-                memberCharacters={memberCharacters}
-                allCharacters={characters}
-                autoReply={autoReply}
-                promotionConnection={promotionConnection}
-                onAddMember={addMember}
-                onRemoveMember={removeMember}
-                onSetAutoReply={setAutoReplyMode}
-                onClose={() => panels.setGroupOpen(false)}
-              />
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => panels.setInventoryOpen((v) => !v)}
-            aria-pressed={panels.inventoryOpen}
-            title={t("room.inventoryTooltip")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.inventoryOpen ? "var(--color-accent)" : "transparent",
-              color: panels.inventoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            🎒
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setQuestsOpen((v) => !v)}
-            aria-pressed={panels.questsOpen}
-            title={t("room.questsTooltip")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.questsOpen ? "var(--color-accent)" : "transparent",
-              color: panels.questsOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            📜
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setCalendarOpen((v) => !v)}
-            aria-pressed={panels.calendarOpen}
-            title={t("room.calendarTooltip", "Kalendář")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.calendarOpen ? "var(--color-accent)" : "transparent",
-              color: panels.calendarOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            📅
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setCharacterOpen((v) => !v)}
-            aria-pressed={panels.characterOpen}
-            title={t("room.characterTooltip")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.characterOpen ? "var(--color-accent)" : "transparent",
-              color: panels.characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            🧍
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setDirectorOpen((v) => !v)}
-            aria-pressed={panels.directorOpen}
-            title={t("director.title")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.directorOpen ? "var(--color-accent)" : "transparent",
-              color: panels.directorOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            🎬
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setMemoryOpen((v) => !v)}
-            aria-pressed={panels.memoryOpen}
-            title={t("room.memoryTooltip")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.memoryOpen ? "var(--color-accent)" : "transparent",
-              color: panels.memoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            🧠
-          </button>
-          <button
-            type="button"
-            onClick={() => panels.setExportOpen((v) => !v)}
-            aria-pressed={panels.exportOpen}
-            title={t("room.exportTooltip")}
-            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
-            style={{
-              borderColor: "var(--color-border-strong)",
-              backgroundColor: panels.exportOpen ? "var(--color-accent)" : "transparent",
-              color: panels.exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-            }}
-          >
-            📖
-          </button>
         </div>
       </header>
+
+      {/* Right icon sidebar */}
+      <div className="flex shrink-0 flex-col gap-1 border-l p-1" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
+        {[ 
+          ["📅", panels.calendarOpen, () => panels.setCalendarOpen(v => !v), "Kalendář"],
+          ["🎒", panels.inventoryOpen, () => panels.setInventoryOpen(v => !v), t("room.inventoryTooltip")],
+          ["📜", panels.questsOpen, () => panels.setQuestsOpen(v => !v), t("room.questsTooltip")],
+          ["🧍", panels.characterOpen, () => panels.setCharacterOpen(v => !v), t("room.characterTooltip")],
+          ["🎬", panels.directorOpen, () => panels.setDirectorOpen(v => !v), t("director.title")],
+          ["🧠", panels.memoryOpen, () => panels.setMemoryOpen(v => !v), t("room.memoryTooltip")],
+          ["📖", panels.exportOpen, () => panels.setExportOpen(v => !v), t("room.exportTooltip")],
+        ].map(([icon, open, onClick, title]) => (
+          <button key={String(icon)} type="button" onClick={onClick} title={String(title)}
+            className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors"
+            style={{
+              backgroundColor: open ? "var(--color-accent)" : "transparent",
+              color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >{icon}</button>
+        ))}
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
@@ -834,6 +670,97 @@ export function ChatScreen() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Bottom bar: persona + group */}
+      <div className="flex shrink-0 items-center gap-3 border-t px-4 py-1.5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
+        <select
+          className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs"
+          style={selectStyle}
+          value={chat?.personaId ?? ""}
+          onChange={async (e) => {
+            const personaId = e.target.value || null;
+            await setPersona(id, personaId);
+          }}
+          title={t("room.personaLabel") ?? ""}
+        >
+          <option value="">{t("room.noPersona")}</option>
+          {personas.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => panels.setGroupOpen((v) => !v)}
+            aria-pressed={panels.groupOpen}
+            title={t("room.groupMembers") ?? ""}
+            className="flex items-center rounded-[var(--radius-sm)] border px-1.5 py-1 transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: panels.groupOpen ? "var(--color-accent)" : "transparent",
+            }}
+          >
+            {memberCharacters.slice(0, MAX_VISIBLE_AVATARS).map((c, i) => {
+              const url = avatarSrc(c.avatarPath);
+              return url ? (
+                <img
+                  key={c.id}
+                  src={url}
+                  alt={c.name}
+                  title={c.name}
+                  className="h-6 w-6 rounded-full border object-cover"
+                  style={{ borderColor: "var(--color-border-strong)", marginLeft: i === 0 ? 0 : "-0.4rem" }}
+                />
+              ) : (
+                <span
+                  key={c.id}
+                  title={c.name}
+                  aria-hidden
+                  className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
+                  style={{
+                    borderColor: "var(--color-border-strong)",
+                    backgroundColor: "var(--color-surface-2)",
+                    color: "var(--color-text-muted)",
+                    marginLeft: i === 0 ? 0 : "-0.4rem",
+                  }}
+                >
+                  {(c.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                </span>
+              );
+            })}
+            {memberCharacters.length > MAX_VISIBLE_AVATARS && (
+              <span
+                className="flex h-6 w-6 items-center justify-center rounded-full border text-[0.6rem] font-medium"
+                style={{
+                  borderColor: "var(--color-border-strong)",
+                  backgroundColor: "var(--color-surface-2)",
+                  color: "var(--color-text-muted)",
+                  marginLeft: "-0.4rem",
+                }}
+              >
+                +{memberCharacters.length - MAX_VISIBLE_AVATARS}
+              </span>
+            )}
+          </button>
+          {panels.groupOpen && chat && (
+            <GroupMembersPopover
+              chatId={id}
+              chatCharacterId={chat.characterId}
+              members={members}
+              memberCharacters={memberCharacters}
+              allCharacters={characters}
+              autoReply={autoReply}
+              promotionConnection={promotionConnection}
+              onAddMember={addMember}
+              onRemoveMember={removeMember}
+              onSetAutoReply={setAutoReplyMode}
+              onClose={() => panels.setGroupOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
