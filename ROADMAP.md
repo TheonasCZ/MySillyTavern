@@ -560,18 +560,55 @@ licenci.
   hodinách, jen kalendářně, viz M32 poznámka o [TIME:14:00] bez hodin
   v kalendáři — tohle by dalo smysl řešit spolu s hodinovou granularitou).
   Umístění: pravděpodobně hlavička chatu vedle ostatních ikon panelů.
-- **Nápad (2026-07-18): panel "Postava" — přehled stavu vedle Inventáře
-  a Questů** — nová ikona v hlavičce chatu (mozek pro paměť, batoh pro
-  inventář, svitek pro questy — sem by patřila postava/štít). Obsah:
-  věk, HP/zranění, buffy a debuffy (kondice — `[COND:...]` tag už
-  existuje a je od dneška chat-scoped, takže data jsou po ruce), tělesné
-  modifikace (protézy, mutace, runové implantáty — herní svět to má),
-  a hlavně **seznam dovedností** s úrovněmi — hráč se potřebuje kdykoli
-  rychle podívat "co vlastně umím a v jakém jsem stavu", ne to hledat
-  zpětně v historii chatu. Datově navazuje přímo na dnešní migraci
-  skills/xp/level/conditions na chat — ty samé zdroje dat (`chat.skills`,
-  `chat.conditions`, `chat.xp`/`chat.level`), jen chybí UI panel a tag
-  pro tělesné modifikace (nejspíš nový `[MOD:+popis]` v duchu `[COND:...]`).
+- ✅ **HOTOVO (2026-07-18): panel "Postava"** — ikona 🧍 v hlavičce
+  chatu vedle Inventáře/Questů, ukazuje věk, úroveň/XP, kondice
+  (buffy/zranění), tělesné modifikace, seznam dovedností. Tag
+  `[MOD:+popis]`/`[MOD:-popis]` zaveden, dedup podle jména.
+
+### Nápady z brainstormingu 2026-07-18 (efektivita promptu, "malý AI pomáhá velkému")
+
+Kontext: po vyřešení duplicit a capování stavu postavy v promptu
+(viz commit "Prompt: odstranit duplicitu...") vznikl brainstorm o
+dalším využití offline systémů (vektory, DB) místo jen posílání
+většího textu. Dva menší nápady poslány rovnou na izolované agenty
+(worktree, mimo master — embedding-based sjednocování jmen kondic/
+modifikací + lokální validační vrstva nad tagy). Zbylé, větší:
+
+- **Nápad: vektorové hledání v syrové historii jako záchranná síť
+  nad extrahovanými fakty** — dnešní paměť ukládá jen fakta vytažená
+  AI extraktorem (ztrátové — extraktor může něco vynechat). Chunkovat
+  a embedovat i syrový přepis chatu (ne jen fakta) by umožnilo
+  dohledat i věc, co nikdy nebyla označená za "fakt". Riziko není
+  latence vyhledávání (to je rychlé, jen matematika nad vektory) —
+  je to (a) objem embedding API volání na pozadí soutěžící o denní
+  kvótu (1000/den u gemini-embedding-2) s existujícím použitím pro
+  vzpomínky, (b) růst úložiště, (c) při velkém počtu chunků možná
+  potřeba pořádný vektorový index místo lineárního procházení
+  (zkontrolovat, jak dnes `semanticSearch`/`embeddingsEngine.ts`
+  reálně prohledává — jestli lineárně přes všechny řádky).
+- **Nápad: hlasová konzistence NPC přes embeddingy jejich replik** —
+  místo statického "příkladu stylu" v promptu vektorově vyhledat pár
+  nejpodobnějších starších replik KONKRÉTNÍ postavy k aktuální situaci
+  a dát je modelu jako živý příklad. Stejná úvaha o kvótě/objemu jako
+  výše (embedovat průběžně každou repliku NPC).
+- **Nápad (větší, samostatný projekt): miniaturní lokální AI model
+  běžící přímo v apce** ("malý AI pomáhá velkému") — reálně existují
+  modely dělané na on-device běh (Gemma 3 270M/1B, Qwen2.5 0.5B,
+  SmolLM2), šlo by je pustit cross-platform (Linux/Windows/Android)
+  přes `llama.cpp`/ONNX Rust bindings. NENÍ potřeba pro sjednocování
+  jmen (to řeší jednodušeji embeddingy, viz agent výše) — dávalo by
+  smysl pro (a) plně offline hraní bez internetu, (b) bleskové levné
+  filtrovací úlohy bez volání velkého modelu (např. "potřebuje tahle
+  zpráva vůbec tag?"). Cena: bundlování modelu (i malý = stovky MB)
+  do instalátoru napříč platformami, natívní knihovny per-platforma
+  (zvlášť Android ARM). Nezačínat bez jasného konkrétního use-case —
+  zatím jen nápad k prozkoumání, ne zadání.
+- **Nápad (menší, doplněk k dnešnímu capování): stav podle změny,
+  ne podle pořadí v poli** — dnešní cap řadí podle pořadí v poli
+  (proxy pro "nedávno přidané"). Chytřejší verze by prioritizovala
+  podle toho, co bylo nedávno POUŽITO/ZMĚNĚNO, ne jen přidáno —
+  potřebuje sledovat "naposledy dotčeno" timestamp per položka
+  (dnes chybí ve schématu).
 
 ## Doporučené pořadí a velikost (zbývající práce)
 
