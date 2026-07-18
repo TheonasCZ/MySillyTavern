@@ -544,6 +544,15 @@ licenci.
   řešit přednostně před dalším milníkem.
 - **Dokumentační hygiena** — u nových milníků držet číslování z tohoto
   souboru; commity značit `M<n>` jen podle této roadmapy.
+- **Nápad (2026-07-18): hudba/zvuková kulisa na pozadí, výběr podle
+  světa kampaně.** Malý přehrávač pouštějící ambientní podklad během
+  hraní — ne krátký melodický loop (rychle otravuje), ale dlouhé
+  (desítky minut) ambientní stopy nebo víc navazujících témat s
+  křížovým prolínáním, co vydrží klidně 50h hraní. Vzor kvality:
+  Tabletop Audio (zdarma, dělané přímo pro RPG session), OpenGameArt.org
+  a incompetech.com (Kevin MacLeod) jako CC/royalty-free zdroje stop.
+  Uživatel by si vybíral/nahrával stopy podle žánru kampaně (les/město/
+  dungeon apod.). Čistě nápad, nezadáno k realizaci.
 - **Nápad (2026-07-18): centrální crash/error reporting (Sentry) — až
   bude víc uživatelů než vývojář sám.** Analog Crashlytics pro Tauri:
   `tauri-plugin-sentry` (Rust strana) + oficiální Sentry browser SDK
