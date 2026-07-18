@@ -573,31 +573,48 @@ dalším využití offline systémů (vektory, DB) místo jen posílání
 většího textu. Dva nápady zkusmo postaveny jako izolované experimenty
 (worktree, mimo master) a **reálně otestovány** — výsledky níže.
 
-**✅ Function calling (`get_item_detail`) — otestováno živě s reálným
-klíčem, výsledek nadějný.** Model (gemini-flash-lite-latest) se choval
-přesně správně ve 4/4 scénářích: zavolal nástroj jen když hráč odkázal
-na starou/sbalenou věc, nezavolal nic navíc u běžných akcí ani u věcí
-viditelných napřímo — obava z "trigger-happy" chování se nepotvrdila
-(malý vzorek, ověřit na delším hraní). Naměřená cena: přímá odpověď
-~0,7 s, s voláním nástroje ~1,2–1,4 s (tj. ~0,5–0,7 s navíc, ale JEN
-když je to skutečně potřeba). **Nalezena reálná chyba k opravě před
-nasazením:** Gemini v druhém kole (po odpovědi nástroje) vyžaduje
-vrátit i `thoughtSignature` z prvního kola, jinak vrací HTTP 400 —
-prototyp (`.claude/worktrees/agent-a7dc7194cdfeda1f8`, větev
-`worktree-agent-a7dc7194cdfeda1f8`) to zatím nedělá. Další krok: tuhle
-opravu doplnit a odzkoušet na delší reálné hře, pak zvážit sloučení.
+**✅ HOTOVO — Function calling (`get_item_detail`) sloučen do mastera
+(commit 2d4d260), aktivní v dev buildu.** Model (gemini-flash-lite-
+latest) se choval přesně správně ve 4/4 scénářích: zavolal nástroj
+jen když hráč odkázal na starou/sbalenou věc, nezavolal nic navíc
+u běžných akcí ani u věcí viditelných napřímo. Naměřená cena: přímá
+odpověď ~0,7 s, s voláním nástroje ~1,2–1,4 s (~0,5–0,7 s navíc, JEN
+když je to skutečně potřeba). Nalezená chyba (Gemini v druhém kole
+vyžaduje vrátit `thoughtSignature` z prvního kola, jinak HTTP 400)
+opravena a znovu živě ověřena (přesný formát, co staví opravený kód,
+prošel end-to-end). Scope jen Gemini (OpenAI/Claude no-op). Cap/fold
+logika v promptu zůstává nedotčená — tohle je doplněk, ne náhrada.
+**Zbývá:** ověřit na delší reálné hře (dosud jen 4-5 zpráv testováno),
+sledovat jestli model nezačne volat nástroj zbytečně často v praxi.
 
-**🟡 Embedding-based sjednocování jmen kondic/modifikací — funguje
-mechanicky, práh nekalibrovaný.** Agent zvolil 0,90 kosinové podobnosti,
-ale bez přístupu k reálnému API — hodnota je z ručně sestavených
-vektorů, ne ze skutečných embeddingů (krátké české fráze jsou zrovna
-oblast, kde jsou embeddingy nejméně spolehlivé). Postaveno jako
-background reconciliation (mirror `imageGenQueue.ts`), nikdy synchronně,
-každé sloučení logováno + breadcrumb v popisu (nikdy tiché). Prototyp:
-`/tmp/.../scratchpad/fuzzy-dedup-exp`, větev `experiment/fuzzy-condition-
-dedup` (POZOR: dočasná cesta ve scratchpadu, může zmizet — přesunout
-při zájmu o pokračování). Další krok před nasazením: reálný smoke test
-+ prokalibrovat práh na skutečných embeddinzích z reálného hraní.
+**🔴 ZAMÍTNUTO (2026-07-18, po reálné kalibraci): embedding-based
+sjednocování jmen kondic/modifikací nefunguje.** Agent postavil
+mechanismus s odhadnutým prahem 0,90 (bez přístupu k reálnému API).
+Otestováno na skutečných `gemini-embedding-2` vektorech na 7 českých
+párech — **žádný práh nerozdělí "mělo by sloučit" od "nemělo by
+sloučit" spolehlivě**, skóre se překrývá:
+
+| Pár | Skóre | Mělo by |
+|---|---|---|
+| levá ruka / levice | 0,57 | sloučit |
+| otrávený jedem / otrava | 0,78 | sloučit |
+| zlomená paže / zlomenina paže | 0,95 | sloučit |
+| otrávený / unavený | 0,76 | NEsloučit |
+| zlomená pravá ruka / zlomená levá noha | **0,81** | NEsloučit |
+| krvácející rána na hrudi / na noze | 0,82 | NEsloučit |
+| kletba temnoty / požehnání světla | 0,60 | NEsloučit |
+
+"Zlomená pravá ruka" vs "zlomená levá noha" (různé věci!) skóruje
+VÝŠ (0,81) než "otrávený jedem" vs "otrava" (tatáž věc, 0,78) — není
+to otázka doladění čísla, data se překrývají příliš na to, aby
+jakýkoli jeden práh na kosinovou podobnost krátkých českých frází
+fungoval. **Neimplementovat v téhle podobě.** Pokud by se k tomu
+chtělo vrátit, potřeba jiný přístup — např. extrahovat explicitní
+"část těla" jako klíčové slovo místo porovnávání celé fráze, nebo
+vyžadovat potvrzení člověkem před každým sloučením (nikdy automaticky
+tiché). Prototyp zůstává jako referenc v `/tmp/.../scratchpad/
+fuzzy-dedup-exp`, větev `experiment/fuzzy-condition-dedup` (dočasná
+cesta, pravděpodobně už smazaná).
 
 **Nápad: vektorové hledání v syrové historii jako záchranná síť nad
 extrahovanými fakty** — dnešní paměť ukládá jen fakta vytažená AI
