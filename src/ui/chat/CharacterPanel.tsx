@@ -49,7 +49,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
             className="flex-1 rounded-[var(--radius-md)] border p-2 text-center"
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
           >
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
+            <div className="text-[0.625em] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
               {t("character.age", "Věk")}
             </div>
             <div className="text-sm font-medium">
@@ -60,7 +60,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
             className="flex-1 rounded-[var(--radius-md)] border p-2 text-center"
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
           >
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
+            <div className="text-[0.625em] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
               {t("character.level", "Úroveň")}
             </div>
             <div className="text-sm font-medium">{level}</div>
@@ -69,7 +69,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
             className="flex-1 rounded-[var(--radius-md)] border p-2 text-center"
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}
           >
-            <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
+            <div className="text-[0.625em] uppercase tracking-wider" style={{ color: "var(--color-text-faint)" }}>
               {t("character.xp", "Zkušenosti")}
             </div>
             <div className="text-sm font-medium">{xp}</div>
@@ -79,7 +79,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
         {/* Skills — the centerpiece of this panel */}
         <div className="mb-4">
           <h4
-            className="mb-2 text-[10px] font-bold uppercase tracking-wider"
+            className="mb-2 text-[0.625em] font-bold uppercase tracking-wider"
             style={{ color: "var(--color-text-faint)" }}
           >
             {t("character.skills", "Dovednosti")}
@@ -98,7 +98,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
                 >
                   <span className="text-sm font-medium truncate">{s.name}</span>
                   <span
-                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold"
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[0.625em] font-bold"
                     style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
                   >
                     {s.level}
@@ -112,7 +112,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
         {/* Conditions — buffs and wound-tracking (no separate HP stat) */}
         <div className="mb-4">
           <h4
-            className="mb-2 text-[10px] font-bold uppercase tracking-wider"
+            className="mb-2 text-[0.625em] font-bold uppercase tracking-wider"
             style={{ color: "var(--color-text-faint)" }}
           >
             {t("character.conditions", "Kondice a zranění")}
@@ -144,7 +144,7 @@ export function CharacterPanel({ age, level, xp, conditions, modifications, skil
         {/* Body modifications */}
         <div>
           <h4
-            className="mb-2 text-[10px] font-bold uppercase tracking-wider"
+            className="mb-2 text-[0.625em] font-bold uppercase tracking-wider"
             style={{ color: "var(--color-text-faint)" }}
           >
             {t("character.modifications", "Tělesné modifikace")}

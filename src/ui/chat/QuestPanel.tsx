@@ -97,7 +97,7 @@ export function QuestPanel({ chatId, onClose }: Props) {
             return (
               <div key={status} className="mb-4">
                 <h4
-                  className="mb-2 text-[10px] font-bold uppercase tracking-wider"
+                  className="mb-2 text-[0.625em] font-bold uppercase tracking-wider"
                   style={{ color: "var(--color-text-faint)" }}
                 >
                   {statusLabels[status]}
@@ -115,7 +115,7 @@ export function QuestPanel({ chatId, onClose }: Props) {
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-sm font-medium">{q.name}</span>
                         <span
-                          className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                          className="shrink-0 rounded-full px-1.5 py-0.5 text-[0.5625em] font-bold uppercase"
                           style={{
                             backgroundColor: STATUS_STYLE[q.status]?.bg ?? "var(--color-surface-2)",
                             color: STATUS_STYLE[q.status]?.text ?? "var(--color-text-muted)",
