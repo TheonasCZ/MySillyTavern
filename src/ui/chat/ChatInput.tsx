@@ -221,15 +221,15 @@ export function ChatInput({
         type="button"
         onClick={onSuggest}
         disabled={disabled || streaming || suggesting}
-        title={t("room.suggest.tooltip") ?? ""}
-        className="shrink-0 rounded-[var(--radius-md)] border px-3 py-2 text-sm disabled:opacity-50"
+        title={suggesting ? t("room.suggest.loading") : t("room.suggest.tooltip") ?? ""}
+        className="shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base disabled:opacity-50"
         style={{
           borderColor: "var(--color-border-strong)",
           backgroundColor: "var(--color-surface-2)",
           color: "var(--color-text-muted)",
         }}
       >
-        {suggesting ? t("room.suggest.loading") : t("room.suggest.button")}
+        {suggesting ? "⏳" : "💡"}
       </button>
       )}
       <textarea

@@ -288,7 +288,42 @@ export function ChatScreen() {
         ) : (
           <div />
         )}
-        <div />
+        <div className="flex items-center justify-end gap-2">
+          {actions.fallbackCharacter && (
+            <button
+              type="button"
+              onClick={() => panels.setGroupOpen((v) => !v)}
+              title={`${t("room.gmLabel")} ${actions.fallbackCharacter.name}`}
+              aria-pressed={panels.groupOpen}
+            >
+              {actions.fallbackCharacter.avatarUrl ? (
+                <img
+                  src={actions.fallbackCharacter.avatarUrl}
+                  alt={actions.fallbackCharacter.name}
+                  className="h-7 w-7 rounded-full border object-cover"
+                  style={{ borderColor: panels.groupOpen ? "var(--color-accent)" : "var(--color-border-strong)" }}
+                />
+              ) : (
+                <span
+                  className="flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium"
+                  style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
+                >
+                  {(actions.fallbackCharacter.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                </span>
+              )}
+            </button>
+          )}
+          <div
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
+            style={{
+              borderColor: connection ? "var(--color-success)" : "var(--color-danger)",
+              backgroundColor: "var(--color-surface-2)",
+            }}
+            title={connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
+          >
+            {connection ? "🔌" : "⚠️"}
+          </div>
+        </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -665,6 +700,7 @@ export function ChatScreen() {
               { icon: "📅", open: panels.calendarOpen, onToggle: () => panels.setCalendarOpen((v) => !v), title: t("room.calendarTooltip") },
               { icon: "🎒", open: panels.inventoryOpen, onToggle: () => panels.setInventoryOpen((v) => !v), title: t("room.inventoryTooltip") },
               { icon: "📜", open: panels.questsOpen, onToggle: () => panels.setQuestsOpen((v) => !v), title: t("room.questsTooltip") },
+              { icon: "🧍", open: panels.characterOpen, onToggle: () => panels.setCharacterOpen((v) => !v), title: t("room.characterTooltip") },
               { icon: "🎬", open: panels.directorOpen, onToggle: () => panels.setDirectorOpen((v) => !v), title: t("director.title") },
               { icon: "🧠", open: panels.memoryOpen, onToggle: () => panels.setMemoryOpen((v) => !v), title: t("room.memoryTooltip") },
               { icon: "📖", open: panels.exportOpen, onToggle: () => panels.setExportOpen((v) => !v), title: t("room.exportTooltip") },
@@ -686,34 +722,8 @@ export function ChatScreen() {
             </button>
           ))}
 
-          {/* Connection badge — compact, full name on hover. Border color
-              doubles as a status signal (connected vs. missing). */}
-          <div
-            className="mt-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
-            style={{
-              borderColor: connection ? "var(--color-success)" : "var(--color-danger)",
-              backgroundColor: "var(--color-surface-2)",
-            }}
-            title={connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
-          >
-            {connection ? "🔌" : "⚠️"}
-          </div>
-
-          {/* ---- Divider + Character/Persona (pinned to bottom, mirrors Settings in the main Sidebar) ---- */}
+          {/* ---- Divider + Persona (pinned to bottom, mirrors Settings in the main Sidebar) ---- */}
           <div className="mt-auto flex w-full flex-col items-center gap-1 border-t pt-2" style={{ borderColor: "var(--color-border)" }}>
-            <button
-              type="button"
-              onClick={() => panels.setCharacterOpen((v) => !v)}
-              title={t("room.characterTooltip")}
-              aria-pressed={panels.characterOpen}
-              className="flex w-full items-center justify-center rounded-[var(--radius-sm)] py-2 text-base transition-colors"
-              style={{
-                backgroundColor: panels.characterOpen ? "var(--color-accent)" : "transparent",
-                color: panels.characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-              }}
-            >
-              🧍
-            </button>
             <div className="relative">
               <button
                 type="button"
@@ -741,7 +751,7 @@ export function ChatScreen() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setPersonaSwitcherOpen(false)} />
                   <div
-                    className="absolute bottom-0 left-full z-50 ml-2 w-48 rounded-[var(--radius-md)] border p-1 shadow-lg"
+                    className="absolute bottom-0 right-full z-50 mr-2 w-64 rounded-[var(--radius-md)] border p-1 shadow-lg"
                     style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
                   >
                     <button
@@ -773,16 +783,21 @@ export function ChatScreen() {
                         }}
                       >
                         {avatarSrc(p.avatarPath) ? (
-                          <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                          <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
                         ) : (
                           <span
-                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px]"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm"
                             style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
                           >
                             {p.name.trim().charAt(0).toUpperCase() || "?"}
                           </span>
                         )}
-                        <span className="truncate">{p.name}</span>
+                        <span className="flex flex-col overflow-hidden">
+                          <span className="truncate">{p.name}</span>
+                          <span className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
+                            {[p.age ? t("room.ageYears", { age: p.age }) : null, p.race || null].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
                       </button>
                     ))}
                   </div>

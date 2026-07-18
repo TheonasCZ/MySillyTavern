@@ -120,7 +120,9 @@
       "memoryTooltip": "Memory and recollections",
       "exportTooltip": "Export chronicle",
       "calendarTooltip": "Game calendar and time",
-      "toolsSidebar": "Chat tools"
+      "toolsSidebar": "Chat tools",
+      "gmLabel": "Narrator:",
+      "ageYears": "{{age}} yrs"
     },
     "character": {
       "title": "Character",
