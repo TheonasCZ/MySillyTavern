@@ -530,6 +530,72 @@ licenci.
 
 ---
 
+## 🔴 AKTIVNÍ BUG (2026-07-18, předáno DeepSeekovi k dořešení): confirm() dialogy nefungují napříč celou apkou
+
+**Příznak:** uživatel hlásil "starý inventář zůstává i po založení nového chatu" —
+při vyšetřování se ukázalo, že to NENÍ o inventáři, ale že se **nezaložil
+žádný nový chat vůbec** (v DB je pořád jen 1 řádek, nezměněná
+`created_at`/`updated_at`). Uživatel se pokoušel starý chat smazat a
+založit nový, ale **potvrzovací dialog (`confirm()`) se nikdy nezobrazí**
+— akce buď potichu neproběhne, NEBO (horší) proběhne BEZ reálného
+potvrzení uživatele.
+
+**13 míst v kódu používá bare `confirm(...)`** (native JS, ne
+`@tauri-apps/plugin-dialog` import) — `grep -rn "confirm(" src/ --include="*.ts" --include="*.tsx"`:
+`LorebookEditor.tsx`, `MemoryPanel.tsx` (3×), `SettingsScreen.tsx`,
+`CardEditor.tsx`, `ChatListScreen.tsx`, `ChatScreen.tsx`,
+`PersonaForm.tsx`, `BackupPanel.tsx`, `PresetsPanel.tsx` (2×),
+`ConnectionForm.tsx` — mazání chatu/postavy/persony/presetu/připojení/
+lorebook entry, reset nastavení, import zálohy, větvení chatu.
+
+**Zjištěno a opraveno (částečně):**
+1. ✅ `capabilities/desktop.json` mělo jen `dialog:default`, které
+   NEOBSAHUJE `allow-confirm` (ověřeno v `gen/schemas/desktop-schema.json`
+   — `dialog:default` = jen `allow-message`+`allow-save`+`allow-open`,
+   `allow-confirm`/`allow-ask` jsou samostatná oprávnění). Přidáno
+   `"dialog:allow-confirm"` do permissions listu. **Toto samo o sobě
+   problém NEVYŘEŠILO** — chyba `dialog.confirm not allowed. Command
+   not found` se objevovala i po opravě a restartu (uživatel to
+   potvrdil živě).
+
+2. ⚠️ **Podezření na skutečnou příčinu (NEOVĚŘENO, potřeba doladit):**
+   Tauri v2 interceptuje nativní `window.confirm()`/`alert()`/`prompt()`
+   a routuje je přes IPC na dialog plugin — což znamená, že **`confirm()`
+   vrací Promise, ne synchronní boolean** (na rozdíl od klasického
+   browser `confirm()`). Kód v celé apce ale všude používá vzor
+   `if (confirm(t("...")) ) void remove(...)` — **synchronní if nad
+   Promise objektem je VŽDY truthy** (jakýkoli non-null objekt je v JS
+   pravdivý), takže by se akce spustila OKAMŽITĚ bez ohledu na to, co
+   Promise později vrátí — to přesně sedí s pozorováním "chat se smaže,
+   ale bez potvrzení". Chybová hláška v logu (`dialog.confirm not
+   allowed`) je pravděpodobně odmítnutá Promise, která se zaloguje
+   až POTOM, kdy už je pozdě.
+
+**Co je potřeba udělat:**
+1. Ověřit, jestli `confirm()`/`window.confirm` pod Tauri v2 v tomhle
+   projektu skutečně vrací Promise (zkusit `const ok = await confirm(...)`
+   a zkontrolovat typ, nebo se podívat do `@tauri-apps/api` zdrojáků/
+   dokumentace k verzi použité v `package.json`).
+2. Pokud ano — přepsat všech **13 volání** na `async`/`await` vzor
+   (`if (await confirm(...)) { ... }`), obalující funkce budou muset
+   být `async` (zkontrolovat, že to nerozbije typy onClick handlerů
+   v Reactu — `onClick={() => void handleDelete()}` pattern už se
+   v repu používá jinde, měl by sedět).
+3. Zvážit, jestli místo bare `confirm()` nepoužít rovnou
+   `@tauri-apps/plugin-dialog`'s `confirm()` import (jasně async,
+   typované, žádná nejednoznačnost) — `src/platform.ts` už má
+   Android-safe wrappery pro `dialog`, možná tam přidat i `confirm`
+   wrapper a nahradit všech 13 volání jedním centrálním místem.
+4. Po opravě ověřit živě: smazat chat → dialog se MUSÍ zobrazit a
+   čekat na odpověď → Zrušit nesmí smazat, OK musí smazat. Zopakovat
+   pro alespoň 2-3 další z těch 13 míst.
+
+**Zpět k původnímu příznaku:** až tohle bude opravené, ověřit že
+založení nového chatu skutečně vytvoří nový řádek v `chats` s
+prázdným/seedovaným inventářem (ne že ukazuje starý) — to už by mělo
+být samo o sobě v pořádku díky dnešní migraci inventáře na chat-scope,
+jen se k tomu uživatel kvůli tomuhle bugu vůbec nedostal.
+
 ## Průběžně (mimo milníky)
 
 - **UI kvalita jako DoD** — každý nový feature musí přijít s FieldHelp

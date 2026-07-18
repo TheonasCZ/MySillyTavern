@@ -6,6 +6,7 @@
   "platforms": ["linux", "macOS", "windows"],
   "permissions": [
     "dialog:default",
+    "dialog:allow-confirm",
     "process:default",
     "process:allow-restart",
     "updater:default"
