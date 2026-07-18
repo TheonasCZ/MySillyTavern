@@ -167,20 +167,19 @@ export function Sidebar() {
           ))}
         </ul>
 
-        {/* ---- Desktop collapse toggle (right edge, vertically centered) ---- */}
+        {/* ---- Desktop collapse strip (right edge, full height, semi-transparent) ---- */}
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 rounded-full border text-xs leading-none transition-colors hover:opacity-70 sm:flex sm:items-center sm:justify-center"
-          style={{
-            width: 20, height: 20,
-            color: "var(--color-text-muted)",
-            backgroundColor: "var(--color-bg-elevated)",
-            borderColor: "var(--color-border)",
-          }}
-          title={collapsed ? "Rozbalit" : "Sbalit"}
+          className="absolute right-0 top-0 bottom-0 hidden w-4 cursor-pointer items-center justify-center transition-colors hover:bg-white/5 sm:flex"
+          title={collapsed ? "Rozbalit sidebar (Ctrl+B)" : "Sbalit sidebar (Ctrl+B)"}
         >
-          {collapsed ? "▸" : "◂"}
+          <span
+            className="select-none text-[10px] leading-none transition-opacity opacity-30 group-hover:opacity-60"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {collapsed ? "▸" : "◂"}
+          </span>
         </button>
 
         {/* ---- Settings + version (pinned to bottom) ---- */}
