@@ -60,12 +60,15 @@ function MiniMonthGrid({
 
   return (
     <div className="mt-2">
-      <div className="mb-1 flex items-center justify-between gap-1">
+      <div
+        className="mb-1 flex items-center justify-between gap-1 rounded-[var(--radius-md)] border px-1 py-1.5"
+        style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-bg-elevated)" }}
+      >
         <button
           type="button"
           onClick={onPrevMonth}
           aria-label={t("calendar.prevMonth", "Předchozí měsíc") ?? ""}
-          className="shrink-0 px-1 text-xs"
+          className="shrink-0 cursor-pointer px-1.5 text-xs"
           style={{ color: "var(--color-text-muted)" }}
         >
           ‹
@@ -77,7 +80,7 @@ function MiniMonthGrid({
           type="button"
           onClick={onNextMonth}
           aria-label={t("calendar.nextMonth", "Další měsíc") ?? ""}
-          className="shrink-0 px-1 text-xs"
+          className="shrink-0 cursor-pointer px-1.5 text-xs"
           style={{ color: "var(--color-text-muted)" }}
         >
           ›
