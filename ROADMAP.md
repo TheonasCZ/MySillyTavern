@@ -818,3 +818,23 @@ velký model sám přes function calling.
 
 Vědomě vynecháno (nedohánět ST): extensions ekosystém, desítky API
 providerů, STscript, instruct šablony, CFG/logit bias, Live2D/VRM avatary.
+
+---
+
+## QoL + Refactoring session (2026-07-18, DeepSeek)
+
+### Hotovo
+- ✅ **Sidebar redesign** — burger menu na mobilu, sbalitelný na desktopu (ikonový mód), auto-collapse v chatu, `Ctrl+B` zkratka, odebrán divider mezi Postavy/Persony, všechny položky mají viditelné pozadí (kartičky), kolapsovací proužek přes celou výšku
+- ✅ **Settings tabs reorganizace** — 7 záložek: Připojení, Hra (presets+paměť), Zvuk, Synchronizace, Vzhled, Data, Zkratky. Responzivní burger na mobilu
+- ✅ **Refactoring** — `chatStore.ts` (1223→659 ř.) rozbit na 6 modulů (messageOps, speakerOps, extractionOps, configOps, chatStoreTypes); `promptBuilder.ts` (1122→914 ř.) → gameTags + voiceExamples; `ChatScreen.tsx` (1011→532 ř.) → useChatPanels + useChatActions
+- ✅ **Button styling** — 20+ tlačítek dostalo `backgroundColor`, `padding`, `border-radius` napříč celou appkou
+- ✅ **Inventář list/grid toggle** — přepínač ☰/⊞ v headeru, list mód s typovými ikonami (⚔️🛡️🧪📜💎🍖🔧📦), default list, negeneruje obrázky v list módu
+- ✅ **PersonaForm reset button** — tlačítko "Resetovat herní stav" pro vyčištění persony
+- ✅ **Undo toast** — 5s toast s "Undo" po smazání
+- ✅ **Streaming indicator** — animované `...` při generování
+- ✅ **Unread badges** — na chatech v seznamu
+- ✅ **Import card preview** — náhled karty před importem
+- ✅ **Export progress** — indikátor průběhu exportu
+- ✅ **NPC voice consistency** — embedding-based reply examples
+- ✅ **Cap by last_touched** — inventář/skilly se řadí podle `last_touched`
+- ✅ **M26 sampler toast** — varování o nepodporovaných parametrech (jen 1×)
