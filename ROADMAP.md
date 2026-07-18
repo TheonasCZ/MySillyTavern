@@ -570,45 +570,116 @@ licenci.
 Kontext: po vyřešení duplicit a capování stavu postavy v promptu
 (viz commit "Prompt: odstranit duplicitu...") vznikl brainstorm o
 dalším využití offline systémů (vektory, DB) místo jen posílání
-většího textu. Dva menší nápady poslány rovnou na izolované agenty
-(worktree, mimo master — embedding-based sjednocování jmen kondic/
-modifikací + lokální validační vrstva nad tagy). Zbylé, větší:
+většího textu. Dva nápady zkusmo postaveny jako izolované experimenty
+(worktree, mimo master) a **reálně otestovány** — výsledky níže.
 
-- **Nápad: vektorové hledání v syrové historii jako záchranná síť
-  nad extrahovanými fakty** — dnešní paměť ukládá jen fakta vytažená
-  AI extraktorem (ztrátové — extraktor může něco vynechat). Chunkovat
-  a embedovat i syrový přepis chatu (ne jen fakta) by umožnilo
-  dohledat i věc, co nikdy nebyla označená za "fakt". Riziko není
-  latence vyhledávání (to je rychlé, jen matematika nad vektory) —
-  je to (a) objem embedding API volání na pozadí soutěžící o denní
-  kvótu (1000/den u gemini-embedding-2) s existujícím použitím pro
-  vzpomínky, (b) růst úložiště, (c) při velkém počtu chunků možná
-  potřeba pořádný vektorový index místo lineárního procházení
-  (zkontrolovat, jak dnes `semanticSearch`/`embeddingsEngine.ts`
-  reálně prohledává — jestli lineárně přes všechny řádky).
-- **Nápad: hlasová konzistence NPC přes embeddingy jejich replik** —
-  místo statického "příkladu stylu" v promptu vektorově vyhledat pár
-  nejpodobnějších starších replik KONKRÉTNÍ postavy k aktuální situaci
-  a dát je modelu jako živý příklad. Stejná úvaha o kvótě/objemu jako
-  výše (embedovat průběžně každou repliku NPC).
-- **Nápad (větší, samostatný projekt): miniaturní lokální AI model
-  běžící přímo v apce** ("malý AI pomáhá velkému") — reálně existují
-  modely dělané na on-device běh (Gemma 3 270M/1B, Qwen2.5 0.5B,
-  SmolLM2), šlo by je pustit cross-platform (Linux/Windows/Android)
-  přes `llama.cpp`/ONNX Rust bindings. NENÍ potřeba pro sjednocování
-  jmen (to řeší jednodušeji embeddingy, viz agent výše) — dávalo by
-  smysl pro (a) plně offline hraní bez internetu, (b) bleskové levné
-  filtrovací úlohy bez volání velkého modelu (např. "potřebuje tahle
-  zpráva vůbec tag?"). Cena: bundlování modelu (i malý = stovky MB)
-  do instalátoru napříč platformami, natívní knihovny per-platforma
-  (zvlášť Android ARM). Nezačínat bez jasného konkrétního use-case —
-  zatím jen nápad k prozkoumání, ne zadání.
-- **Nápad (menší, doplněk k dnešnímu capování): stav podle změny,
-  ne podle pořadí v poli** — dnešní cap řadí podle pořadí v poli
-  (proxy pro "nedávno přidané"). Chytřejší verze by prioritizovala
-  podle toho, co bylo nedávno POUŽITO/ZMĚNĚNO, ne jen přidáno —
-  potřebuje sledovat "naposledy dotčeno" timestamp per položka
-  (dnes chybí ve schématu).
+**✅ Function calling (`get_item_detail`) — otestováno živě s reálným
+klíčem, výsledek nadějný.** Model (gemini-flash-lite-latest) se choval
+přesně správně ve 4/4 scénářích: zavolal nástroj jen když hráč odkázal
+na starou/sbalenou věc, nezavolal nic navíc u běžných akcí ani u věcí
+viditelných napřímo — obava z "trigger-happy" chování se nepotvrdila
+(malý vzorek, ověřit na delším hraní). Naměřená cena: přímá odpověď
+~0,7 s, s voláním nástroje ~1,2–1,4 s (tj. ~0,5–0,7 s navíc, ale JEN
+když je to skutečně potřeba). **Nalezena reálná chyba k opravě před
+nasazením:** Gemini v druhém kole (po odpovědi nástroje) vyžaduje
+vrátit i `thoughtSignature` z prvního kola, jinak vrací HTTP 400 —
+prototyp (`.claude/worktrees/agent-a7dc7194cdfeda1f8`, větev
+`worktree-agent-a7dc7194cdfeda1f8`) to zatím nedělá. Další krok: tuhle
+opravu doplnit a odzkoušet na delší reálné hře, pak zvážit sloučení.
+
+**🟡 Embedding-based sjednocování jmen kondic/modifikací — funguje
+mechanicky, práh nekalibrovaný.** Agent zvolil 0,90 kosinové podobnosti,
+ale bez přístupu k reálnému API — hodnota je z ručně sestavených
+vektorů, ne ze skutečných embeddingů (krátké české fráze jsou zrovna
+oblast, kde jsou embeddingy nejméně spolehlivé). Postaveno jako
+background reconciliation (mirror `imageGenQueue.ts`), nikdy synchronně,
+každé sloučení logováno + breadcrumb v popisu (nikdy tiché). Prototyp:
+`/tmp/.../scratchpad/fuzzy-dedup-exp`, větev `experiment/fuzzy-condition-
+dedup` (POZOR: dočasná cesta ve scratchpadu, může zmizet — přesunout
+při zájmu o pokračování). Další krok před nasazením: reálný smoke test
++ prokalibrovat práh na skutečných embeddinzích z reálného hraní.
+
+**Nápad: vektorové hledání v syrové historii jako záchranná síť nad
+extrahovanými fakty** — dnešní paměť ukládá jen fakta vytažená AI
+extraktorem (ztrátové — extraktor může něco vynechat). Chunkovat
+a embedovat i syrový přepis chatu (ne jen fakta) by umožnilo dohledat
+i věc, co nikdy nebyla označená za "fakt". Riziko není latence
+vyhledávání (to je rychlé, jen matematika nad vektory) — je to objem
+embedding API volání na pozadí + při velkém počtu chunků možná
+potřeba pořádný vektorový index místo lineárního procházení.
+
+**Nápad: hlasová konzistence NPC přes embeddingy jejich replik** —
+místo statického "příkladu stylu" v promptu vektorově vyhledat pár
+nejpodobnějších starších replik KONKRÉTNÍ postavy k aktuální situaci
+a dát je modelu jako živý příklad.
+
+**Nápad (menší, doplněk k dnešnímu capování): stav podle změny, ne
+podle pořadí v poli** — dnešní cap řadí podle pořadí v poli (proxy
+pro "nedávno přidané"). Chytřejší verze by prioritizovala podle toho,
+co bylo nedávno POUŽITO/ZMĚNĚNO, ne jen přidáno — potřebuje sledovat
+"naposledy dotčeno" timestamp per položka (dnes chybí ve schématu).
+
+**Lokální AI napříč apkou — ucelený přehled (2026-07-18 večer),
+po upřesnění od uživatele:**
+
+Rozlišit dvě různé myšlenky, co se snadno pletou pod nálepkou
+"lokální AI":
+
+1. *Lokální AI mluví/generuje přímo* (TTS, vypravěč, STT) — u toho
+   je hodnocení jednoznačné, viz níže.
+2. *Lokální AI jako kurátor dat* — malý model by měl podle promptu
+   hráče sám "proplout" vektory/DB/function calling a sestavit
+   přesně ten výsek dat, co velký cloudový model pro danou zprávu
+   potřebuje, místo posílání generického balíku. **Chytrá myšlenka,
+   ale s jednou zásadní záludností:** mechanické prohledávání (vektory,
+   DB dotazy) už DĚLÁME lokálně a rychle — to není problém. Těžká
+   část je ÚSUDEK "co je pro tuhle konkrétní zprávu relevantní", a
+   úsudek/plánování je přesně oblast, kde jsou malé modely nejslabší
+   (mnohem slabší než v mechanickém párování podobnosti). Navíc dnešní
+   živý test function callingu ukázal, že **velký cloudový model tenhle
+   úsudek už dnes dělá dobře sám** (rozpoznal, kdy potřebuje data
+   a kdy ne, ve 4/4 případech). Malý lokální model by v tomhle
+   rozhodování pravděpodobně dělal horší volby, ne lepší — riziko, že
+   by to byl krok zpět, ne vpřed. Realistický směr: nechat mechanické
+   vyhledávání lokálně (embeddingy, DB), a úsudek "co dotáhnout" nechat
+   na velkém modelu přes function calling (viz výše) — to už fakticky
+   je "malá práce lokálně + chytré rozhodnutí od velkého modelu",
+   jen bez zvláštního druhého modelu navíc. Separátní malý "orchestrační"
+   model zůstává jako spekulativní, vyšší riziko / nejistý přínos nápad
+   pro budoucí prozkoumání, ne jako dnešní zadání.
+
+Honestní hodnocení přímého použití lokální AI, oblast po oblasti:
+
+- 🟢 **Lokální embedding model** — nejsilnější kandidát. Nejde jen
+  o kvótu (ta se dnes s aktuálně používaným modelem/limitem nepere) —
+  jde o **rychlost** (cloudové volání = síťová latence navíc na
+  každé embedování) a **nezávislost na providerovi** (funguje stejně
+  bez ohledu na to, jaký cloudový model zrovna hraje, i offline).
+  Embedding modely jsou zralejší a spolehlivější než generativní —
+  nemusí "rozumět", jen převádět text na čísla.
+- 🟡 **Lokální STT (rozpoznávání řeči) pro hlasový vstup** — zralá
+  technologie (whisper.cpp, běží i na mobilu), ale je to NOVÁ FEATURA
+  (mluv na postavu nahlas), ne optimalizace něčeho stávajícího. Stojí
+  za zvážení, pokud by hlasové ovládání hry byla žádaná věc.
+- 🔴 **Lokální TTS neurální hlasy** — už zkoumáno a zavrženo (Piper,
+  M31) kvůli chybějícím českým fonémům. Edge-TTS je zdarma a lepší.
+- 🔴 **Lokální generování obrázků** — i "malé" image modely jsou
+  stovky MB až GB a potřebují výkon nedostupný na mobilu. Nereálné.
+- 🔴 **Lokální model jako hlavní vypravěč** — kvalitativní propast
+  oproti cloudovým modelům by byla okamžitě znát a degradovala by
+  zážitek. Smysl jen jako záchranná síť pro plně offline hraní, ne
+  jako vylepšení kvality.
+- 🔴 **Lokální model na "je tahle zpráva důležitá?"/drift-check** —
+  vyžaduje skutečné porozumění nuancím, malé modely (270M–1B) jsou
+  v tom nespolehlivé. Nejistý přínos, reálné riziko zhoršení.
+
+**Shrnutí:** jediná jasně doporučená položka je lokální embedding
+model. Vše ostatní je buď "hezký nápad na jindy, jiná kategorie"
+(STT), nebo věc, kde bych upřímně řekl nezačínat (TTS/obrázky/hlavní
+vypravěč/drift-check) — kvalita nebo rozsah práce by nebyly úměrné
+přínosu. Separátní "lokální orchestrátor dat" zůstává zajímavý, ale
+spekulativní směr — dnešní test naznačuje, že tu roli už dobře plní
+velký model sám přes function calling.
 
 ## Doporučené pořadí a velikost (zbývající práce)
 
