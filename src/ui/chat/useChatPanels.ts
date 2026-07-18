@@ -109,6 +109,7 @@ export function useChatPanels() {
     characterOpen,
     groupOpen,
     exportOpen,
+    calendarOpen,
     hasOpenPanel,
     // Legacy per-panel setters for direct boolean/toggle control
     setMemoryOpen,
@@ -118,5 +119,6 @@ export function useChatPanels() {
     setCharacterOpen,
     setGroupOpen,
     setExportOpen,
+    setCalendarOpen,
   };
 }

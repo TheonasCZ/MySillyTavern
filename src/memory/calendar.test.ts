@@ -164,7 +164,7 @@ describe("formatCalendarDateShort", () => {
     const d = calendarDateFromDays(847, 45, 6);
     const s = formatCalendarDateShort(d);
     expect(s).toContain("🕐");
-    expect(s).toContain("6h");
+    expect(s).toContain("06:00");
     expect(s).toContain("15. Jarního větru, 847");
   });
 });
@@ -427,7 +427,7 @@ describe("calendarDescription with hourOfDay", () => {
   it("includes hour and period info", () => {
     const d = calendarDateFromDays(847, 45, 14);
     const desc = calendarDescription(d);
-    expect(desc).toContain("14h");
+    expect(desc).toContain("14:00");
     expect(desc).toContain("day");
     expect(desc).toContain("[TIME:+1h]");
   });
@@ -440,7 +440,7 @@ describe("formatCalendarDateShort with hourOfDay", () => {
     const d = calendarDateFromDays(847, 45, 14);
     const s = formatCalendarDateShort(d);
     expect(s).toContain("🕐");
-    expect(s).toContain("14h");
+    expect(s).toContain("14:00");
     expect(s).toContain("🌸");
     expect(s).toContain("Jaro");
   });

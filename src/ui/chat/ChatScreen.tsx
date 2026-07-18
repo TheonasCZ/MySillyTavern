@@ -126,7 +126,6 @@ export function ChatScreen() {
 
   // Calendar state
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
-  const [calendarPanelOpen, setCalendarPanelOpen] = useState(false);
   const [weather, setWeather] = useState<string>("jasno");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
@@ -275,19 +274,9 @@ export function ChatScreen() {
           </button>
           <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
           {calendarDate && (
-            <button
-              type="button"
-              onClick={() => setCalendarPanelOpen((v) => !v)}
-              aria-pressed={calendarPanelOpen}
-              className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors shrink-0"
-              style={{
-                color: "var(--color-text-muted)",
-                backgroundColor: calendarPanelOpen ? "var(--color-surface-2)" : "transparent",
-              }}
-              title={`${calendarDate.season} — ${calendarDate.day}. ${calendarDate.month}, Rok ${calendarDate.year}`}
-            >
+            <span className="text-xs whitespace-nowrap shrink-0" style={{ color: "var(--color-text-muted)" }}>
               {formatCalendarDateShort(calendarDate)} | {weatherIcon(weather)} {weather}
-            </button>
+            </span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -408,6 +397,20 @@ export function ChatScreen() {
             }}
           >
             📜
+          </button>
+          <button
+            type="button"
+            onClick={() => panels.setCalendarOpen((v) => !v)}
+            aria-pressed={panels.calendarOpen}
+            title={t("room.calendarTooltip", "Kalendář")}
+            className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
+            style={{
+              borderColor: "var(--color-border-strong)",
+              backgroundColor: panels.calendarOpen ? "var(--color-accent)" : "transparent",
+              color: panels.calendarOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >
+            📅
           </button>
           <button
             type="button"
@@ -640,12 +643,12 @@ export function ChatScreen() {
             </aside>
           </>
         )}
-        {calendarPanelOpen && calendarDate && (
+        {panels.calendarOpen && calendarDate && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setCalendarPanelOpen(false)}
+              onClick={() => panels.setCalendarOpen(false)}
             />
             <aside
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
@@ -655,7 +658,7 @@ export function ChatScreen() {
                 calendarDate={calendarDate}
                 weather={weather}
                 events={calendarEvents}
-                onClose={() => setCalendarPanelOpen(false)}
+                onClose={() => panels.setCalendarOpen(false)}
                 onAddEvent={(draft) => {
                   void (async () => {
                     const ev = {
