@@ -22,8 +22,15 @@ import {
   calendarFromJSON,
   type CalendarDate,
   formatCalendarDateShort,
-  SEASON_EFFECTS,
+  weatherIcon,
 } from "../../memory/calendar";
+import { CalendarPanel } from "./CalendarPanel";
+import type { CalendarEvent } from "../../db/repositories/calendarEventsRepo";
+import {
+  listCalendarEvents,
+  createCalendarEvent,
+  deleteCalendarEvent,
+} from "../../db/repositories/calendarEventsRepo";
 import { ChatInput } from "./ChatInput";
 import { DirectorPopover } from "./DirectorPopover";
 import { GroupMembersPopover } from "./GroupMembersPopover";
@@ -117,9 +124,11 @@ export function ChatScreen() {
   // ── Panel state ────────────────────────────────────────────────────
   const panels = useChatPanels();
 
-  // Calendar state (not panel-related — stays in ChatScreen)
+  // Calendar state
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
-  const [calendarExpanded, setCalendarExpanded] = useState(false);
+  const [calendarPanelOpen, setCalendarPanelOpen] = useState(false);
+  const [weather, setWeather] = useState<string>("jasno");
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
   // ── Store-driven derived values ────────────────────────────────────
   const connection = chat?.connectionId
@@ -186,18 +195,40 @@ export function ChatScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Load calendar date for this chat
+  // Load calendar date, weather, and events for this chat
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
     void (async () => {
+      let loadedDate: CalendarDate | null = null;
       try {
         const raw = await getCalendarSetting(id);
         if (cancelled) return;
-        setCalendarDate(raw ? calendarFromJSON(raw) : null);
+        loadedDate = raw ? calendarFromJSON(raw) : null;
+        setCalendarDate(loadedDate);
       } catch {
         if (!cancelled) setCalendarDate(null);
       }
+      // Load weather from localStorage, initialize if missing
+      try {
+        const storedWeather = localStorage.getItem(`weather_${id}`);
+        if (!cancelled && storedWeather) {
+          setWeather(storedWeather);
+        } else if (!cancelled && loadedDate) {
+          // Initialize weather based on season
+          const seasonMap: Record<string, string> = {
+            "Jaro": "polojasno", "Léto": "jasno", "Podzim": "zataženo", "Zima": "zataženo",
+          };
+          const initial = seasonMap[loadedDate.season] ?? "jasno";
+          setWeather(initial);
+          localStorage.setItem(`weather_${id}`, initial);
+        }
+      } catch { /* noop */ }
+      // Load calendar events
+      try {
+        const evts = await listCalendarEvents(id);
+        if (!cancelled) setCalendarEvents(evts);
+      } catch { /* noop */ }
     })();
     return () => { cancelled = true; };
   }, [id]);
@@ -244,44 +275,19 @@ export function ChatScreen() {
           </button>
           <h1 className="truncate font-[var(--font-display)] text-lg">{chat?.title}</h1>
           {calendarDate && (
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setCalendarExpanded((v) => !v)}
-                aria-pressed={calendarExpanded}
-                className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors"
-                style={{
-                  color: "var(--color-text-muted)",
-                  backgroundColor: calendarExpanded ? "var(--color-surface-2)" : "transparent",
-                }}
-                title={calendarDate.season}
-              >
-                {formatCalendarDateShort(calendarDate)}
-              </button>
-              {calendarExpanded && (
-                <>
-                  <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setCalendarExpanded(false)}
-                  />
-                  <div
-                    className="absolute left-0 top-full z-40 mt-1 w-56 rounded-[var(--radius-md)] border p-3 text-xs shadow-lg"
-                    style={{
-                      borderColor: "var(--color-border-strong)",
-                      backgroundColor: "var(--color-bg-elevated)",
-                      color: "var(--color-text)",
-                    }}
-                  >
-                    <div className="font-medium">
-                      {calendarDate.season} — {calendarDate.day}. {calendarDate.month}, Rok {calendarDate.year}
-                    </div>
-                    <div className="mt-1" style={{ color: "var(--color-text-muted)" }}>
-                      {SEASON_EFFECTS[calendarDate.season] ?? ""}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setCalendarPanelOpen((v) => !v)}
+              aria-pressed={calendarPanelOpen}
+              className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors shrink-0"
+              style={{
+                color: "var(--color-text-muted)",
+                backgroundColor: calendarPanelOpen ? "var(--color-surface-2)" : "transparent",
+              }}
+              title={`${calendarDate.season} — ${calendarDate.day}. ${calendarDate.month}, Rok ${calendarDate.year}`}
+            >
+              {formatCalendarDateShort(calendarDate)} | {weatherIcon(weather)} {weather}
+            </button>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -630,6 +636,49 @@ export function ChatScreen() {
                 modifications={chat.modifications}
                 skills={chat.skills}
                 onClose={() => panels.setCharacterOpen(false)}
+              />
+            </aside>
+          </>
+        )}
+        {calendarPanelOpen && calendarDate && (
+          <>
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => setCalendarPanelOpen(false)}
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <CalendarPanel
+                calendarDate={calendarDate}
+                weather={weather}
+                events={calendarEvents}
+                onClose={() => setCalendarPanelOpen(false)}
+                onAddEvent={(draft) => {
+                  void (async () => {
+                    const ev = {
+                      id: crypto.randomUUID(),
+                      chatId: id,
+                      day: draft.day,
+                      monthName: draft.monthName,
+                      year: calendarDate.year,
+                      title: draft.title,
+                      description: draft.description,
+                      icon: "📅",
+                    };
+                    await createCalendarEvent(ev);
+                    const updated = await listCalendarEvents(id);
+                    setCalendarEvents(updated);
+                  })();
+                }}
+                onDeleteEvent={(eventId) => {
+                  void (async () => {
+                    await deleteCalendarEvent(eventId);
+                    setCalendarEvents((prev) => prev.filter((e) => e.id !== eventId));
+                  })();
+                }}
               />
             </aside>
           </>

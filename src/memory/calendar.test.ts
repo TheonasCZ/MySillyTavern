@@ -2,16 +2,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   advanceDay,
+  advanceHour,
   calendarDateFromDays,
   calendarDescription,
   calendarFromJSON,
   calendarToJSON,
+  dayPeriod,
   defaultCalendarDate,
   formatCalendarDate,
   formatCalendarDateShort,
   getSeason,
   MONTHS,
+  seasonIcon,
   SEASON_EFFECTS,
+  timeIcon,
+  weatherIcon,
 } from "./calendar";
 
 // ---- getSeason ------------------------------------------------------------
@@ -155,9 +160,12 @@ describe("formatCalendarDate", () => {
 });
 
 describe("formatCalendarDateShort", () => {
-  it("includes the calendar emoji and shorter year format", () => {
-    const d = calendarDateFromDays(847, 45);
-    expect(formatCalendarDateShort(d)).toBe("📅 15. Jarního větru, 847");
+  it("includes time icon, season icon, and date", () => {
+    const d = calendarDateFromDays(847, 45, 6);
+    const s = formatCalendarDateShort(d);
+    expect(s).toContain("🕐");
+    expect(s).toContain("6h");
+    expect(s).toContain("15. Jarního větru, 847");
   });
 });
 
@@ -169,9 +177,10 @@ describe("calendarDescription", () => {
     const desc = calendarDescription(d);
     expect(desc).toContain("[DNEŠNÍ DATUM]");
     expect(desc).toContain("15. Jarního větru, Rok 847");
-    expect(desc).toContain("(Jaro)");
+    expect(desc).toContain("Jaro");
     expect(desc).toContain(SEASON_EFFECTS["Jaro"]);
     expect(desc).toContain("[TIME:+1d]");
+    expect(desc).toContain("[TIME:+1h]");
   });
 
   it("uses correct effects for each season", () => {
@@ -188,7 +197,7 @@ describe("calendarToJSON / calendarFromJSON", () => {
   it("round-trips through JSON", () => {
     const original = calendarDateFromDays(847, 200);
     const json = calendarToJSON(original);
-    expect(json).toEqual({ year: 847, dayOfYear: 200 });
+    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 6 });
     const restored = calendarFromJSON(json);
     expect(restored.year).toBe(847);
     expect(restored.dayOfYear).toBe(200);
@@ -261,5 +270,178 @@ describe("SEASON_EFFECTS", () => {
     for (const effect of Object.values(SEASON_EFFECTS)) {
       expect(effect.length).toBeGreaterThan(10);
     }
+  });
+});
+
+// ---- hourOfDay in CalendarDate ----------------------------------------------
+
+describe("hourOfDay", () => {
+  it("defaultCalendarDate starts at hour 6 (dawn)", () => {
+    const d = defaultCalendarDate();
+    expect(d.hourOfDay).toBe(6);
+  });
+
+  it("calendarDateFromDays defaults to hour 6", () => {
+    const d = calendarDateFromDays(847, 45);
+    expect(d.hourOfDay).toBe(6);
+  });
+
+  it("calendarDateFromDays accepts explicit hour", () => {
+    const d = calendarDateFromDays(847, 45, 14);
+    expect(d.hourOfDay).toBe(14);
+  });
+
+  it("advanceDay preserves hourOfDay", () => {
+    const d = calendarDateFromDays(847, 45, 14);
+    const next = advanceDay(d);
+    expect(next.hourOfDay).toBe(14);
+    expect(next.day).toBe(16);
+  });
+});
+
+// ---- advanceHour -----------------------------------------------------------
+
+describe("advanceHour", () => {
+  it("advances by one hour within the same day", () => {
+    const d = calendarDateFromDays(847, 45, 14);
+    const next = advanceHour(d);
+    expect(next.hourOfDay).toBe(15);
+    expect(next.day).toBe(15);
+    expect(next.dayOfYear).toBe(45);
+  });
+
+  it("wraps at 24h, advancing the day", () => {
+    const d = calendarDateFromDays(847, 45, 23);
+    const next = advanceHour(d);
+    expect(next.hourOfDay).toBe(0);
+    expect(next.dayOfYear).toBe(46);
+    expect(next.day).toBe(16);
+  });
+
+  it("wraps across year boundary at 24h on day 360", () => {
+    const d = calendarDateFromDays(847, 360, 23);
+    const next = advanceHour(d);
+    expect(next.hourOfDay).toBe(0);
+    expect(next.year).toBe(848);
+    expect(next.dayOfYear).toBe(1);
+  });
+});
+
+// ---- dayPeriod -------------------------------------------------------------
+
+describe("dayPeriod", () => {
+  it("returns dawn for 5-7", () => {
+    expect(dayPeriod(5)).toBe("dawn");
+    expect(dayPeriod(6)).toBe("dawn");
+    expect(dayPeriod(7)).toBe("dawn");
+  });
+
+  it("returns day for 8-17", () => {
+    expect(dayPeriod(8)).toBe("day");
+    expect(dayPeriod(12)).toBe("day");
+    expect(dayPeriod(17)).toBe("day");
+  });
+
+  it("returns dusk for 18-20", () => {
+    expect(dayPeriod(18)).toBe("dusk");
+    expect(dayPeriod(19)).toBe("dusk");
+    expect(dayPeriod(20)).toBe("dusk");
+  });
+
+  it("returns night for 0-4 and 21-23", () => {
+    expect(dayPeriod(0)).toBe("night");
+    expect(dayPeriod(4)).toBe("night");
+    expect(dayPeriod(21)).toBe("night");
+    expect(dayPeriod(23)).toBe("night");
+  });
+});
+
+// ---- timeIcon --------------------------------------------------------------
+
+describe("timeIcon", () => {
+  it("returns correct icons for each period", () => {
+    expect(timeIcon(6)).toBe("🌅");
+    expect(timeIcon(12)).toBe("☀️");
+    expect(timeIcon(19)).toBe("🌆");
+    expect(timeIcon(23)).toBe("🌙");
+  });
+});
+
+// ---- seasonIcon ------------------------------------------------------------
+
+describe("seasonIcon", () => {
+  it("returns correct icons for each season", () => {
+    expect(seasonIcon("Jaro")).toBe("🌸");
+    expect(seasonIcon("Léto")).toBe("☀️");
+    expect(seasonIcon("Podzim")).toBe("🍂");
+    expect(seasonIcon("Zima")).toBe("❄️");
+  });
+
+  it("returns empty string for unknown season", () => {
+    expect(seasonIcon("")).toBe("");
+    expect(seasonIcon("unknown")).toBe("");
+  });
+});
+
+// ---- weatherIcon -----------------------------------------------------------
+
+describe("weatherIcon", () => {
+  it("returns correct icons for known weather", () => {
+    expect(weatherIcon("jasno")).toBe("☀️");
+    expect(weatherIcon("polojasno")).toBe("⛅");
+    expect(weatherIcon("zataženo")).toBe("☁️");
+    expect(weatherIcon("déšť")).toBe("🌧️");
+    expect(weatherIcon("bouřka")).toBe("⛈️");
+    expect(weatherIcon("sníh")).toBe("❄️");
+    expect(weatherIcon("mlha")).toBe("🌫️");
+  });
+
+  it("returns empty string for unknown weather", () => {
+    expect(weatherIcon("")).toBe("");
+    expect(weatherIcon("tornádo")).toBe("");
+  });
+});
+
+// ---- Serialization with hourOfDay -----------------------------------------
+
+describe("calendarToJSON / calendarFromJSON with hourOfDay", () => {
+  it("round-trips hourOfDay through JSON", () => {
+    const original = calendarDateFromDays(847, 200, 14);
+    const json = calendarToJSON(original);
+    expect(json).toEqual({ year: 847, dayOfYear: 200, hourOfDay: 14 });
+    const restored = calendarFromJSON(json);
+    expect(restored.hourOfDay).toBe(14);
+    expect(restored.year).toBe(847);
+    expect(restored.dayOfYear).toBe(200);
+  });
+
+  it("calendarFromJSON defaults hourOfDay to 6 when missing", () => {
+    const d = calendarFromJSON({ year: 847, dayOfYear: 100 });
+    expect(d.hourOfDay).toBe(6);
+  });
+});
+
+// ---- calendarDescription updated for hourOfDay ----------------------------
+
+describe("calendarDescription with hourOfDay", () => {
+  it("includes hour and period info", () => {
+    const d = calendarDateFromDays(847, 45, 14);
+    const desc = calendarDescription(d);
+    expect(desc).toContain("14h");
+    expect(desc).toContain("day");
+    expect(desc).toContain("[TIME:+1h]");
+  });
+});
+
+// ---- formatCalendarDateShort updated --------------------------------------
+
+describe("formatCalendarDateShort with hourOfDay", () => {
+  it("includes time icon and season icon", () => {
+    const d = calendarDateFromDays(847, 45, 14);
+    const s = formatCalendarDateShort(d);
+    expect(s).toContain("🕐");
+    expect(s).toContain("14h");
+    expect(s).toContain("🌸");
+    expect(s).toContain("Jaro");
   });
 });

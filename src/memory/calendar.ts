@@ -5,6 +5,9 @@
  * Each year has exactly 360 days: 12 months × 30 days.
  * Each season spans 90 days (3 months).
  *
+ * Time-of-day is tracked as hourOfDay (0–23) alongside the date. Hours
+ * advance independently; wrapping at 24h also advances the calendar day.
+ *
  * Month names use Czech genitive forms for date formatting
  * (e.g. "15. Jarního větru, Rok 847"). */
 
@@ -16,6 +19,8 @@ export interface CalendarDate {
   /** 1-based day within the current month (1..30). */
   day: number;
   season: string;
+  /** Hour of day (0–23). */
+  hourOfDay: number;
 }
 
 // ---- Month definitions ---------------------------------------------------
@@ -71,8 +76,8 @@ export function getSeason(dayOfYear: number): string {
   return "Zima";
 }
 
-/** Builds a CalendarDate from a year and day-of-year. */
-export function calendarDateFromDays(year: number, dayOfYear: number): CalendarDate {
+/** Builds a CalendarDate from a year, day-of-year, and optional hour. */
+export function calendarDateFromDays(year: number, dayOfYear: number, hourOfDay = 6): CalendarDate {
   const d = Math.max(1, Math.min(DAYS_PER_YEAR, Math.floor(dayOfYear)));
   let remaining = d;
   let monthIdx = 0;
@@ -90,42 +95,110 @@ export function calendarDateFromDays(year: number, dayOfYear: number): CalendarD
     month: month.genitive,
     day: remaining,
     season: month.season,
+    hourOfDay: Math.max(0, Math.min(23, Math.floor(hourOfDay))),
   };
 }
 
-/** Default calendar start: 1. Měsíce probuzení, Rok 847 (day 1 of year 847). */
+/** Default calendar start: 1. Měsíce probuzení, Rok 847, 6h (dawn). */
 export function defaultCalendarDate(): CalendarDate {
-  return calendarDateFromDays(847, 1);
+  return calendarDateFromDays(847, 1, 6);
 }
 
-/** Advances the calendar by one day, wrapping year boundaries. */
+/** Advances the calendar by one day, wrapping year boundaries. Preserves hourOfDay. */
 export function advanceDay(current: CalendarDate): CalendarDate {
   const nextDay = current.dayOfYear >= DAYS_PER_YEAR ? 1 : current.dayOfYear + 1;
   const nextYear = current.dayOfYear >= DAYS_PER_YEAR ? current.year + 1 : current.year;
-  return calendarDateFromDays(nextYear, nextDay);
+  return calendarDateFromDays(nextYear, nextDay, current.hourOfDay);
 }
+
+/** Advances the calendar by one hour. Wraps at 24h, advancing the day. */
+export function advanceHour(current: CalendarDate): CalendarDate {
+  const nextHour = current.hourOfDay + 1;
+  if (nextHour >= 24) {
+    const nextDayOfYear = current.dayOfYear >= DAYS_PER_YEAR ? 1 : current.dayOfYear + 1;
+    const nextYear = current.dayOfYear >= DAYS_PER_YEAR ? current.year + 1 : current.year;
+    return calendarDateFromDays(nextYear, nextDayOfYear, 0);
+  }
+  return { ...current, hourOfDay: nextHour };
+}
+
+// ---- Time-of-day helpers -------------------------------------------------
+
+export type DayPeriod = "dawn" | "day" | "dusk" | "night";
+
+/** Returns the day period for a given hour (0–23). */
+export function dayPeriod(hour: number): DayPeriod {
+  const h = Math.max(0, Math.min(23, Math.floor(hour)));
+  if (h >= 5 && h <= 7) return "dawn";
+  if (h >= 8 && h <= 17) return "day";
+  if (h >= 18 && h <= 20) return "dusk";
+  return "night"; // 21–4
+}
+
+/** Returns an emoji icon for the time of day. */
+export function timeIcon(hour: number): string {
+  const period = dayPeriod(hour);
+  switch (period) {
+    case "dawn": return "🌅";
+    case "day": return "☀️";
+    case "dusk": return "🌆";
+    case "night": return "🌙";
+  }
+}
+
+/** Returns an emoji icon for a Czech fantasy season. */
+export function seasonIcon(season: string): string {
+  switch (season) {
+    case "Jaro": return "🌸";
+    case "Léto": return "☀️";
+    case "Podzim": return "🍂";
+    case "Zima": return "❄️";
+    default: return "";
+  }
+}
+
+/** Returns an emoji icon for a Czech weather string. */
+export function weatherIcon(weather: string): string {
+  switch (weather) {
+    case "jasno": return "☀️";
+    case "polojasno": return "⛅";
+    case "zataženo": return "☁️";
+    case "déšť": return "🌧️";
+    case "bouřka": return "⛈️";
+    case "sníh": return "❄️";
+    case "mlha": return "🌫️";
+    default: return "";
+  }
+}
+
+// ---- Formatting ------------------------------------------------------------
 
 /** Formats a CalendarDate for display: "15. Jarního větru, Rok 847". */
 export function formatCalendarDate(date: CalendarDate): string {
   return `${date.day}. ${date.month}, Rok ${date.year}`;
 }
 
-/** Short format for UI header: "📅 15. Jarního větru, 847". */
+/** Short format for UI header: includes time icon, season icon, and date. */
 export function formatCalendarDateShort(date: CalendarDate): string {
-  return `📅 ${date.day}. ${date.month}, ${date.year}`;
+  const hour = date.hourOfDay ?? 6;
+  return `🕐 ${hour}h ${timeIcon(hour)} | ${seasonIcon(date.season)} ${date.season} | 📅 ${date.day}. ${date.month}, ${date.year}`;
 }
 
 /** Produces the full prompt block for the current date including season effects
- * and the `[TIME:+1d]` tag instruction for advancing the calendar. */
+ * and the `[TIME:+1d]` / `[TIME:+1h]` tag instructions for advancing time. */
 export function calendarDescription(date: CalendarDate): string {
   const effects = SEASON_EFFECTS[date.season] ?? "";
-  const tagNote = "Pro posun času o jeden den použij tag [TIME:+1d] — spustí se efekty úsvitu/soumraku.";
-  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date)} (${date.season})\n${effects}\n${tagNote}`;
+  const period = dayPeriod(date.hourOfDay ?? 6);
+  const hour = date.hourOfDay ?? 6;
+  const tagNote = `Pro posun času použij tag [TIME:+1d] (den) nebo [TIME:+1h] (hodina). Aktuálně je ${hour}h (${period}).`;
+  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date)} (${date.season}, ${hour}h — ${period})\n${effects}\n${tagNote}`;
 }
 
+// ---- Serialization ---------------------------------------------------------
+
 /** Serializes calendar state to a storable JSON object. */
-export function calendarToJSON(date: CalendarDate): { year: number; dayOfYear: number } {
-  return { year: date.year, dayOfYear: date.dayOfYear };
+export function calendarToJSON(date: CalendarDate): { year: number; dayOfYear: number; hourOfDay: number } {
+  return { year: date.year, dayOfYear: date.dayOfYear, hourOfDay: date.hourOfDay };
 }
 
 /** Deserializes calendar state from stored JSON. Falls back to default on any error. */
@@ -133,7 +206,8 @@ export function calendarFromJSON(json: unknown): CalendarDate {
   try {
     const obj = json as Record<string, unknown>;
     if (typeof obj?.year === "number" && typeof obj?.dayOfYear === "number") {
-      return calendarDateFromDays(obj.year, obj.dayOfYear);
+      const hour = typeof obj.hourOfDay === "number" ? obj.hourOfDay : 6;
+      return calendarDateFromDays(obj.year, obj.dayOfYear, hour);
     }
   } catch {
     // fall through

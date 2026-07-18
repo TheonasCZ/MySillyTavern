@@ -173,6 +173,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_028,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 29,
+            description: "calendar_events: world calendar events for the fantasy calendar system",
+            sql: MIGRATION_029,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -532,6 +538,20 @@ ALTER TABLE chats ADD COLUMN level INTEGER NOT NULL DEFAULT 1;
 /// persona template (unlike inventory/skills/conditions above), so this is
 /// just a new chat column with no persona-seeding counterpart.
 const MIGRATION_028: &str = r#"ALTER TABLE chats ADD COLUMN modifications TEXT NOT NULL DEFAULT '[]';"#;
+
+const MIGRATION_029: &str = r#"
+CREATE TABLE calendar_events (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  day INTEGER NOT NULL,
+  month_name TEXT NOT NULL,
+  year INTEGER,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"#;
 
 const MIGRATION_020: &str = r#"
 CREATE TABLE tts_voice_profiles (

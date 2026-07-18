@@ -181,6 +181,20 @@
       },
       "extra": "Vlastní pokyn",
       "extraPlaceholder": "např. Zaveď do děje tajemného cizince…"
+    },
+    "calendar": {
+      "title": "Kalendář",
+      "addEvent": "Přidat",
+      "eventTitle": "Název události",
+      "eventDesc": "Popis (volitelné)",
+      "noEvents": "Žádné nadcházející události.",
+      "weather": "Počasí",
+      "upcoming": "Nadcházející události",
+      "today": "Dnes",
+      "cancel": "Zrušit",
+      "save": "Uložit",
+      "day": "Den",
+      "delete": "Smazat"
     }
   },
   "characters": {

@@ -181,6 +181,20 @@
       },
       "extra": "Custom instruction",
       "extraPlaceholder": "e.g. Introduce a mysterious stranger…"
+    },
+    "calendar": {
+      "title": "Calendar",
+      "addEvent": "Add",
+      "eventTitle": "Event name",
+      "eventDesc": "Description (optional)",
+      "noEvents": "No upcoming events.",
+      "weather": "Weather",
+      "upcoming": "Upcoming events",
+      "today": "Today",
+      "cancel": "Cancel",
+      "save": "Save",
+      "day": "Day",
+      "delete": "Delete"
     }
   },
   "characters": {
