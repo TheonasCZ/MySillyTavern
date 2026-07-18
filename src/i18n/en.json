@@ -677,9 +677,12 @@
     },
     "tabs": {
       "connection": "Connection",
-      "play": "Play",
+      "sound": "Sound",
+      "sync": "Sync",
+      "game": "Game",
       "appearance": "Appearance",
-      "data": "Data & diagnostics"
+      "data": "Data & diagnostics",
+      "shortcuts": "Shortcuts"
     },
     "resetButton": "Reset to defaults",
     "resetConfirm": "Reset all settings to defaults?",

@@ -677,9 +677,12 @@
     },
     "tabs": {
       "connection": "Připojení",
-      "play": "Hraní",
+      "sound": "Zvuk",
+      "sync": "Synchronizace",
+      "game": "Hra",
       "appearance": "Vzhled",
-      "data": "Data a diagnostika"
+      "data": "Data a diagnostika",
+      "shortcuts": "Zkratky"
     },
     "resetButton": "Obnovit výchozí hodnoty",
     "resetConfirm": "Opravdu obnovit všechna nastavení?",

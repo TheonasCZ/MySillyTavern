@@ -14,13 +14,16 @@ import { SyncPanel } from "./SyncPanel";
 import { TtsPanel } from "./TtsPanel";
 import { UsagePanel } from "./UsagePanel";
 
-type Tab = "connection" | "play" | "appearance" | "data";
+type Tab = "connection" | "game" | "sound" | "sync" | "appearance" | "data" | "shortcuts";
 
 const TABS: readonly { id: Tab; i18nKey: string }[] = [
   { id: "connection", i18nKey: "tabs.connection" },
-  { id: "play", i18nKey: "tabs.play" },
+  { id: "game", i18nKey: "tabs.game" },
+  { id: "sound", i18nKey: "tabs.sound" },
+  { id: "sync", i18nKey: "tabs.sync" },
   { id: "appearance", i18nKey: "tabs.appearance" },
   { id: "data", i18nKey: "tabs.data" },
+  { id: "shortcuts", i18nKey: "tabs.shortcuts" },
 ] as const;
 
 const STORAGE_KEY = "settings-tab";
@@ -63,7 +66,7 @@ export function SettingsScreen() {
   // On mount, read the hash if present
   useEffect(() => {
     const hash = window.location.hash;
-    const match = /^#settings\/(connection|play|appearance|data)$/.exec(hash);
+    const match = /^#settings\/(connection|sound|sync|system|appearance|data|shortcuts)$/.exec(hash);
     if (match) {
       const hashTab = match[1] as Tab;
       setTab(hashTab);
@@ -79,23 +82,25 @@ export function SettingsScreen() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
       <h1 className="font-[var(--font-display)] text-2xl">{t("title")}</h1>
 
-      {/* Tab bar */}
+      {/* Tab bar — horizontal on desktop, vertical stack on mobile */}
       <nav
-        className="flex gap-0 overflow-x-auto rounded-[var(--radius-md)]"
+        className="flex flex-col gap-0 overflow-x-auto rounded-[var(--radius-md)] sm:flex-row"
         style={{ backgroundColor: "var(--color-surface-2)" }}
         role="tablist"
       >
-        {TABS.map(({ id, i18nKey }) => (
+        {TABS.map(({ id, i18nKey }, i) => (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={tab === id}
             onClick={() => switchTab(id)}
-            className="flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors first:rounded-l-[var(--radius-md)] last:rounded-r-[var(--radius-md)]"
+            className="flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors sm:first:rounded-l-[var(--radius-md)] sm:last:rounded-r-[var(--radius-md)]"
             style={{
               backgroundColor: tab === id ? "var(--color-primary)" : "transparent",
               color: tab === id ? "var(--color-primary-contrast, #fff)" : "var(--color-text)",
+              ...(i === 0 ? { borderTopLeftRadius: "var(--radius-md)", borderTopRightRadius: "var(--radius-md)" } : {}),
+              ...(i === TABS.length - 1 ? { borderBottomLeftRadius: "var(--radius-md)", borderBottomRightRadius: "var(--radius-md)" } : {}),
             }}
           >
             {t(i18nKey)}
@@ -106,29 +111,28 @@ export function SettingsScreen() {
       {/* Tab panels */}
       {tab === "connection" && <ConnectionsPanel />}
 
-      {tab === "play" && (
+      {tab === "sound" && <TtsPanel />}
+
+      {tab === "sync" && <SyncPanel />}
+
+      {tab === "game" && (
         <>
           <PresetsPanel />
-          <TtsPanel />
-          <SyncPanel />
-        </>
-      )}
-
-      {tab === "appearance" && (
-        <>
-          <AppearancePanel />
           <MemorySettingsPanel />
         </>
       )}
+
+      {tab === "appearance" && <AppearancePanel />}
 
       {tab === "data" && (
         <>
           <BackupPanel />
           <UsagePanel />
           <DiagnosticsPanel />
-          <ShortcutsPanel />
         </>
       )}
+
+      {tab === "shortcuts" && <ShortcutsPanel />}
 
       <div className="border-t pt-4" style={{ borderColor: "var(--color-border)" }}>
         <button
