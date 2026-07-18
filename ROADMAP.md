@@ -41,7 +41,9 @@ Stav k 2026-07-18. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odlo�
 - ✅ **Settings tabs** — 7 záložek (Připojení, Hra, Zvuk, Sync, Vzhled, Data, Zkratky), responzivní burger
 - ✅ **Refactoring** — chatStore (1223→659 ř., 6 modulů), promptBuilder (1122→914 ř., gameTags+voiceExamples), ChatScreen (1011→532 ř., useChatPanels+useChatActions)
 - ✅ **Button styling** — 20+ tlačítek s backgroundem, paddingem, border-radius
-- ✅ **Inventář** — grid/list toggle, typové ikony (⚔️🛡️🧪📜💎🍖🔧📦), default list; whole-word + frázový matching (fix "ocelový nůž"=⚔️, "alchymistická sada"=🧪, "inženýrská sada"=🔧); quantity badge 0.7em (škáluje se s fontem)
+- ✅ **Chat layout** — right vertical icon sidebar (📅🎒📜🧍🎬🧠📖) uvnitř flex kontejneru; ← bez textu, sidebar se sekcemi + divider pro narrative controls
+- ✅ **Kalendář** — čas dne (🌅☀️🌆🌙), fantasy měsíce s reálnými v závorce, ikony sezón, template-based světové události (20 šablon, 5 na chat), CalendarPanel, 📅 tlačítko v icon baru
+- ✅ **Inventář** — grid/list toggle, typové ikony (⚔️🛡️🧪📜💎🍖🔧📦), default list; whole-word + frázový matching (fix "ocelový nůž"=⚔️, "alchymistická sada"=🧪, "inženýrská sada"=🔧); quantity badge 0.7em (škáluje se s fontem); grid mód zobrazuje ikony místo placeholderů
 - ✅ **Potvrzovací dialogy** — `showConfirm()` wrapper, 13 míst opraveno
 - ✅ **Undo toast**, streaming indikátor, unread badges, import preview, export progress
 - ✅ **Drobné opravy** — grey screen (useKeyboardShortcuts mimo Router), inventář přetrvávající napříč chaty
