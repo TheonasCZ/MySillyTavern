@@ -13,7 +13,9 @@ import {
   type ChatDraft,
 } from "../db/repositories/chatsRepo";
 import { createCalendarEvent } from "../db/repositories/calendarEventsRepo";
+import { setCalendarSetting } from "../db/repositories/settingsRepo";
 import { generateCalendarEvents } from "../memory/calendarEvents";
+import { calendarToJSON, defaultCalendarDate } from "../memory/calendar";
 
 interface ChatListState {
   chats: Chat[];
@@ -40,15 +42,17 @@ export const useChatListStore = create<ChatListState>((set, get) => ({
   create: async (draft) => {
     const created = await createChat(draft);
     set({ chats: [created, ...get().chats] });
-    // Seed calendar events for the new chat (fire-and-forget, template-based, no AI)
+    // Initialize calendar date + seed events (fire-and-forget, no AI)
     void (async () => {
       try {
-        const events = generateCalendarEvents(created.id, 847);
+        const cal = defaultCalendarDate();
+        await setCalendarSetting(created.id, calendarToJSON(cal));
+        const events = generateCalendarEvents(created.id, cal.year);
         for (const ev of events) {
           await createCalendarEvent(ev);
         }
       } catch (err) {
-        console.warn("chatListStore: failed to seed calendar events", err);
+        console.warn("chatListStore: failed to init calendar", err);
       }
     })();
     return created;
