@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { Character } from "../db/repositories/charactersRepo";
 import {
-  addChatMember,
+  addChatMember, removeChatMember,
 } from "../db/repositories/chatMembersRepo";
 import {
   getChat,

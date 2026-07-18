@@ -50,6 +50,7 @@ export function SettingsScreen() {
   const { t } = useTranslation("settings");
   const [tab, setTab] = useState<Tab>(readStoredTab);
   const [resetDone, setResetDone] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const switchTab = useCallback(
     (next: Tab) => {
@@ -82,31 +83,70 @@ export function SettingsScreen() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
       <h1 className="font-[var(--font-display)] text-2xl">{t("title")}</h1>
 
-      {/* Tab bar — horizontal on desktop, vertical stack on mobile */}
+      {/* ---- Desktop tab bar (sm+) ---- */}
       <nav
-        className="flex flex-col gap-0 overflow-x-auto rounded-[var(--radius-md)] sm:flex-row"
+        className="hidden gap-0 rounded-[var(--radius-md)] sm:flex"
         style={{ backgroundColor: "var(--color-surface-2)" }}
         role="tablist"
       >
-        {TABS.map(({ id, i18nKey }, i) => (
+        {TABS.map((({ id, i18nKey }) => (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={tab === id}
             onClick={() => switchTab(id)}
-            className="flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors sm:first:rounded-l-[var(--radius-md)] sm:last:rounded-r-[var(--radius-md)]"
+            className="flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors first:rounded-l-[var(--radius-md)] last:rounded-r-[var(--radius-md)]"
             style={{
               backgroundColor: tab === id ? "var(--color-primary)" : "transparent",
               color: tab === id ? "var(--color-primary-contrast, #fff)" : "var(--color-text)",
-              ...(i === 0 ? { borderTopLeftRadius: "var(--radius-md)", borderTopRightRadius: "var(--radius-md)" } : {}),
-              ...(i === TABS.length - 1 ? { borderBottomLeftRadius: "var(--radius-md)", borderBottomRightRadius: "var(--radius-md)" } : {}),
             }}
           >
             {t(i18nKey)}
           </button>
         ))}
       </nav>
+
+      {/* ---- Mobile burger dropdown (below sm) ---- */}
+      <div className="relative sm:hidden">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((o) => !o)}
+          className="flex w-full items-center justify-between rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-medium"
+          style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
+          aria-expanded={menuOpen}
+        >
+          <span>{t(TABS.find((t) => t.id === tab)!.i18nKey)}</span>
+          <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>{menuOpen ? "▲" : "▼"}</span>
+        </button>
+        {menuOpen && (
+          <>
+            {/* Backdrop to close on outside click */}
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+            <div
+              className="absolute left-0 right-0 z-50 mt-1 rounded-[var(--radius-md)] py-1 shadow-lg"
+              style={{ backgroundColor: "var(--color-surface-2)", borderColor: "var(--color-border)", borderWidth: 1 }}
+              role="menu"
+            >
+              {TABS.map(({ id, i18nKey }) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { switchTab(id); setMenuOpen(false); }}
+                  className="block w-full px-4 py-2 text-left text-sm transition-colors"
+                  style={{
+                    backgroundColor: tab === id ? "var(--color-primary)" : "transparent",
+                    color: tab === id ? "var(--color-primary-contrast, #fff)" : "var(--color-text)",
+                  }}
+                >
+                  {t(i18nKey)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Tab panels */}
       {tab === "connection" && <ConnectionsPanel />}
