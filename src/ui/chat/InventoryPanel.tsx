@@ -37,11 +37,16 @@ function getSilhouette(race?: string): string {
 function itemIcon(item: InventoryEntry): string {
   const words = (item.item + " " + (item.note ?? "")).toLowerCase().split(/\s+/).filter(Boolean);
   const has = (...keywords: string[]) => words.some((w) => keywords.includes(w));
+  const fullText = (item.item + " " + (item.note ?? "")).toLowerCase();
+
+  // Compound phrases first (multi-word items)
+  if (/alchymistická sada|léčitelská sada|bylinkářská sada/.test(fullText)) return "🧪";
+  if (/inženýrská sada|zlodějská sada|mechanická sada/.test(fullText)) return "🔧";
 
   // Order matters — first match wins
   if (has("meč", "meče", "luk", "luky", "dýka", "dýky", "sekera", "sekery", "kopí", "hůl", "hole", "kuše", "šipka", "oštěp", "palcát", "cep", "rapír", "šavle", "kord", "nůž", "nože", "dýka")) return "⚔️";
   if (has("brnění", "štít", "helma", "helmice", "plášť", "rukavice", "boty", "náramek", "pancíř", "kyrys", "náholenice")) return "🛡️";
-  if (has("lektvar", "lahvička", "elixír", "jed", "flakón", "ampule", "olej", "extrakt", "tinktura", "sada")) return "🧪";
+  if (has("lektvar", "lahvička", "lahvičky", "elixír", "jed", "flakón", "ampule", "ampulka", "olej", "extrakt", "tinktura")) return "🧪";
   if (has("svitek", "kniha", "mapa", "dopis", "pergamen", "deník", "zápisník", "manuál")) return "📜";
   if (has("prsten", "drahokam", "amulet", "náhrdelník", "náušnice", "diadém", "koruna", "brož", "spona", "odznak")) return "💎";
   if (has("jídlo", "chleba", "sýr", "maso", "víno", "pivo", "med", "voda", "dávka", "suchar", "polévka", "ryba")) return "🍖";
