@@ -3,6 +3,15 @@ import { useLocation } from "react-router-dom";
 import { useChatStore } from "../stores/chatStore";
 
 /**
+ * Component wrapper — renders nothing, just activates the hook inside Router context.
+ * Place this inside your <HashRouter> tree.
+ */
+export function KeyboardShortcutListener() {
+  useKeyboardShortcuts();
+  return null;
+}
+
+/**
  * Global keyboard shortcuts:
  * - Ctrl+R / Cmd+R → regenerate last assistant message (only when chat is open)
  * - Ctrl+Enter → send message (handled by ChatInput natively)

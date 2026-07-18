@@ -16,11 +16,10 @@ import { LorebooksListScreen } from "./ui/lorebooks/LorebooksListScreen";
 import { PersonasScreen } from "./ui/personas/PersonasScreen";
 import { SettingsScreen } from "./ui/settings/SettingsScreen";
 import { UpdateBanner } from "./ui/UpdateBanner";
-import { useKeyboardShortcuts } from "./ui/useKeyboardShortcuts";
+import { KeyboardShortcutListener } from "./ui/useKeyboardShortcuts";
 
 function App() {
   const { hydrated, hydrate } = useSettingsStore();
-  useKeyboardShortcuts();
 
   useEffect(() => {
     void hydrate();
@@ -70,6 +69,7 @@ function App() {
           <Route path="/settings" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <KeyboardShortcutListener />
         <UpdateBanner />
         <SamplerToast />
         <UndoToast />
