@@ -61,85 +61,87 @@ function MiniMonthGrid({
   return (
     <div className="mt-2">
       <div
-        className="mb-1 flex items-center justify-between gap-1 rounded-[var(--radius-md)] border px-1 py-1.5"
+        className="rounded-[var(--radius-md)] border p-2"
         style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-bg-elevated)" }}
       >
-        <button
-          type="button"
-          onClick={onPrevMonth}
-          aria-label={t("calendar.prevMonth", "Předchozí měsíc") ?? ""}
-          className="shrink-0 cursor-pointer px-1.5 text-xs"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          ‹
-        </button>
-        <div className="truncate text-center text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>
-          {t("calendar.monthEvents", { month: monthLabel, defaultValue: `Události ${monthLabel}` })}
+        <div className="mb-1.5 flex items-center justify-between gap-1">
+          <button
+            type="button"
+            onClick={onPrevMonth}
+            aria-label={t("calendar.prevMonth", "Předchozí měsíc") ?? ""}
+            className="shrink-0 cursor-pointer px-1.5 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            ‹
+          </button>
+          <div className="truncate text-center text-xs font-medium" style={{ color: "var(--color-text-muted)" }}>
+            {t("calendar.monthEvents", { month: monthLabel, defaultValue: `Události ${monthLabel}` })}
+          </div>
+          <button
+            type="button"
+            onClick={onNextMonth}
+            aria-label={t("calendar.nextMonth", "Další měsíc") ?? ""}
+            className="shrink-0 cursor-pointer px-1.5 text-xs"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            ›
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onNextMonth}
-          aria-label={t("calendar.nextMonth", "Další měsíc") ?? ""}
-          className="shrink-0 cursor-pointer px-1.5 text-xs"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          ›
-        </button>
-      </div>
-      <div className="grid grid-cols-6 gap-0.5">
-        {days.map((d) => {
-          const isToday = isCurrentMonth && d === todayDay;
-          const hasEvents = eventsByDay.has(d);
-          return (
-            <button
-              key={d}
-              type="button"
-              disabled={!hasEvents}
-              onClick={() => onSelectDay(d)}
-              className="relative flex h-6 w-6 items-center justify-center rounded text-[0.625em]"
-              style={{
-                backgroundColor: isToday
-                  ? "var(--color-accent)"
-                  : selectedDay === d
-                    ? "var(--color-surface-2)"
-                    : "transparent",
-                color: isToday ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
-                fontWeight: isToday ? 700 : 400,
-                cursor: hasEvents ? "pointer" : "default",
-              }}
-            >
-              {d}
-              {hasEvents && (
-                <span
-                  className="absolute bottom-0.5 h-1 w-1 rounded-full"
-                  style={{ backgroundColor: isToday ? "var(--color-accent-contrast)" : "var(--color-accent)" }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-      {selectedEvents && selectedEvents.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1.5">
-          {selectedEvents.map((ev) => (
-            <div
-              key={ev.id}
-              className="flex items-start gap-2 rounded-[var(--radius-sm)] p-1.5"
-              style={{ backgroundColor: "var(--color-surface-2)" }}
-            >
-              <span className="text-lg shrink-0">{ev.icon}</span>
-              <div className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-medium">{ev.title}</span>
-                {ev.description && (
-                  <div className="mt-0.5 text-[0.625em]" style={{ color: "var(--color-text-muted)" }}>
-                    {ev.description}
-                  </div>
+        <div className="grid grid-cols-6 gap-0.5">
+          {days.map((d) => {
+            const isToday = isCurrentMonth && d === todayDay;
+            const hasEvents = eventsByDay.has(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                disabled={!hasEvents}
+                onClick={() => onSelectDay(d)}
+                className="relative flex h-6 w-6 items-center justify-center rounded text-[0.625em]"
+                style={{
+                  backgroundColor: isToday
+                    ? "var(--color-accent)"
+                    : selectedDay === d
+                      ? "var(--color-surface-2)"
+                      : "transparent",
+                  color: isToday ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+                  fontWeight: isToday ? 700 : 400,
+                  cursor: hasEvents ? "pointer" : "default",
+                }}
+              >
+                {d}
+                {hasEvents && (
+                  <span
+                    className="absolute bottom-0.5 h-1 w-1 rounded-full"
+                    style={{ backgroundColor: isToday ? "var(--color-accent-contrast)" : "var(--color-accent)" }}
+                  />
                 )}
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
-      )}
+        {selectedEvents && selectedEvents.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1.5">
+            {selectedEvents.map((ev) => (
+              <div
+                key={ev.id}
+                className="flex items-start gap-2 rounded-[var(--radius-sm)] p-1.5"
+                style={{ backgroundColor: "var(--color-surface-2)" }}
+              >
+                <span className="text-lg shrink-0">{ev.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium">{ev.title}</span>
+                  {ev.description && (
+                    <div className="mt-0.5 text-[0.625em]" style={{ color: "var(--color-text-muted)" }}>
+                      {ev.description}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
