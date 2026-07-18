@@ -99,6 +99,7 @@ export function ChatScreen() {
     interruptedMessageIds,
     hasOlderMessages,
     loadingOlderMessages,
+    gameOver,
     openChat,
     closeChat,
     loadOlderMessages,
@@ -117,6 +118,7 @@ export function ChatScreen() {
     addMember,
     removeMember,
     setAutoReplyMode,
+    setHardcoreMode,
     setSelectedSpeaker,
   } = useChatStore();
   const calendarMode = useSettingsStore((s) => s.calendarMode);
@@ -349,7 +351,31 @@ export function ChatScreen() {
   return (
     <div className="relative flex h-full flex-col">
       {panels.directorOpen && id && (
-        <DirectorPopover chatId={id} onClose={() => panels.setDirectorOpen(false)} />
+        <DirectorPopover
+          chatId={id}
+          onClose={() => panels.setDirectorOpen(false)}
+          hardcoreMode={chat?.hardcoreMode ?? false}
+          onToggleHardcoreMode={(on) => void setHardcoreMode(on)}
+        />
+      )}
+      {gameOver && (
+        <div
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 px-6 text-center"
+          style={{ backgroundColor: "var(--color-overlay)" }}
+        >
+          <h2
+            className="font-[var(--font-display)] text-4xl tracking-wide"
+            style={{ color: "var(--color-danger)" }}
+          >
+            {t("gameOver.title")}
+          </h2>
+          <p className="max-w-md text-sm" style={{ color: "var(--color-text)" }}>
+            {gameOver.reason}
+          </p>
+          <p className="max-w-md text-xs" style={{ color: "var(--color-text-muted)" }}>
+            {t("gameOver.hint")}
+          </p>
+        </div>
       )}
       <header
         className="grid grid-cols-3 items-center gap-3 border-b px-4 py-3 sm:px-8"
@@ -853,7 +879,7 @@ export function ChatScreen() {
 
         <ChatInput
           chatId={id}
-          disabled={loading || !connection}
+          disabled={loading || !connection || !!gameOver}
           streaming={streaming}
           onSend={(content) => void sendMessage(content)}
           onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}

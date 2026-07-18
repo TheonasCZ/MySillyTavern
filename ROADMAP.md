@@ -107,6 +107,57 @@ DeepSeekův pokus o layout skončil rozbitým buildem (heterogenní pole → šp
 
 ---
 
+## Hardcore mode + oprava driftu faktů (2026-07-18, Claude)
+
+**Hardcore mode:**
+- Nová vlastnost chatu (`chats.hardcore_mode`, migrace 30) — nastavuje se napevno
+  při vytváření chatu (checkbox s hintem), ale jde přepnout i kdykoliv za chodu
+  z Režie scény (🎬). Jeden zdroj pravdy, žádná duplicita mezi formulářem a
+  popoverem. Karta chatu v seznamu má indikátor 💀. Branch/undo-delete flag
+  zachovávají.
+- Když zapnuto, model dostává instrukci (`DIRECTOR_HARDCORE_NOTE`), že smrt
+  postavy je reálná a trvalá — bez poslední záchrany, ale musí to logicky
+  vyplývat z toho, co se stalo. Model to signalizuje tagem `[GAMEOVER:důvod]`,
+  který se zpracuje jen když je hardcore skutečně zapnutý (ověřeno na chatu,
+  ne věřeno modelu). Jakmile nastane, chat se zablokuje a přes obrazovku se
+  zobrazí overlay s důvodem — trvalé, žádné pokračování v tom chatu.
+- Vedle toho i obecný (vždy zapnutý) risk/cost systém v `TWO_ROLES_INSTRUCTIONS`:
+  riskantní akce nemá být ani automatický čistý úspěch, ani tvrdá zeď kvůli
+  chybějícímu skillu — default je "uspěješ, ale něco tě to stojí" (zranění,
+  spotřeba materiálu, ztráta věci, čas, komplikace), škálované podle
+  nepřipravenosti pokusu. U nejistých situací má model vyzvat k hodu kostkou
+  (`/r 1d20`, existující dice systém) a výsledek interpretovat narativně —
+  bez pevného DC.
+- Popsáno i menší doprovodné opravy: `[GAMEOVER:...]` tag v `inventoryTags.ts`,
+  nevyužitá diagnostika `lastTagErrors`/`getLastTagErrors()` teď skutečně
+  zapojená do dalšího promptu jako `[TAG CORRECTION]` (dřív mrtvý kód).
+
+**Diagnóza a oprava driftu příběhu (nahlásil uživatel v reálné kampani):**
+- Hráč porazil poškozený, 300 let starý konstrukt a AI během pár zpráv (a) hned
+  poslala další posilu bez logického zdůvodnění a (b) sloučila samostatný
+  runový pilíř (kterého se hráč vůbec nedotkl) s poraženým konstruktem do
+  jedné entity.
+- Kořenová příčina nalezena přímo v produkční DB: extraktor faktů zachytil
+  improvizované vysvětlení, které si AI vymyslela na místě k ospravedlnění
+  eskalace ("vybití energie funguje jako maják přitahující ostatní stroje
+  přes rezonanční síť"), jako trvalý `world` fakt. Fakt nebyl zamčený/kánon
+  (`canon=0`), ale prompt ho i tak vykresloval pod hlavičkou
+  `[WORLD FACTS — binding]` — tedy se stejnou váhou jako skutečné kánon
+  zákony. Model pak eskaloval a slil entity, aby zůstal konzistentní s
+  vlastní jednorázovou impovizací, kterou teď bral jako závaznou.
+- Oprava (`promptTexts.ts`): (1) hlavička nezamčených faktů zmírněna z
+  "binding" na "established so far, not unbreakable... a one-off in-fiction
+  explanation isn't a new law"; (2) `EXTRACTION_SYSTEM_PROMPT` nově výslovně
+  rozlišuje trvalé worldbuilding pravidlo od jednorázové improvizované
+  omluvy pro danou scénu — druhé se nemá zapisovat; (3) nová instrukce
+  "ENTITY CONSISTENCY AND PACING" v `TWO_ROLES_INSTRUCTIONS` — zakázané
+  zpětné slévání/přepisování zavedených entit a reflexivní eskalace hrozeb
+  bez zdůvodnění v příběhu.
+- Špatný fakt v rozehrané kampani ručně archivován v DB, ať okamžitě přestane
+  otravovat prompt (extraktor by ho jinak mohl nechat ležet libovolně dlouho).
+
+---
+
 ## Nápady a poznámky
 
 ### Nápady z brainstormingu (2026-07-18)

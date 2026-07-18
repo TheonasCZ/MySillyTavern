@@ -7,6 +7,7 @@ import {
 import {
   getChat,
   setAutoReply,
+  setHardcoreMode as setChatHardcoreMode,
   setPrimaryCharacter,
   touchChat,
   type Chat,
@@ -29,6 +30,7 @@ import {
 import { runCanonSeed } from "../memory/canonSeed";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
 import { setOnInventoryImageWritten } from "../memory/imageGenQueue";
+import { getGameOverState } from "../chat/gameOver";
 import { applyRegexRules } from "../chat/regexTransform";
 import { CONTINUE_AS, CONTINUE_EXACT, CONTINUE_EXACT_SOLO, SUGGEST_PROMPT } from "../prompt/promptTexts";
 import { estimateTokens } from "../prompt/tokenEstimate";
@@ -85,6 +87,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingOlderMessages: false,
   suggestions: null,
   suggesting: false,
+  gameOver: null,
 
   openChat: async (chatId) => {
     if (get().streaming) {
@@ -109,12 +112,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       loadingOlderMessages: false,
       suggestions: null,
       suggesting: false,
+      gameOver: null,
     });
-    const [messages, total, chat, { members, memberCharacters }] = await Promise.all([
+    const [messages, total, chat, { members, memberCharacters }, gameOver] = await Promise.all([
       listRecentMessages(chatId, MESSAGE_PAGE_SIZE),
       countMessages(chatId),
       getChat(chatId),
       loadMembers(chatId),
+      getGameOverState(chatId),
     ]);
     // Ignore the result if the user has already navigated to a different
     // chat while this query was in flight.
@@ -133,6 +138,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       memberCharacters,
       autoReply: chat?.autoReply ?? false,
       selectedSpeakerId,
+      gameOver,
     });
 
     // Canon seeding (M25.5) — first open of a fresh chat distills 3–5 story
@@ -201,8 +207,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (content) => {
     const trimmed = content.trim();
-    const { chatId, messages, streaming, members, memberCharacters, autoReply, selectedSpeakerId } = get();
-    if (!chatId || !trimmed || streaming) return;
+    const { chatId, messages, streaming, members, memberCharacters, autoReply, selectedSpeakerId, gameOver } = get();
+    if (!chatId || !trimmed || streaming || gameOver) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ error: "offline", errorRetryable: true, retry: () => void get().sendMessage(content) });
       return;
@@ -294,8 +300,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * appends a nudge asking that member specifically to continue the scene
    * (plan §5). */
   triggerSpeaker: async (speakerId) => {
-    const { chatId, messages, streaming, memberCharacters } = get();
-    if (!chatId || streaming) return;
+    const { chatId, messages, streaming, memberCharacters, gameOver } = get();
+    if (!chatId || streaming || gameOver) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ error: "offline", errorRetryable: true, retry: () => void get().triggerSpeaker(speakerId) });
       return;
@@ -366,8 +372,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   regenerate: async (messageId) => {
-    const { chatId, messages, streaming, memberCharacters } = get();
-    if (!chatId || streaming) return;
+    const { chatId, messages, streaming, memberCharacters, gameOver } = get();
+    if (!chatId || streaming || gameOver) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ error: "offline", errorRetryable: true, retry: () => void get().regenerate(messageId) });
       return;
@@ -434,8 +440,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * half of the "continue/regenerate" pair required by plan §9. Authorship
    * never changes (plan §5). */
   continueMessage: async (messageId) => {
-    const { chatId, messages, streaming, memberCharacters } = get();
-    if (!chatId || streaming) return;
+    const { chatId, messages, streaming, memberCharacters, gameOver } = get();
+    if (!chatId || streaming || gameOver) return;
     const chat = await getChat(chatId);
     if (!chat) return;
     const connection = resolveConnection(chat.connectionId);
@@ -632,6 +638,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ autoReply: on, chat: chat ? { ...chat, autoReply: on } : chat });
   },
 
+  setHardcoreMode: async (on) => {
+    const { chatId, chat } = get();
+    if (!chatId) return;
+    await setChatHardcoreMode(chatId, on);
+    set({ chat: chat ? { ...chat, hardcoreMode: on } : chat });
+  },
+
   setSelectedSpeaker: (id) => set({ selectedSpeakerId: id }),
 }));
 
@@ -645,9 +658,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
  *  refresh landing after the user has switched to a different chat. */
 async function refreshChatState(chatId: string): Promise<void> {
   if (useChatStore.getState().chatId !== chatId) return;
-  const freshChat = await getChat(chatId);
+  const [freshChat, gameOver] = await Promise.all([getChat(chatId), getGameOverState(chatId)]);
   if (freshChat && useChatStore.getState().chatId === chatId) {
-    useChatStore.setState({ chat: freshChat });
+    useChatStore.setState({ chat: freshChat, gameOver });
   }
 }
 

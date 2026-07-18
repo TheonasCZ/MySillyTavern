@@ -4,7 +4,7 @@
  * of the prompt by `buildPrompt` (input `directorNote`). */
 
 import { getSetting, setSetting } from "../db/repositories/settingsRepo";
-import { DIRECTOR_PACE, DIRECTOR_TONE, DIRECTOR_FOCUS } from "../prompt/promptTexts";
+import { DIRECTOR_PACE, DIRECTOR_TONE, DIRECTOR_FOCUS, DIRECTOR_HARDCORE_NOTE } from "../prompt/promptTexts";
 
 export type DirectorPace = "slow" | "normal" | "fast";
 export type DirectorTone = "light" | "neutral" | "dark" | "epic";
@@ -43,12 +43,16 @@ const FOCUS_NOTES: Record<DirectorFocus, string> = {
 };
 
 /** Renders the settings into the prompt note; returns "" when everything is
- * at defaults so the section is skipped entirely. */
-export function buildDirectorNote(settings: DirectorSettings): string {
+ * at defaults so the section is skipped entirely. Hardcore mode is a
+ * chat-level property (set at chat creation, see chatsRepo.ts), not a
+ * Director setting, so it's passed in separately rather than living on
+ * `settings`. */
+export function buildDirectorNote(settings: DirectorSettings, hardcoreMode = false): string {
   const lines = [
     PACE_NOTES[settings.pace],
     TONE_NOTES[settings.tone],
     FOCUS_NOTES[settings.focus],
+    hardcoreMode ? DIRECTOR_HARDCORE_NOTE : "",
     settings.extra.trim(),
   ].filter(Boolean);
   return lines.join("\n");

@@ -58,6 +58,7 @@ import {
   SECTION_FACTS,
   SECTION_SCENE_DIRECTION,
   SECTION_SILENT_CORRECTION,
+  SECTION_TAG_CORRECTIONS,
   SECTION_STORY_SO_FAR,
   SECTION_MEMORIES,
   SECTION_LOREBOOK,
@@ -251,6 +252,11 @@ export interface PromptBuilderInput {
    * recent scenes contradicted locked canon facts. Injected into the
    * trailing system message; the player never sees them in the UI flow. */
   driftCorrections?: string[];
+  /** Tag validation feedback — diagnostics from the previous response's game
+   * tags that targeted state that doesn't exist (e.g. [INV:-item] for an
+   * item the player doesn't have). Rendered as course-correction hints so
+   * the model doesn't repeat the same mistake next turn. */
+  tagCorrections?: string[];
   /** Director note (M25.3) — per-chat pacing/tone/genre steering, rendered
    * into the trailing system message so it outweighs older instructions. */
   directorNote?: string;
@@ -637,6 +643,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   const activeFacts = input.ledgerFacts.filter((f) => f.status === "active");
   const factsTotal = activeFacts.length;
   const driftCorrections = (input.driftCorrections ?? []).map((c) => c.trim()).filter(Boolean);
+  const tagCorrections = (input.tagCorrections ?? []).map((c) => c.trim()).filter(Boolean);
 
   // Mutable working state for the trim passes below.
   let lore = [...input.loreEntries].sort((a, b) => a.priority - b.priority); // ascending: index 0 = lowest priority = first to cut
@@ -758,6 +765,16 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (driftCorrections.length > 0) {
       const lines = driftCorrections.map((c) => `- ${c}`).join("\n");
       const block = SECTION_SILENT_CORRECTION(lines);
+      phi = phi ? `${phi}\n\n${block}` : block;
+    }
+
+    // Tag validation feedback — course-correction for game-tag mistakes made
+    // in the previous response (e.g. an [INV:-item] for an item the player
+    // doesn't have). Also last, so it's the freshest instruction the model
+    // reads before generating.
+    if (tagCorrections.length > 0) {
+      const lines = tagCorrections.map((c) => `- ${c}`).join("\n");
+      const block = SECTION_TAG_CORRECTIONS(lines);
       phi = phi ? `${phi}\n\n${block}` : block;
     }
     if (phi) {

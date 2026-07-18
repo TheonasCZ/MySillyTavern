@@ -58,6 +58,8 @@
       "greetingLabel": "Úvodní zpráva",
       "gameLanguage": "Jazyk hry",
       "gameLanguageHelp": "Jazyk, ve kterém AI píše odpovědi.",
+      "hardcoreMode": "Hardcore mód",
+      "hardcoreModeHelp": "Smrt postavy je reálná a trvalá — bez záchranných scénářů. Jde zapnout i vypnout později v Režii scény.",
       "create": "Vytvořit chat"
     },
     "list": {
@@ -184,8 +186,14 @@
         "action": "Akce",
         "exploration": "Objevování"
       },
+      "hardcoreMode": "Hardcore mód",
+      "hardcoreModeHint": "Smrt postavy je reálná a trvalá — bez záchranných scénářů.",
       "extra": "Vlastní pokyn",
       "extraPlaceholder": "např. Zaveď do děje tajemného cizince…"
+    },
+    "gameOver": {
+      "title": "GAME OVER",
+      "hint": "Příběh v tomto chatu skončil. Hardcore mód smrt nezvrací — pokud chceš pokračovat, začni nový chat."
     },
     "calendar": {
       "title": "Kalendář",

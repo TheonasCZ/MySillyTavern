@@ -1,5 +1,6 @@
 import type { Persona } from "../db/repositories/personasRepo";
 import {
+  getChat,
   getChatConditions,
   getChatInventory,
   getChatModifications,
@@ -17,6 +18,7 @@ import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "..
 import { advanceAndPersistCalendar } from "../memory/memoryEngine";
 import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
 import { parseGameTags } from "./inventoryTags";
+import { setGameOverState } from "./gameOver";
 
 /** Tag validation feedback — stored across turns so the next prompt can
  *  warn the AI about malformed tags from the previous response. */
@@ -32,8 +34,24 @@ export async function processGameResponse(
   chatId?: string,
 ): Promise<string> {
   if (!persona) return text;
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0) return text;
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason } = parseGameTags(text);
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0 && gameOverReason === null) return text;
+
+  // [GAMEOVER:reason] only ever takes effect in hardcore mode — the model is
+  // only told the tag exists via DIRECTOR_HARDCORE_NOTE when the chat's
+  // hardcoreMode is on, but a stray/hallucinated tag from a non-hardcore
+  // chat must not end the run, hence the explicit re-check here rather than
+  // trusting the tag.
+  if (gameOverReason !== null && chatId) {
+    try {
+      const chat = await getChat(chatId);
+      if (chat?.hardcoreMode) {
+        await setGameOverState(chatId, gameOverReason);
+      }
+    } catch {
+      // Non-critical
+    }
+  }
 
   // Diagnostic messages for mutations that targeted state that doesn't
   // actually exist (missing item, never-learned skill, nonexistent

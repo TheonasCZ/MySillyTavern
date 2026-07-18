@@ -58,6 +58,8 @@
       "greetingLabel": "Opening message",
       "gameLanguage": "Game language",
       "gameLanguageHelp": "Language the AI writes responses in.",
+      "hardcoreMode": "Hardcore mode",
+      "hardcoreModeHelp": "Character death is real and permanent — no narrative safety net. Can be turned on/off later from Scene direction.",
       "create": "Create chat"
     },
     "list": {
@@ -184,8 +186,14 @@
         "action": "Action",
         "exploration": "Exploration"
       },
+      "hardcoreMode": "Hardcore mode",
+      "hardcoreModeHint": "Character death is real and permanent — no narrative safety net.",
       "extra": "Custom instruction",
       "extraPlaceholder": "e.g. Introduce a mysterious stranger…"
+    },
+    "gameOver": {
+      "title": "GAME OVER",
+      "hint": "The story in this chat has ended. Hardcore mode death is not reversed — start a new chat to continue."
     },
     "calendar": {
       "title": "Calendar",

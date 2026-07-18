@@ -35,6 +35,11 @@ export const EXTRACTION_SYSTEM_PROMPT = (lang: string) =>
   "this prevents the first fact from being overwritten by the second. If you don't fill in sub_key, an empty string is used. " +
   "Record only facts of a permanent nature (who is who, what happened, where we are, quest objectives) — " +
   "not transient descriptions of mood or dialogue. Use 'remove' for facts that are no longer true.\n\n" +
+  "Be careful with category 'world': record deliberate, established worldbuilding (how magic works, what " +
+  "a place is, a recurring rule), not a one-off in-fiction rationalization the GM improvised in the moment " +
+  "to justify a single scene event (e.g. an offhand explanation for why a new threat showed up). Recording " +
+  "the latter as a permanent world fact turns a throwaway line into binding law for the rest of the game — " +
+  "when in doubt whether something is a lasting rule or a one-time narrative device, don't record it.\n\n" +
   "Pay special attention to facts that prevent genre and tone drift — this game runs for " +
   "hundreds of messages and without explicit boundaries recorded, the world and the player's abilities " +
   "gradually and imperceptibly drift in a different direction than how the game began:\n" +
@@ -105,11 +110,13 @@ export const NPC_PROMOTION_PROMPT = (lang: string) =>
 // ---- Section headers (English, structural — no lang param needed) ------
 
 export const SECTION_CANON = "[STORY CANON — unbreakable rules; take priority over everything]";
-export const SECTION_FACTS = "[WORLD FACTS — binding]";
+export const SECTION_FACTS = "[WORLD FACTS — established so far, not unbreakable like canon above; a one-off in-fiction explanation isn't a new law]";
 export const SECTION_SCENE_DIRECTION = "[SCENE DIRECTION]";
 export const SECTION_SILENT_CORRECTION = (correctionsText: string) =>
   `[SILENT CORRECTION — recent scenes drifted from canon. ` +
   `Quietly, without comment and without breaking the story, correct them back:]\n${correctionsText}`;
+export const SECTION_TAG_CORRECTIONS = (errorsText: string) =>
+  `[TAG CORRECTION — your previous response's game tags had these problems; fix them going forward, do not mention this to the player:]\n${errorsText}`;
 export const SECTION_STORY_SO_FAR = "[STORY SO FAR]";
 export const SECTION_MEMORIES = "[RELEVANT MEMORIES — older scenes, verbatim]";
 export const SECTION_LOREBOOK = "[WORLD NOTES — lorebook]";
@@ -138,12 +145,40 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "  [COND:+name] / [COND:+name:duration] / [COND:-name]\n" +
   "  [MOD:+popis] (add body modification) / [MOD:-popis] (remove body modification)\n" +
   "  [TIME:+1d] (advance N days) / [TIME:+1h] (advance N hours) / [TIME:+15m] (advance N minutes) — relative only, never write an absolute clock time like [TIME:14:00]\n" +
+  "RISK AND COST: when the player attempts something risky, dangerous, or of uncertain outcome, don't just " +
+  "narrate an automatic clean success — and don't hard-block the action just because the player lacks a " +
+  "skill either. Default to letting the attempt succeed, but make success cost something scaled to how " +
+  "reckless, improvised, or unequipped the approach was: a new [COND:+name] or [MOD:+description] injury, " +
+  "consuming more/rarer materials than a careful approach would ([INV:-...]), losing or damaging an item " +
+  "([INV:-item]), lost time ([TIME:+...]), or a narrative complication (noise draws attention, the method " +
+  "leaves evidence, an NPC notices). The more absurd or under-equipped the attempt (e.g. striking a live " +
+  "reactor with a bare rock), the steeper the cost and the less clean the outcome — but still let the player " +
+  "find some way through rather than a flat wall of failure. When the outcome is genuinely uncertain, prompt " +
+  "the player to roll dice in the chat input (e.g. \"roll 1d20\") and interpret the result narratively: a low " +
+  "roll means the cost above lands hard or the attempt only partially works, a high roll means it landed " +
+  "clean with minimal cost. There's no fixed DC — judge it from the fiction (how dangerous, how prepared the " +
+  "character is, what's at stake).\n" +
+  "IMPORTANT for [INV:...]: whenever the narration has the player's character use up, break, hand over, " +
+  "lose, or otherwise consume an item they were carrying, you MUST emit a matching [INV:-item] (or " +
+  "[INV:-n:item]) tag for that exact item — never let it silently vanish from the prose only. If you also " +
+  "want to add new byproduct/loot items in the same response, the removal tag for the consumed item takes " +
+  "priority over adding flavor items — the 3-tag budget below exists for this, so drop an optional add-tag " +
+  "before you drop a required remove-tag.\n" +
   "IMPORTANT for [COND:...] and [MOD:...]: always reuse the exact same name for the same body part/effect " +
   "across the whole story — e.g. always \"left arm\", never switch to \"left hand\" or \"my arm\" for the same " +
   "injury. A new tag with a name that already exists REPLACES the old entry instead of adding a duplicate, " +
   "but only if the name matches exactly — inconsistent naming creates duplicate, contradictory entries " +
   "(e.g. two separate \"torn off arm\" records). This applies to non-humanoid anatomy too — e.g. for a " +
   "spider-like creature, use stable slot names like \"leg 1\"–\"leg 8\", not vague terms like \"a leg\".\n" +
+  "ENTITY CONSISTENCY AND PACING: distinct objects, locations, and creatures established in the story " +
+  "stay distinct and keep the exact properties they were given — never retroactively merge two separate " +
+  "things into one, or reinterpret something the player hasn't touched as secretly being something else, " +
+  "just to make a later plot beat make sense. If a new complication needs justifying, invent it forward " +
+  "from what's already established rather than rewriting what's already there. Likewise, don't escalate " +
+  "threats reflexively: after the player resolves a danger, a new one should only follow if the fiction " +
+  "actually supports it right now — an ancient, decrepit, isolated threat doesn't imply a garrison of " +
+  "backup arriving within seconds; that kind of response-time needs its own in-fiction justification (an " +
+  "alarm, a nearby patrol) or should simply not happen yet.\n" +
   `Write tags as the Mechanic — never mix them into narrator text. Each tag on its own line, using the exact format above. At most 3 tags per response. Always respond in ${lang}.`;
 
 export const DIALOG_EXAMPLE_HEADER = "[EXAMPLE OF CORRECT RESPONSE]";
@@ -213,10 +248,19 @@ export const DIRECTOR_FOCUS: Record<string, string> = {
   exploration: "Focus scenes on exploration — environment, mysteries, discoveries.",
 };
 
+export const DIRECTOR_HARDCORE_NOTE =
+  "HARDCORE MODE IS ON: the safety net described in RISK AND COST above is off for the worst outcomes — " +
+  "when the fiction genuinely supports it (the character is critically wounded with no way out, attempts " +
+  "something suicidal, or a lethal threat is not escaped or countered), let the character actually die. " +
+  "Don't manufacture a death, and don't reach for one lightly — it must follow believably from what actually " +
+  "happened, the same way you'd judge any other cost. But when it's earned, play it straight: no last-second " +
+  "rescue, no miracle. If the character dies, end your response with the tag [GAMEOVER:short reason] on its " +
+  "own line, after narrating the death itself.";
+
 // ---- Game tag instructions (English) -----------------------------------
 
 export const TAG_INSTRUCTIONS_CURRENT_INVENTORY = "Current inventory:";
-export const TAG_INSTRUCTIONS_INVENTORY_CHANGES = "Inventory changes: [INV:+item] gain, [INV:-item] lose, [INV:+count:item] quantity.";
+export const TAG_INSTRUCTIONS_INVENTORY_CHANGES = "Inventory changes: [INV:+item] gain, [INV:-item] lose, [INV:+count:item] quantity. If the narration has the player consume/use up/lose an item from this list, always emit the matching [INV:-item] tag — don't just describe it in prose.";
 export const TAG_INSTRUCTIONS_CURRENT_SKILLS = "Current skills:";
 export const TAG_INSTRUCTIONS_SKILL_CHANGES = "Skill changes: [SKILL:+name] learn (level 1), [SKILL:+name:level] set level, [SKILL:name+1] increase.";
 export const TAG_INSTRUCTIONS_LEVEL_CURRENT = (lvl: number, xp: number) => `Current: level ${lvl}, ${xp} XP.`;

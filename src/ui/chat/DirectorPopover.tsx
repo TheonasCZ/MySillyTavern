@@ -22,8 +22,21 @@ const TONES: DirectorTone[] = ["light", "neutral", "dark", "epic"];
 const FOCUSES: DirectorFocus[] = ["dialogue", "balanced", "action", "exploration"];
 
 /** Director popover (M25.3): pace/tone/focus per chat. Saves on every
- * change — the next sent message picks the settings up automatically. */
-export function DirectorPopover({ chatId, onClose }: { chatId: string; onClose: () => void }) {
+ * change — the next sent message picks the settings up automatically.
+ * Hardcore mode is a chat-level property (not part of `DirectorSettings`,
+ * see chatsRepo.ts) — set at chat creation, but toggleable here too since
+ * there's no reason to require re-creating the chat to opt in later. */
+export function DirectorPopover({
+  chatId,
+  onClose,
+  hardcoreMode,
+  onToggleHardcoreMode,
+}: {
+  chatId: string;
+  onClose: () => void;
+  hardcoreMode: boolean;
+  onToggleHardcoreMode: (on: boolean) => void;
+}) {
   const { t } = useTranslation("chat");
   const [settings, setSettings] = useState<DirectorSettings>(defaultDirectorSettings());
   const [loaded, setLoaded] = useState(false);
@@ -113,6 +126,20 @@ export function DirectorPopover({ chatId, onClose }: { chatId: string; onClose: 
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          checked={hardcoreMode}
+          onChange={(e) => onToggleHardcoreMode(e.target.checked)}
+        />
+        <span className="flex flex-col">
+          <span style={{ color: hardcoreMode ? "var(--color-danger)" : undefined }}>
+            {t("director.hardcoreMode")}
+          </span>
+          <span style={{ color: "var(--color-text-faint)" }}>{t("director.hardcoreModeHint")}</span>
+        </span>
       </label>
 
       <label className="flex flex-col gap-1 text-xs">

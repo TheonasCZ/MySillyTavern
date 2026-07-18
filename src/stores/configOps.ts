@@ -19,6 +19,7 @@ import { buildDirectorNote, getDirectorSettings } from "../chat/director";
 import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
 import { findRelevantReplies } from "../prompt/replyExamples";
 import { consumeDriftCorrections } from "../memory/driftDetector";
+import { getLastTagErrors, clearTagErrors } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { calendarDescription } from "../memory/calendar";
 import { estimateTokens } from "../prompt/tokenEstimate";
@@ -236,10 +237,19 @@ export async function buildApiMessages(
       getDirectorSettings(chat.id),
     ]);
     driftCorrections = corrections;
-    directorNote = buildDirectorNote(director) || undefined;
+    directorNote = buildDirectorNote(director, chat.hardcoreMode) || undefined;
   } catch {
     // both are steering aids — a failure must never block the prompt build
   }
+
+  // Tag validation feedback from the previous response's game tags (e.g. an
+  // [INV:-item] that targeted a non-existent item) — surfaced once here so
+  // the model gets course-correction feedback on its next turn, then cleared
+  // so it isn't repeated forever. Module-level state (see inventoryProcessor.ts),
+  // not chat-scoped, but that's fine: it only ever reflects the turn that was
+  // just processed for whichever chat is currently being replied to.
+  const tagCorrections = getLastTagErrors();
+  clearTagErrors();
 
   const { messages, report } = buildPrompt({
     character: speaker,
@@ -260,6 +270,7 @@ export async function buildApiMessages(
     presetExtraSystemPrompt: activePreset?.extraSystemPrompt || undefined,
     presetAuthorNote: activePreset?.authorNote || undefined,
     driftCorrections,
+    tagCorrections,
     directorNote,
     gameLanguage: chat.gameLanguage ?? "cs",
     voiceExamples: voiceExamples.length > 0 ? voiceExamples : undefined,

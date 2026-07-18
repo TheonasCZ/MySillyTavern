@@ -4,6 +4,7 @@ import type { Chat } from "../db/repositories/chatsRepo";
 import type { Message } from "../db/repositories/messagesRepo";
 import type { ChatStreamHandle } from "../providers/chatStream";
 import type { PromptReport } from "../prompt/promptBuilder";
+import type { GameOverState } from "../chat/gameOver";
 
 export interface ChatState {
   chatId: string | null;
@@ -65,6 +66,11 @@ export interface ChatState {
    * Opt-in per press so it never burns tokens unasked (plan follow-up). */
   suggestions: string[] | null;
   suggesting: boolean;
+  /** Hardcore-mode game over state for this chat — null unless the model
+   *  emitted [GAMEOVER:reason] while chat.hardcoreMode was on. Loaded by
+   *  `openChat` and refreshed after every stream; once set, `sendMessage`/
+   *  `triggerSpeaker`/`regenerate`/`continueMessage` all refuse to run. */
+  gameOver: GameOverState | null;
 
   openChat: (chatId: string) => Promise<void>;
   closeChat: () => Promise<void>;
@@ -89,6 +95,7 @@ export interface ChatState {
    * the chat always has a valid `chats.character_id`. */
   removeMember: (characterId: string) => Promise<boolean>;
   setAutoReplyMode: (on: boolean) => Promise<void>;
+  setHardcoreMode: (on: boolean) => Promise<void>;
   setSelectedSpeaker: (id: string) => void;
 }
 

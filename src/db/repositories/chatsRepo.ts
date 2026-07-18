@@ -17,6 +17,10 @@ export interface Chat {
   autoReply: boolean;
   /** Language the AI writes in (e.g. 'cs', 'en') — per-chat (M28). */
   gameLanguage: string;
+  /** Hardcore mode: character death is real and permanent (see
+   *  DIRECTOR_HARDCORE_NOTE / [GAMEOVER:reason]). Set at chat creation,
+   *  toggleable later from the Director popover. Off by default. */
+  hardcoreMode: boolean;
   /** Live gameplay inventory, scoped to this chat/campaign (not the persona).
    *  Seeded from the persona's template inventory at chat creation time,
    *  then evolves independently for the life of the chat. */
@@ -46,6 +50,8 @@ export interface ChatDraft {
   personaId: string | null;
   /** Language the AI writes in (e.g. 'cs', 'en'). Defaults to 'cs'. (M28) */
   gameLanguage?: string;
+  /** Hardcore mode at creation time — defaults to false. */
+  hardcoreMode?: boolean;
 }
 
 interface ChatRow {
@@ -60,6 +66,7 @@ interface ChatRow {
   preset_id: string | null;
   auto_reply: number;
   game_language: string;
+  hardcore_mode: number;
   inventory: string; // JSON
   skills: string; // JSON
   conditions: string; // JSON
@@ -115,6 +122,7 @@ function toChat(row: ChatRow): Chat {
     presetId: row.preset_id,
     autoReply: !!row.auto_reply,
     gameLanguage: row.game_language ?? "cs",
+    hardcoreMode: !!row.hardcore_mode,
     inventory: parseInventory(row.inventory),
     skills: parseSkills(row.skills),
     conditions: parseConditions(row.conditions),
@@ -161,8 +169,8 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   }
 
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $13)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
     [
       id,
       draft.title,
@@ -170,6 +178,7 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
       draft.personaId,
       draft.connectionId,
       draft.gameLanguage ?? "cs",
+      draft.hardcoreMode ? 1 : 0,
       JSON.stringify(inventory),
       JSON.stringify(skills),
       JSON.stringify(conditions),
@@ -198,6 +207,7 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
     presetId: null,
     autoReply: false,
     gameLanguage: draft.gameLanguage ?? "cs",
+    hardcoreMode: draft.hardcoreMode ?? false,
     inventory,
     skills,
     conditions,
@@ -220,6 +230,18 @@ export async function setAutoReply(id: string, on: boolean): Promise<void> {
     now,
   ]);
   journalEntityWrite("chat", { id, auto_reply: on ? 1 : 0, updated_at: now });
+}
+
+/** Toggles hardcore mode for a chat — settable at creation or any time
+ *  after, from the Director popover. */
+export async function setHardcoreMode(id: string, on: boolean): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET hardcore_mode = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    on ? 1 : 0,
+    now,
+  ]);
+  journalEntityWrite("chat", { id, hardcore_mode: on ? 1 : 0, updated_at: now });
 }
 
 /** Changes which member is the primary (`chats.character_id`) — used e.g.
@@ -485,8 +507,8 @@ export async function branchChat(
   const now = nowIso();
   const title = `${source.title} ${titleSuffix}`.trim();
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)`,
     [
       id,
       title,
@@ -497,6 +519,7 @@ export async function branchChat(
       source.presetId,
       source.autoReply ? 1 : 0,
       source.gameLanguage ?? "cs",
+      source.hardcoreMode ? 1 : 0,
       JSON.stringify(source.inventory.map((i) => ({ ...i }))),
       JSON.stringify(source.skills.map((s) => ({ ...s }))),
       JSON.stringify(source.conditions.map((c) => ({ ...c }))),

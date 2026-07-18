@@ -209,7 +209,7 @@ async function applyChat(entry: JournalEntry): Promise<void> {
         `UPDATE chats SET
            title = $2, character_id = $3, persona_id = $4, connection_id = $5,
            extraction_connection_id = $6, preset_id = $7, auto_reply = $8,
-           game_language = $9, updated_at = $10
+           game_language = $9, hardcore_mode = $10, updated_at = $11
          WHERE id = $1`,
         [
           id,
@@ -221,6 +221,7 @@ async function applyChat(entry: JournalEntry): Promise<void> {
           e.preset_id ?? e.presetId ?? null,
           e.auto_reply ?? e.autoReply ?? 0,
           e.game_language ?? e.gameLanguage ?? "cs",
+          e.hardcore_mode ?? e.hardcoreMode ?? 0,
           e.updated_at ?? e.updatedAt ?? entry.ts,
         ],
       );
@@ -229,8 +230,8 @@ async function applyChat(entry: JournalEntry): Promise<void> {
     // Insert new chat
     await execute(
       `INSERT INTO chats (id, title, character_id, persona_id, connection_id,
-        extraction_connection_id, preset_id, auto_reply, game_language, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        extraction_connection_id, preset_id, auto_reply, game_language, hardcore_mode, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id,
         e.title ?? "",
@@ -241,6 +242,7 @@ async function applyChat(entry: JournalEntry): Promise<void> {
         e.preset_id ?? e.presetId ?? null,
         e.auto_reply ?? e.autoReply ?? 0,
         e.game_language ?? e.gameLanguage ?? "cs",
+        e.hardcore_mode ?? e.hardcoreMode ?? 0,
         e.created_at ?? e.createdAt ?? entry.ts,
         e.updated_at ?? e.updatedAt ?? entry.ts,
       ],

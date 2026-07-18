@@ -56,6 +56,7 @@ export function ChatListScreen() {
   const [newPersonaId, setNewPersonaId] = useState<string>("");
   const [newGreeting, setNewGreeting] = useState<string>("");
   const [newGameLanguage, setNewGameLanguage] = useState<string>("cs");
+  const [newHardcoreMode, setNewHardcoreMode] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -180,6 +181,7 @@ export function ChatListScreen() {
       connectionId: newConnectionId || null,
       personaId: newPersonaId || null,
       gameLanguage: newGameLanguage,
+      hardcoreMode: newHardcoreMode,
     });
 
     const character = await getCharacter(starterCharacterId);
@@ -194,6 +196,7 @@ export function ChatListScreen() {
     setCreating(false);
     setNewTitle("");
     setNewGameLanguage("cs");
+    setNewHardcoreMode(false);
     navigate(`/chat/${created.id}`);
   };
 
@@ -273,6 +276,22 @@ export function ChatListScreen() {
             </select>
             <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
               {t("newChat.gameLanguageHelp")}
+            </span>
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={newHardcoreMode}
+              onChange={(e) => setNewHardcoreMode(e.target.checked)}
+            />
+            <span className="flex flex-col">
+              <span style={{ color: newHardcoreMode ? "var(--color-danger)" : undefined }}>
+                {t("newChat.hardcoreMode")}
+              </span>
+              <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+                {t("newChat.hardcoreModeHelp")}
+              </span>
             </span>
           </label>
 
@@ -463,6 +482,15 @@ export function ChatListScreen() {
                   className="flex-1 truncate text-left font-medium"
                   onClick={() => navigate(`/chat/${chat.id}`)}
                 >
+                  {chat.hardcoreMode && (
+                    <span
+                      className="mr-1"
+                      title={t("newChat.hardcoreMode") ?? ""}
+                      style={{ color: "var(--color-danger)" }}
+                    >
+                      💀
+                    </span>
+                  )}
                   {chat.title}
                   {(() => {
                     const count = messageCounts[chat.id];
@@ -512,8 +540,8 @@ export function ChatListScreen() {
                               characterIds: [deletedChat.characterId],
                               connectionId: deletedChat.connectionId,
                               personaId: deletedChat.personaId,
-                              
                               gameLanguage: undefined,
+                              hardcoreMode: deletedChat.hardcoreMode,
                             });
                             await load();
                           },

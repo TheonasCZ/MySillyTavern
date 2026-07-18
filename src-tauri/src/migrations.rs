@@ -179,6 +179,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_029,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 30,
+            description: "chats: add hardcore_mode — real, permanent character death (opt-in per chat)",
+            sql: MIGRATION_030,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -552,6 +558,11 @@ CREATE TABLE calendar_events (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 "#;
+
+/// Hardcore mode: opt-in per chat (set at creation, toggleable later from the
+/// Director popover) — when on, character death is real and permanent (see
+/// DIRECTOR_HARDCORE_NOTE / the [GAMEOVER:reason] tag).
+const MIGRATION_030: &str = r#"ALTER TABLE chats ADD COLUMN hardcore_mode INTEGER NOT NULL DEFAULT 0;"#;
 
 const MIGRATION_020: &str = r#"
 CREATE TABLE tts_voice_profiles (

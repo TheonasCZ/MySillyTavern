@@ -30,6 +30,9 @@
  *   [CRAFT:result_name:ingredient1+ingredient2]  — discover recipe (consumes ingredients)
  *   [CRAFTED:result_name]                        — craft item (perks auto by skill)
  *   [CRAFTED:result_name:perk1+perk2]            — craft item with specific perks
+ *
+ * Game over tag (hardcore mode only — see DIRECTOR_HARDCORE_NOTE):
+ *   [GAMEOVER:reason]             — the character has died; ends the run
  * 
  * Returns the cleaned text (all tags removed) and parsed mutations.
  */
@@ -107,6 +110,10 @@ interface ParsedTags {
   modMutations: ModMutation[];
   questMutations: QuestMutation[];
   timeMutations: TimeMutation[];
+  /** [GAMEOVER:reason] — null unless the response contained one (last one
+   *  wins if the model somehow emits more than one). Only ever acted on
+   *  when hardcore mode is on — see inventoryProcessor.ts. */
+  gameOverReason: string | null;
 }
 
 export function parseGameTags(text: string): ParsedTags {
@@ -120,6 +127,7 @@ export function parseGameTags(text: string): ParsedTags {
   const modMutations: ModMutation[] = [];
   const questMutations: QuestMutation[] = [];
   const timeMutations: TimeMutation[] = [];
+  let gameOverReason: string | null = null;
 
   let cleanText = text;
 
@@ -288,5 +296,11 @@ export function parseGameTags(text: string): ParsedTags {
     return "";
   });
 
-  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations };
+  // Parse the game-over tag: [GAMEOVER:reason] — hardcore mode only.
+  cleanText = cleanText.replace(/\[GAMEOVER:([^\]]+)\]/gi, (_m, reason: string) => {
+    gameOverReason = reason.trim();
+    return "";
+  });
+
+  return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason };
 }
