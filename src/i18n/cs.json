@@ -119,7 +119,8 @@
       "characterTooltip": "Postava — přehled stavu",
       "memoryTooltip": "Paměť a vzpomínky",
       "exportTooltip": "Export kroniky",
-      "calendarTooltip": "Herní kalendář a čas"
+      "calendarTooltip": "Herní kalendář a čas",
+      "toolsSidebar": "Nástroje chatu"
     },
     "character": {
       "title": "Postava",
