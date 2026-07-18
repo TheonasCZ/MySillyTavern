@@ -178,10 +178,33 @@ export function formatCalendarDate(date: CalendarDate): string {
   return `${date.day}. ${date.month}, Rok ${date.year}`;
 }
 
-/** Short format for UI header: includes time icon, season icon, and date. */
+/** Maps fantasy month genitives to real-world month equivalents. */
+const REAL_MONTH_GENITIVE: Record<string, string> = {
+  // Jaro
+  "Měsíce probuzení": "Březen",
+  "Jarního větru": "Duben",
+  "Měsíce květů": "Květen",
+  // Léto
+  "Měsíce slunce": "Červen",
+  "Měsíce žáru": "Červenec",
+  "Měsíce bouří": "Srpen",
+  // Podzim
+  "Měsíce sklizně": "Září",
+  "Měsíce listí": "Říjen",
+  "Měsíce mlh": "Listopad",
+  // Zima
+  "Měsíce mrazu": "Prosinec",
+  "Měsíce sněhu": "Leden",
+  "Měsíce temnoty": "Únor",
+};
+
+/** Short format for UI header: compact, mobile-friendly, with real month. */
 export function formatCalendarDateShort(date: CalendarDate): string {
   const hour = date.hourOfDay ?? 6;
-  return `🕐 ${hour}h ${timeIcon(hour)} | ${seasonIcon(date.season)} ${date.season} | 📅 ${date.day}. ${date.month}, ${date.year}`;
+  const real = REAL_MONTH_GENITIVE[date.month] ?? "";
+  const realSuffix = real ? ` (${real})` : "";
+  const pad = String(hour).padStart(2, "0");
+  return `🕐${pad}:00 ${timeIcon(hour)} ${date.day}. ${date.month}${realSuffix}, ${date.year} ${seasonIcon(date.season)}`;
 }
 
 /** Produces the full prompt block for the current date including season effects

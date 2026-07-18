@@ -9,7 +9,8 @@ export type PanelType =
   | "director"
   | "character"
   | "group"
-  | "export";
+  | "export"
+  | "calendar";
 
 /**
  * Manages the mutually-exclusive header panel state (memory, inventory,
@@ -37,6 +38,7 @@ export function useChatPanels() {
   const characterOpen = activePanel === "character";
   const groupOpen = activePanel === "group";
   const exportOpen = activePanel === "export";
+  const calendarOpen = activePanel === "calendar";
   const hasOpenPanel = activePanel !== null;
 
   // Per-panel setters that accept boolean | toggle callback (preserves the
@@ -74,6 +76,11 @@ export function useChatPanels() {
   const setExportOpen = useCallback(
     (v: boolean | ((prev: boolean) => boolean)) =>
       setActivePanel((p) => ((typeof v === "function" ? v(p === "export") : v) ? "export" : null)),
+    [],
+  );
+  const setCalendarOpen = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) =>
+      setActivePanel((p) => ((typeof v === "function" ? v(p === "calendar") : v) ? "calendar" : null)),
     [],
   );
 
