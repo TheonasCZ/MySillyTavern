@@ -50,6 +50,8 @@ import type { ConnectionConfig } from "../providers/types";
 import { cosineSimilarity } from "../memory/vector";
 import { estimateTokens } from "./tokenEstimate";
 import { syncCountTokens } from "./tokenCounter";
+import { renderGameTags } from "./gameTags";
+import { buildMesExampleSection, buildVoiceExamplesSection } from "./voiceExamples";
 import {
   RP_INSTRUCTIONS,
   SECTION_CANON,
@@ -61,13 +63,8 @@ import {
   SECTION_LOREBOOK,
   SECTION_OTHER_CHARS,
   SECTION_RIGHT_NOW,
-  SECTION_GAME_TAGS,
-  SECTION_FACTIONS,
-  SECTION_CRAFTING,
   SECTION_PERSONA,
   SECTION_TWO_ROLES,
-  SECTION_DIALOG_EXAMPLE,
-  SECTION_VOICE_EXAMPLES,
   SECTION_CANON_REMINDER,
   TWO_ROLES_INSTRUCTIONS,
   DIALOG_EXAMPLE_HEADER,
@@ -76,23 +73,6 @@ import {
   PERSONA_APPEARANCE,
   PERSONA_FACTION_REP,
   GROUP_SPEAKER_INSTRUCTION,
-  TAG_INSTRUCTIONS_CURRENT_INVENTORY,
-  TAG_INSTRUCTIONS_INVENTORY_CHANGES,
-  TAG_INSTRUCTIONS_CURRENT_SKILLS,
-  TAG_INSTRUCTIONS_SKILL_CHANGES,
-  TAG_INSTRUCTIONS_LEVEL_CURRENT,
-  TAG_INSTRUCTIONS_LEVEL_CHANGES,
-  TAG_INSTRUCTIONS_CURRENT_CONDITIONS,
-  TAG_INSTRUCTIONS_CONDITION_CHANGES,
-  TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS,
-  TAG_INSTRUCTIONS_MODIFICATION_CHANGES,
-  TAG_LIST_FOLD_SUFFIX,
-  TAG_PLACEMENT_HINT,
-  FACTION_INSTRUCTIONS_REACTIONS,
-  FACTION_INSTRUCTIONS_CHANGES,
-  FACTION_TAG_HINT,
-  CRAFTING_INSTRUCTIONS_BASE,
-  CRAFTING_KNOWN_RECIPES,
   TRIM_MEMORIES,
   TRIM_LORE,
   TRIM_HISTORY,
@@ -481,17 +461,6 @@ function buildGroupSpeakerInstruction(otherNames: string[], charName: string, us
   ).replace("{{others}}", names);
 }
 
-function buildMesExampleSection(character: CharacterLike, charName: string, userName: string): string {
-  const trimmed = character.mesExample.trim();
-  if (!trimmed) return "";
-  return `${SECTION_DIALOG_EXAMPLE}\n${substitutePlaceholders(trimmed, charName, userName)}`;
-}
-
-function buildVoiceExamplesSection(examples: string[]): string {
-  if (!examples || examples.length === 0) return "";
-  return `${SECTION_VOICE_EXAMPLES}\n${examples.map((e) => `---\n${e}`).join("\n")}`;
-}
-
 function factLine(fact: LedgerFactLike, charName: string, userName: string): string {
   return `- (${fact.category}/${substitutePlaceholders(fact.subject, charName, userName)}) ${substitutePlaceholders(fact.fact, charName, userName)}`;
 }
@@ -651,45 +620,6 @@ function selectDiverseFacts(
   return selected;
 }
 
-/** Sorts entries by `lastTouched` ascending so the most recently touched
- * entries land at the end of the array (the "most recent" end for
- * `formatCappedList`). Entries without `lastTouched` (legacy data) sort
- * first — they're treated as the oldest and fold first under the cap. */
-function sortByLastTouched<T extends { lastTouched?: string }>(items: T[]): T[] {
-  return [...items].sort((a, b) => {
-    const at = a.lastTouched ?? "";
-    const bt = b.lastTouched ?? "";
-    return at.localeCompare(bt);
-  });
-}
-
-/** Renders a current-state list (inventory/skills/conditions/modifications)
- * for `[GAME TAGS]`, capping full-detail entries to the most recent
- * `capCount` (recency = `lastTouched` timestamp — see `sortByLastTouched`)
- * and folding any older entries into a trailing names-only clause. Never
- * drops a name, even at `capCount === 0` (design constraint: the model must
- * always be able to confirm/deny a claimed item/skill/condition/modification
- * by name, even with zero detail — see the module doc comment / plan
- * discussion this implements). */
-function formatCappedList<T>(
-  items: T[],
-  fullLabel: (item: T) => string,
-  nameOnly: (item: T) => string,
-  capCount: number,
-): string {
-  if (items.length <= capCount) {
-    return items.map(fullLabel).join(", ");
-  }
-  const foldCount = items.length - capCount;
-  const folded = items.slice(0, foldCount); // oldest, names only
-  const shown = items.slice(foldCount); // most recent, full detail
-  const shownStr = shown.map(fullLabel).join(", ");
-  const foldedStr = folded.map(nameOnly).join(", ");
-  return capCount > 0
-    ? `${shownStr}${TAG_LIST_FOLD_SUFFIX(foldCount)}${foldedStr}`
-    : foldedStr; // capCount 0: nothing shown in full, just the names-only list
-}
-
 function assembleSystemMessage(sections: string[]): string {
   return sections.filter(Boolean).join("\n\n");
 }
@@ -794,101 +724,10 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n${SECTION_RIGHT_NOW}\n${gameTimeDesc}` : `${SECTION_RIGHT_NOW}\n${gameTimeDesc}`;
     }
-    // Game tag instructions — tells the model to annotate item/skill/level/
-    // condition/modification changes, and shows the CURRENT state of each
-    // (single canonical location for this — see the note in
-    // `buildSystemCore`). Each list is capped to `stateListCap` most-recent
-    // entries in full detail; older entries fold into a names-only tail via
-    // `formatCappedList` — see its doc comment for the never-drop-a-name
-    // rationale.
-    const progression = persona?.progression ?? "skill";
-    const hasInv = !!persona?.inventory?.length;
-    const hasSkills = !!persona?.skills?.length;
-    const hasCond = !!persona?.conditions?.length;
-    const hasMod = !!persona?.modifications?.length;
-    if (
-      hasCond ||
-      hasMod ||
-      (progression !== "none" && (hasInv || (progression === "skill" && hasSkills)))
-    ) {
-      let tagInstructions = `${SECTION_GAME_TAGS}\n`;
-      // Inventory tags always emitted when inventory exists (regardless of progression)
-      if (hasInv && persona) {
-        const inv = sortByLastTouched(persona.inventory ?? []);
-        const list = formatCappedList(
-          inv,
-          (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""),
-          (i) => i.item,
-          stateListCap,
-        );
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${list}.\n`;
-        tagInstructions += `${TAG_INSTRUCTIONS_INVENTORY_CHANGES}\n`;
-      }
-      if (progression === "skill" && hasSkills && persona) {
-        const sk = sortByLastTouched(persona.skills ?? []);
-        const list = formatCappedList(
-          sk,
-          (s) => `${s.name} ${s.level}`,
-          (s) => s.name,
-          stateListCap,
-        );
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${list}.\n`;
-        tagInstructions += `${TAG_INSTRUCTIONS_SKILL_CHANGES}\n`;
-      }
-      if (progression === "level") {
-        const xp = persona?.xp ?? 0;
-        const lvl = persona?.level ?? 1;
-        tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CURRENT(lvl, xp)}\n`;
-        tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CHANGES}\n`;
-      }
-      if (hasCond && persona) {
-        const cond = sortByLastTouched(persona.conditions ?? []);
-        const list = formatCappedList(
-          cond,
-          (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""),
-          (c) => c.name,
-          stateListCap,
-        );
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_CONDITIONS} ${list}.\n`;
-        tagInstructions += `${TAG_INSTRUCTIONS_CONDITION_CHANGES}\n`;
-      }
-      if (hasMod && persona) {
-        const mods = sortByLastTouched(persona.modifications ?? []);
-        const list = formatCappedList(mods, (m) => m.name, (m) => m.name, stateListCap);
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS} ${list}.\n`;
-        tagInstructions += `${TAG_INSTRUCTIONS_MODIFICATION_CHANGES}\n`;
-      }
-      tagInstructions += TAG_PLACEMENT_HINT;
-      phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
-    }
-
-    // Faction reputation instructions — always included when persona has any faction standings
-    const hasFactions = persona?.factions?.length;
-    if (hasFactions && persona) {
-      let factionInstructions = `${SECTION_FACTIONS}\n`;
-      factionInstructions += `${FACTION_INSTRUCTIONS_REACTIONS}\n`;
-      factionInstructions += `${FACTION_INSTRUCTIONS_CHANGES}\n`;
-      factionInstructions += FACTION_TAG_HINT;
-      phi = phi ? `${phi}\n\n${factionInstructions}` : factionInstructions;
-    }
-
-    // Crafting instructions — included when persona has known recipes or an inventory
-    const hasRecipes = persona?.craftingRecipes?.length;
-    if (hasRecipes || hasInv) {
-      let craftInstructions = `${SECTION_CRAFTING}\n`;
-      craftInstructions += CRAFTING_INSTRUCTIONS_BASE;
-
-      if (hasRecipes && persona) {
-        craftInstructions += `\n\n${CRAFTING_KNOWN_RECIPES}\n`;
-        for (const r of persona.craftingRecipes ?? []) {
-          const crafted = r.craftedAt ? "✓" : "✗";
-          const skillHint = r.skillName ? ` (skill: ${r.skillName})` : "";
-          const perksStr = r.perks.length > 0 ? ` [perky: ${r.perks.join(", ")}]` : "";
-          craftInstructions += `- ${crafted} ${r.resultItem} ← ${r.ingredients.join(" + ")}${skillHint}${perksStr}\n`;
-        }
-      }
-
-      phi = phi ? `${phi}\n\n${craftInstructions}` : craftInstructions;
+    // Game tags, faction reputation, and crafting — extracted to gameTags.ts
+    const gameTagsBlock = renderGameTags(persona, stateListCap);
+    if (gameTagsBlock) {
+      phi = phi ? `${phi}\n\n${gameTagsBlock}` : gameTagsBlock;
     }
 
     // Director note (M25.3) — pacing/tone steering, close to generation so

@@ -1,13 +1,10 @@
-import { showConfirm } from "../../platform";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { ChronicleTheme, ChronicleFormat, ExportStatus } from "../../chat/chronicleTypes";
+import type { ChronicleTheme } from "../../chat/chronicleTypes";
 import { THEMES } from "../../chat/chronicleThemes";
-import { branchChat } from "../../db/repositories/chatsRepo";
-import { createMessage, countMessages } from "../../db/repositories/messagesRepo";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { MemoryPanel } from "../memory/MemoryPanel";
@@ -21,11 +18,6 @@ import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { useUnreadStore } from "../../stores/unreadStore";
 import { humanizeProviderError } from "../../providers/humanizeError";
-import { formatDiceSystemMessage } from "../../chat/diceCommand";
-import { pickNextSpeaker } from "../../chat/groupSpeaker";
-import { extractInlineSuggestions } from "../../chat/inlineSuggestions";
-import { useTts } from "../../chat/useTts";
-import { useAndroidBack } from "../useAndroidBack";
 import {
   calendarFromJSON,
   type CalendarDate,
@@ -35,8 +27,12 @@ import {
 import { ChatInput } from "./ChatInput";
 import { DirectorPopover } from "./DirectorPopover";
 import { GroupMembersPopover } from "./GroupMembersPopover";
-import { MessageList, type MemberInfo } from "./MessageList";
+import { MessageList } from "./MessageList";
 import { SpeakerPicker } from "./SpeakerPicker";
+import { countMessages } from "../../db/repositories/messagesRepo";
+
+import { useChatPanels } from "./useChatPanels";
+import { useChatActions } from "./useChatActions";
 
 const selectStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -117,216 +113,54 @@ export function ChatScreen() {
   const { personas, loaded: personasLoaded, load: loadPersonas } = usePersonasStore();
   const { characters, loaded: charactersLoaded, load: loadCharacters } = useCharactersStore();
   const { setPersona } = useChatListStore();
-  // Header panels (memory/director/inventory/quests/group/export) are
-  // mutually exclusive — opening one closes any other that was open.
-  const [openPanel, setOpenPanel] = useState<
-    "memory" | "director" | "inventory" | "quests" | "character" | "group" | "export" | null
-  >(null);
-  const memoryOpen = openPanel === "memory";
-  const setMemoryOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "memory") : v) ? "memory" : null));
-  const directorOpen = openPanel === "director";
-  const setDirectorOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "director") : v) ? "director" : null));
-  const inventoryOpen = openPanel === "inventory";
-  const setInventoryOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "inventory") : v) ? "inventory" : null));
-  const questsOpen = openPanel === "quests";
-  const setQuestsOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "quests") : v) ? "quests" : null));
-  const characterOpen = openPanel === "character";
-  const setCharacterOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "character") : v) ? "character" : null));
-  const groupOpen = openPanel === "group";
-  const setGroupOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "group") : v) ? "group" : null));
-  const [dismissedSuggestionsMsgId, setDismissedSuggestionsMsgId] = useState<string | null>(null);
+
+  // ── Panel state ────────────────────────────────────────────────────
+  const panels = useChatPanels();
+
+  // Calendar state (not panel-related — stays in ChatScreen)
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [calendarExpanded, setCalendarExpanded] = useState(false);
-  const exportOpen = openPanel === "export";
-  const setExportOpen = (v: boolean | ((prev: boolean) => boolean)) =>
-    setOpenPanel((p) => ((typeof v === "function" ? v(p === "export") : v) ? "export" : null));
-  const [exportConnectionId, setExportConnectionId] = useState("");
-  const [exportTheme, setExportTheme] = useState<ChronicleTheme>("fantasy");
-  const [exportFormat, setExportFormat] = useState<ChronicleFormat>("html");
-  const [exportIllustrations, setExportIllustrations] = useState(true);
-  const [exportJobId, setExportJobId] = useState<string | null>(null);
-  const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null);
 
-  // Android back button: close panels first, then navigate back
-  const hasOpenPanel = memoryOpen || inventoryOpen || questsOpen || characterOpen || directorOpen || groupOpen || exportOpen;
-  useAndroidBack(
-    { hasOpenPanel },
-    () => {
-      if (exportOpen) setExportOpen(false);
-      else if (memoryOpen) setMemoryOpen(false);
-      else if (inventoryOpen) setInventoryOpen(false);
-      else if (questsOpen) setQuestsOpen(false);
-      else if (characterOpen) setCharacterOpen(false);
-      else if (directorOpen) setDirectorOpen(false);
-      else if (groupOpen) setGroupOpen(false);
-      else navigate(-1);
-    },
-  );
+  // ── Store-driven derived values ────────────────────────────────────
+  const connection = chat?.connectionId
+    ? connections.find((c) => c.id === chat.connectionId)
+    : undefined;
+  const promotionConnectionId = chat?.extractionConnectionId ?? chat?.connectionId ?? null;
+  const promotionConnection = promotionConnectionId
+    ? (connections.find((c) => c.id === promotionConnectionId) ?? null)
+    : null;
+  const persona = chat?.personaId ? personas.find((p) => p.id === chat.personaId) : undefined;
+  const isGroup = members.length > 1;
 
-  // TTS
-  const tts = useTts();
-  const [ttsSpeakingId, setTtsSpeakingId] = useState<string | null>(null);
-  const lastAssistantIdRef = useRef<string | null>(null);
-  const ttsInitializedRef = useRef(false);
+  // ── Chat actions & derived state ───────────────────────────────────
+  const actions = useChatActions({
+    chatId,
+    id,
+    messages,
+    streaming,
+    members,
+    memberCharacters,
+    characters,
+    connection,
+    autoReply,
+    selectedSpeakerId,
+    isGroup,
+    chatCharacterId: chat?.characterId,
+  });
 
-  // Auto-read: when a new assistant message arrives and autoRead is on,
-  // speak it automatically.
-  useEffect(() => {
-    if (!tts.autoRead) return;
-    // Find the last assistant message
-    const lastAsst = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!lastAsst) return;
-    // Skip the initial load — only auto-speak genuinely new messages
-    if (!ttsInitializedRef.current) {
-      lastAssistantIdRef.current = lastAsst.id;
-      ttsInitializedRef.current = true;
-      return;
-    }
-    if (lastAsst.id !== lastAssistantIdRef.current && !streaming) {
-      lastAssistantIdRef.current = lastAsst.id;
-      // Use character-specific voice if available
-      const charVoice = lastAsst.characterId
-        ? characters.find((c) => c.id === lastAsst.characterId)?.ttsVoice ?? undefined
-        : undefined;
-      setTtsSpeakingId(lastAsst.id);
-      tts.speak(lastAsst.content, charVoice);
-    }
-  }, [messages, streaming, tts.autoRead, tts]);
+  if (!id) return null;
 
-  const handleSpeakMessage = useCallback(
-    (messageId: string) => {
-      const msg = messages.find((m) => m.id === messageId);
-      if (!msg) return;
-      if (ttsSpeakingId === messageId && tts.isSpeaking) {
-        tts.stop();
-        setTtsSpeakingId(null);
-      } else {
-        const charVoice = msg.characterId
-          ? characters.find((c) => c.id === msg.characterId)?.ttsVoice ?? undefined
-          : undefined;
-        setTtsSpeakingId(messageId);
-        tts.speak(msg.content, charVoice);
-      }
-    },
-    [messages, tts, ttsSpeakingId, characters],
-  );
+  // Combined suggestions: store suggestions take priority; fall back to
+  // inline suggestions extracted from the last assistant message.
+  const combinedSuggestions =
+    suggestions && suggestions.length > 0
+      ? suggestions
+      : actions.inlineSuggestions.length > 0
+        ? actions.inlineSuggestions
+        : null;
+  const lastMessage = messages[messages.length - 1];
 
-  // Clear speaking id when speech ends
-  useEffect(() => {
-    if (!tts.isSpeaking && ttsSpeakingId) {
-      setTtsSpeakingId(null);
-    }
-  }, [tts.isSpeaking, ttsSpeakingId]);
-
-  // A new stream replaces whatever was being read aloud
-  useEffect(() => {
-    if (streaming && ttsSpeakingId) {
-      tts.stop();
-      setTtsSpeakingId(null);
-    }
-  }, [streaming, ttsSpeakingId, tts]);
-
-  // Chronicle "jump to message": page older history in until the target is
-  // loaded, close the memory panel, then let MessageList scroll+highlight it.
-  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
-  const handleJumpToMessage = useCallback(async (messageId: string) => {
-    const state = useChatStore.getState;
-    const isLoaded = () => state().messages.some((m) => m.id === messageId);
-    let guard = 0;
-    while (!isLoaded() && state().hasOlderMessages && guard++ < 200) {
-      await state().loadOlderMessages();
-    }
-    if (!isLoaded()) return;
-    setMemoryOpen(false);
-    setScrollToMessageId(null);
-    requestAnimationFrame(() => setScrollToMessageId(messageId));
-  }, []);
-
-  const handleDiceRoll = useCallback(
-    async (expression: string) => {
-      if (!chatId) return;
-      try {
-        const result: string = await invoke("eval_dice", { expression });
-        const content = formatDiceSystemMessage(expression, result);
-        const systemMsg = await createMessage(chatId, "system", content);
-        // Check we're still on the same chat before inserting
-        if (useChatStore.getState().chatId === chatId) {
-          useChatStore.setState((s) => ({
-            messages: [...s.messages, systemMsg],
-          }));
-        }
-      } catch (err) {
-        // No other UI feedback on this path (no toast) — error level so it's
-        // at least not invisible if a user reports "dice roll did nothing".
-        console.error("ChatScreen: dice roll failed for expression", expression, "in chat", chatId, err);
-      }
-    },
-    [chatId],
-  );
-
-  // Poll export status every second while a job is running
-  useEffect(() => {
-    if (!exportJobId) return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status: ExportStatus = await invoke("get_export_status", { jobId: exportJobId });
-        if (cancelled) return;
-        setExportStatus(status);
-        if (status.status === "done" || status.status === "error") {
-          setExportJobId(null);
-        }
-      } catch {
-        // polling error – ignore
-      }
-    };
-    // poll immediately, then every 1s
-    void poll();
-    const iv = setInterval(() => { void poll(); }, 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(iv);
-    };
-  }, [exportJobId]);
-
-  // Resume running export on mount
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        // Check if there's a known running job stored (we store it in localStorage)
-        const stored = localStorage.getItem(`export_job_${id}`);
-        if (!stored) return;
-        const { jobId } = JSON.parse(stored) as { jobId: string };
-        const status: ExportStatus = await invoke("get_export_status", { jobId });
-        if (cancelled) return;
-        if (status.status === "running") {
-          setExportJobId(jobId);
-          setExportStatus(status);
-        } else {
-          // Clean up stale storage
-          localStorage.removeItem(`export_job_${id}`);
-        }
-      } catch {
-        // No running job or error – ignore
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [id]);
-
-  // Persist job id so resume works across remounts
-  useEffect(() => {
-    if (!id || !exportJobId) return;
-    localStorage.setItem(`export_job_${id}`, JSON.stringify({ jobId: exportJobId }));
-  }, [id, exportJobId]);
-
+  // ── Effects ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
   }, [connectionsLoaded, loadConnections]);
@@ -342,7 +176,6 @@ export function ChatScreen() {
   useEffect(() => {
     if (!id) return;
     void openChat(id);
-    // Mark chat as read when opened
     void (async () => {
       const count = await countMessages(id);
       useUnreadStore.getState().markRead(id, count);
@@ -371,7 +204,6 @@ export function ChatScreen() {
 
   // One-shot backfill: generate illustrations for inventory items that
   // predate the auto-illustration trigger (e.g. imported/restored chats).
-  // Idempotent — safe to run on every chat open.
   useEffect(() => {
     if (!chat?.id) return;
     const currentChat = chat;
@@ -391,65 +223,11 @@ export function ChatScreen() {
       c.provider === "gemini" || c.purposes.includes("chat"),
   );
 
-  if (!id) return null;
-
-  const connection = chat?.connectionId
-    ? connections.find((c) => c.id === chat.connectionId)
-    : undefined;
-  const promotionConnectionId = chat?.extractionConnectionId ?? chat?.connectionId ?? null;
-  const promotionConnection = promotionConnectionId
-    ? (connections.find((c) => c.id === promotionConnectionId) ?? null)
-    : null;
-  const persona = chat?.personaId ? personas.find((p) => p.id === chat.personaId) : undefined;
-  const isGroup = members.length > 1;
-
-  const membersById = new Map<string, MemberInfo>(
-    memberCharacters.map((c) => [c.id, { name: c.name, avatarUrl: avatarSrc(c.avatarPath) }]),
-  );
-
-  // Rough context usage estimate: total chars in messages / 3 chars-per-token / budget
-  const contextUsage = connection
-    ? Math.min(1, messages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) / 3 / connection.contextBudget)
-    : 0;
-
-  const primaryCharacter = chat ? memberCharacters.find((c) => c.id === chat.characterId) : undefined;
-  const fallbackCharacter: MemberInfo = {
-    name: primaryCharacter?.name ?? "",
-    avatarUrl: avatarSrc(primaryCharacter?.avatarPath ?? null),
-  };
-
-  const lastUserText = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-  const recentSpeakerIds = messages
-    .filter((m) => m.role === "assistant")
-    .map((m) => m.characterId ?? chat?.characterId ?? "");
-  const speakerCandidates = members.map((m) => ({
-    id: m.characterId,
-    name: memberCharacters.find((c) => c.id === m.characterId)?.name ?? "",
-    position: m.position,
-  }));
-  const predictedSpeakerId = isGroup ? pickNextSpeaker(speakerCandidates, lastUserText, recentSpeakerIds) : null;
-
-  // Options the model itself appended to its last reply ("Co uděláš? 1) …")
-  // replace the extra suggest-replies LLM call; the button stays only as a
-  // fallback for replies without a trailing option block.
-  const lastMessage = messages[messages.length - 1];
-  const inlineSuggestions =
-    !streaming && lastMessage?.role === "assistant" && lastMessage.id !== dismissedSuggestionsMsgId
-      ? extractInlineSuggestions(lastMessage.content)
-      : [];
-  const combinedSuggestions =
-    suggestions && suggestions.length > 0 ? suggestions : inlineSuggestions.length > 0 ? inlineSuggestions : null;
-
-  const handleBranch = async (messageId: string) => {
-    if (!await showConfirm(t("room.branchConfirm") ?? "")) return;
-    const branched = await branchChat(id, messageId, t("room.branchSuffix"));
-    if (branched) navigate(`/chat/${branched.id}`);
-  };
-
+  // ── Render ─────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full flex-col">
-      {directorOpen && id && (
-        <DirectorPopover chatId={id} onClose={() => setDirectorOpen(false)} />
+      {panels.directorOpen && id && (
+        <DirectorPopover chatId={id} onClose={() => panels.setDirectorOpen(false)} />
       )}
       <header
         className="flex items-center justify-between gap-3 border-b px-4 py-3 sm:px-8"
@@ -530,13 +308,13 @@ export function ChatScreen() {
           <div className="relative">
             <button
               type="button"
-              onClick={() => setGroupOpen((v) => !v)}
-              aria-pressed={groupOpen}
+              onClick={() => panels.setGroupOpen((v) => !v)}
+              aria-pressed={panels.groupOpen}
               title={t("room.groupMembers") ?? ""}
               className="flex items-center rounded-[var(--radius-sm)] border px-1.5 py-1 transition-colors"
               style={{
                 borderColor: "var(--color-border-strong)",
-                backgroundColor: groupOpen ? "var(--color-accent)" : "transparent",
+                backgroundColor: panels.groupOpen ? "var(--color-accent)" : "transparent",
               }}
             >
               {memberCharacters.slice(0, MAX_VISIBLE_AVATARS).map((c, i) => {
@@ -581,7 +359,7 @@ export function ChatScreen() {
                 </span>
               )}
             </button>
-            {groupOpen && chat && (
+            {panels.groupOpen && chat && (
               <GroupMembersPopover
                 chatId={id}
                 chatCharacterId={chat.characterId}
@@ -593,90 +371,90 @@ export function ChatScreen() {
                 onAddMember={addMember}
                 onRemoveMember={removeMember}
                 onSetAutoReply={setAutoReplyMode}
-                onClose={() => setGroupOpen(false)}
+                onClose={() => panels.setGroupOpen(false)}
               />
             )}
           </div>
           <button
             type="button"
-            onClick={() => setInventoryOpen((v) => !v)}
-            aria-pressed={inventoryOpen}
+            onClick={() => panels.setInventoryOpen((v) => !v)}
+            aria-pressed={panels.inventoryOpen}
             title={t("room.inventoryTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: inventoryOpen ? "var(--color-accent)" : "transparent",
-              color: inventoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.inventoryOpen ? "var(--color-accent)" : "transparent",
+              color: panels.inventoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             🎒
           </button>
           <button
             type="button"
-            onClick={() => setQuestsOpen((v) => !v)}
-            aria-pressed={questsOpen}
+            onClick={() => panels.setQuestsOpen((v) => !v)}
+            aria-pressed={panels.questsOpen}
             title={t("room.questsTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: questsOpen ? "var(--color-accent)" : "transparent",
-              color: questsOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.questsOpen ? "var(--color-accent)" : "transparent",
+              color: panels.questsOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             📜
           </button>
           <button
             type="button"
-            onClick={() => setCharacterOpen((v) => !v)}
-            aria-pressed={characterOpen}
+            onClick={() => panels.setCharacterOpen((v) => !v)}
+            aria-pressed={panels.characterOpen}
             title={t("room.characterTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: characterOpen ? "var(--color-accent)" : "transparent",
-              color: characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.characterOpen ? "var(--color-accent)" : "transparent",
+              color: panels.characterOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             🧍
           </button>
           <button
             type="button"
-            onClick={() => setDirectorOpen((v) => !v)}
-            aria-pressed={directorOpen}
+            onClick={() => panels.setDirectorOpen((v) => !v)}
+            aria-pressed={panels.directorOpen}
             title={t("director.title")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: directorOpen ? "var(--color-accent)" : "transparent",
-              color: directorOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.directorOpen ? "var(--color-accent)" : "transparent",
+              color: panels.directorOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             🎬
           </button>
           <button
             type="button"
-            onClick={() => setMemoryOpen((v) => !v)}
-            aria-pressed={memoryOpen}
+            onClick={() => panels.setMemoryOpen((v) => !v)}
+            aria-pressed={panels.memoryOpen}
             title={t("room.memoryTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: memoryOpen ? "var(--color-accent)" : "transparent",
-              color: memoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.memoryOpen ? "var(--color-accent)" : "transparent",
+              color: panels.memoryOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             🧠
           </button>
           <button
             type="button"
-            onClick={() => setExportOpen((v) => !v)}
-            aria-pressed={exportOpen}
+            onClick={() => panels.setExportOpen((v) => !v)}
+            aria-pressed={panels.exportOpen}
             title={t("room.exportTooltip")}
             className="rounded-[var(--radius-sm)] border px-2 py-1 text-xs transition-colors"
             style={{
               borderColor: "var(--color-border-strong)",
-              backgroundColor: exportOpen ? "var(--color-accent)" : "transparent",
-              color: exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+              backgroundColor: panels.exportOpen ? "var(--color-accent)" : "transparent",
+              color: panels.exportOpen ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
           >
             📖
@@ -732,16 +510,16 @@ export function ChatScreen() {
               streamingMessageId={streamingMessageId}
               streamingText={streamingText}
               interruptedMessageIds={interruptedMessageIds}
-              membersById={membersById}
-              fallbackCharacter={fallbackCharacter}
+              membersById={actions.membersById}
+              fallbackCharacter={actions.fallbackCharacter}
               personaAvatarUrl={avatarSrc(persona?.avatarPath ?? null)}
               personaName={persona?.name}
               streamingSpeakerId={streamingSpeakerId}
               isGroup={isGroup}
-              onBranch={(messageId) => void handleBranch(messageId)}
-              onSpeakMessage={handleSpeakMessage}
-              speakingMessageId={ttsSpeakingId}
-              scrollToMessageId={scrollToMessageId}
+              onBranch={(messageId) => void actions.handleBranch(messageId)}
+              onSpeakMessage={actions.handleSpeakMessage}
+              speakingMessageId={actions.ttsSpeakingId}
+              scrollToMessageId={actions.scrollToMessageId}
               hasOlder={hasOlderMessages}
               loadingOlder={loadingOlderMessages}
               onLoadOlder={() => void loadOlderMessages()}
@@ -756,7 +534,7 @@ export function ChatScreen() {
             <SpeakerPicker
               members={memberCharacters}
               selectedSpeakerId={selectedSpeakerId}
-              predictedSpeakerId={predictedSpeakerId}
+              predictedSpeakerId={actions.predictedSpeakerId}
               autoReply={autoReply}
               streaming={streaming}
               onSelect={setSelectedSpeaker}
@@ -768,26 +546,26 @@ export function ChatScreen() {
             disabled={loading || !connection}
             streaming={streaming}
             onSend={(content) => void sendMessage(content)}
-            onDiceRoll={(expression) => void handleDiceRoll(expression)}
+            onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
             onStop={() => void stop()}
             suggestions={combinedSuggestions}
             suggesting={suggesting}
-            showSuggestButton={inlineSuggestions.length === 0}
+            showSuggestButton={actions.inlineSuggestions.length === 0}
             onSuggest={() => void suggestReplies()}
             onClearSuggestions={() => {
               clearSuggestions();
-              if (lastMessage?.role === "assistant") setDismissedSuggestionsMsgId(lastMessage.id);
+              if (lastMessage?.role === "assistant") actions.setDismissedSuggestionsMsgId(lastMessage.id);
             }}
-            contextUsage={contextUsage}
+            contextUsage={actions.contextUsage}
           />
         </div>
 
-        {memoryOpen && (
+        {panels.memoryOpen && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setMemoryOpen(false)}
+              onClick={() => panels.setMemoryOpen(false)}
             />
             <aside
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-96 lg:max-w-none lg:shrink-0"
@@ -795,48 +573,50 @@ export function ChatScreen() {
             >
               <MemoryPanel
                 chatId={id}
-                onClose={() => setMemoryOpen(false)}
-                onJumpToMessage={(messageId) => void handleJumpToMessage(messageId)}
+                onClose={() => panels.setMemoryOpen(false)}
+                onJumpToMessage={(messageId) =>
+                  void actions.handleJumpToMessage(messageId, () => panels.setMemoryOpen(false))
+                }
               />
             </aside>
           </>
         )}
-        {inventoryOpen && chat && (
+        {panels.inventoryOpen && chat && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setInventoryOpen(false)}
+              onClick={() => panels.setInventoryOpen(false)}
             />
             <aside
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
               style={{ borderColor: "var(--color-border)" }}
             >
-              <InventoryPanel inventory={chat.inventory} race={persona?.race} onClose={() => setInventoryOpen(false)} />
+              <InventoryPanel inventory={chat.inventory} race={persona?.race} onClose={() => panels.setInventoryOpen(false)} />
             </aside>
           </>
         )}
-        {questsOpen && (
+        {panels.questsOpen && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setQuestsOpen(false)}
+              onClick={() => panels.setQuestsOpen(false)}
             />
             <aside
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
               style={{ borderColor: "var(--color-border)" }}
             >
-              <QuestPanel chatId={id} onClose={() => setQuestsOpen(false)} />
+              <QuestPanel chatId={id} onClose={() => panels.setQuestsOpen(false)} />
             </aside>
           </>
         )}
-        {characterOpen && chat && (
+        {panels.characterOpen && chat && (
           <>
             <div
               className="fixed inset-0 z-40 lg:hidden"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setCharacterOpen(false)}
+              onClick={() => panels.setCharacterOpen(false)}
             />
             <aside
               className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
@@ -849,19 +629,19 @@ export function ChatScreen() {
                 conditions={chat.conditions}
                 modifications={chat.modifications}
                 skills={chat.skills}
-                onClose={() => setCharacterOpen(false)}
+                onClose={() => panels.setCharacterOpen(false)}
               />
             </aside>
           </>
         )}
 
         {/* ---- Chronicle Export Dialog ---- */}
-        {exportOpen && (
+        {panels.exportOpen && (
           <>
             <div
               className="fixed inset-0 z-50"
               style={{ backgroundColor: "var(--color-overlay)" }}
-              onClick={() => setExportOpen(false)}
+              onClick={() => panels.setExportOpen(false)}
             />
             <div
               className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-[var(--radius-md)] border p-6 shadow-xl"
@@ -872,11 +652,11 @@ export function ChatScreen() {
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {exportJobId ? (
+              {actions.exportJobId ? (
                 /* ---- Progress ---- */
                 <div className="space-y-3">
                   <h3 className="font-[var(--font-display)] text-lg">📖 Export kroniky</h3>
-                  {exportStatus ? (
+                  {actions.exportStatus ? (
                     <>
                       <div
                         className="h-2 w-full rounded-full overflow-hidden"
@@ -885,20 +665,20 @@ export function ChatScreen() {
                         <div
                           className="h-full transition-all duration-300"
                           style={{
-                            width: `${exportStatus.progress}%`,
+                            width: `${actions.exportStatus.progress}%`,
                             backgroundColor: "var(--color-accent)",
                           }}
                         />
                       </div>
                       <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-                        Exportuji {exportStatus.progress}% ({exportStatus.currentChunk}/{exportStatus.totalChunks} kapitol)
+                        Exportuji {actions.exportStatus.progress}% ({actions.exportStatus.currentChunk}/{actions.exportStatus.totalChunks} kapitol)
                       </p>
-                      {exportStatus.status === "done" && (
+                      {actions.exportStatus.status === "done" && (
                         <div className="space-y-2">
                           <p className="text-sm font-medium" style={{ color: "var(--color-success, #22c55e)" }}>
                             ✅ Hotovo!
                           </p>
-                          {exportStatus.outputPath && (
+                          {actions.exportStatus.outputPath && (
                             <button
                               type="button"
                               className="rounded-[var(--radius-sm)] border px-3 py-1 text-xs transition-colors"
@@ -907,7 +687,7 @@ export function ChatScreen() {
                                 color: "var(--color-text)",
                               }}
                               onClick={() => {
-                                void invoke("open_path", { path: exportStatus.outputPath });
+                                void invoke("open_path", { path: actions.exportStatus!.outputPath });
                               }}
                             >
                               Otevřít složku
@@ -930,8 +710,8 @@ export function ChatScreen() {
                     <select
                       className="mt-1 block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-sm"
                       style={selectStyle}
-                      value={exportConnectionId}
-                      onChange={(e) => setExportConnectionId(e.target.value)}
+                      value={actions.exportConnectionId}
+                      onChange={(e) => actions.setExportConnectionId(e.target.value)}
                     >
                       <option value="">-- vyberte --</option>
                       {exportConnections.map((c) => (
@@ -945,11 +725,11 @@ export function ChatScreen() {
                     <select
                       className="mt-1 block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-sm"
                       style={selectStyle}
-                      value={exportTheme}
-                      onChange={(e) => setExportTheme(e.target.value as ChronicleTheme)}
+                      value={actions.exportTheme}
+                      onChange={(e) => actions.setExportTheme(e.target.value as ChronicleTheme)}
                     >
-                      {THEMES.map((t) => (
-                        <option key={t.key} value={t.key}>{t.label}</option>
+                      {THEMES.map((theme) => (
+                        <option key={theme.key} value={theme.key}>{theme.label}</option>
                       ))}
                     </select>
                   </label>
@@ -957,17 +737,17 @@ export function ChatScreen() {
                   <fieldset className="text-xs" style={{ color: "var(--color-text-muted)" }}>
                     <legend className="mb-1">Formát</legend>
                     <label className="mr-4 inline-flex items-center gap-1">
-                      <input type="radio" name="exportFormat" value="html" checked={exportFormat === "html"} onChange={() => setExportFormat("html")} />
+                      <input type="radio" name="exportFormat" value="html" checked={actions.exportFormat === "html"} onChange={() => actions.setExportFormat("html")} />
                       HTML
                     </label>
                     <label className="inline-flex items-center gap-1">
-                      <input type="radio" name="exportFormat" value="pdf" checked={exportFormat === "pdf"} onChange={() => setExportFormat("pdf")} />
+                      <input type="radio" name="exportFormat" value="pdf" checked={actions.exportFormat === "pdf"} onChange={() => actions.setExportFormat("pdf")} />
                       PDF
                     </label>
                   </fieldset>
 
                   <label className="flex items-center gap-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
-                    <input type="checkbox" checked={exportIllustrations} onChange={(e) => setExportIllustrations(e.target.checked)} />
+                    <input type="checkbox" checked={actions.exportIllustrations} onChange={(e) => actions.setExportIllustrations(e.target.checked)} />
                     Ilustrace
                   </label>
 
@@ -978,24 +758,21 @@ export function ChatScreen() {
                         const result: { jobId: string } = await invoke("start_export", {
                           chatId: id,
                           personaId: chat?.personaId ?? undefined,
-                          connectionId: exportConnectionId,
-                          theme: exportTheme,
-                          format: exportFormat,
-                          includeIllustrations: exportIllustrations,
+                          connectionId: actions.exportConnectionId,
+                          theme: actions.exportTheme,
+                          format: actions.exportFormat,
+                          includeIllustrations: actions.exportIllustrations,
                         });
-                        setExportJobId(result.jobId);
-                        setExportStatus(null);
+                        actions.setExportJobId(result.jobId);
+                        actions.setExportStatus(null);
                       } catch (err) {
-                        // No other UI feedback on this path (no toast) — error
-                        // level so it's at least not invisible if a user
-                        // reports "chronicle export button did nothing".
                         console.error("ChatScreen: chronicle export start failed for chat", id, err);
                       }
                     }}
-                    disabled={!exportConnectionId}
+                    disabled={!actions.exportConnectionId}
                     style={{
-                      backgroundColor: exportConnectionId ? "var(--color-accent)" : "var(--color-surface-2)",
-                      color: exportConnectionId ? "var(--color-accent-contrast)" : "var(--color-text-faint)",
+                      backgroundColor: actions.exportConnectionId ? "var(--color-accent)" : "var(--color-surface-2)",
+                      color: actions.exportConnectionId ? "var(--color-accent-contrast)" : "var(--color-text-faint)",
                     }}
                   >
                     Spustit export
