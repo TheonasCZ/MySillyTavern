@@ -89,7 +89,7 @@ export function SettingsScreen() {
         style={{ backgroundColor: "var(--color-surface-2)" }}
         role="tablist"
       >
-        {TABS.map((({ id, i18nKey }) => (
+        {TABS.map(({ id, i18nKey }) => (
           <button
             key={id}
             type="button"
@@ -128,7 +128,7 @@ export function SettingsScreen() {
               style={{ backgroundColor: "var(--color-surface-2)", borderColor: "var(--color-border)", borderWidth: 1 }}
               role="menu"
             >
-              {TABS.map(({ id, i18nKey }) => (
+              {TABS.map({ id, i18nKey }) => (
                 <button
                   key={id}
                   type="button"
