@@ -147,10 +147,7 @@ export function Sidebar() {
         </button>
 
         {/* ---- Settings + version (pinned to bottom) ---- */}
-        <div
-          className="mt-auto border-t pt-3"
-          style={{ borderColor: "var(--color-border)" }}
-        >
+        <div className="mt-auto pt-3">
           <NavLink
             to="/settings"
             onClick={() => setMobileOpen(false)}

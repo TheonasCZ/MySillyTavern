@@ -198,7 +198,7 @@ export function ChatInput({
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
       {personaSlot}
       <textarea
         ref={textareaRef}
@@ -238,20 +238,22 @@ export function ChatInput({
         <button
           type="button"
           onClick={onStop}
-          className="shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium"
-          style={{ backgroundColor: "var(--color-danger)", color: "var(--color-accent-contrast)" }}
+          title={t("room.stop") ?? ""}
+          className="shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base"
+          style={{ borderColor: "var(--color-danger)", backgroundColor: "var(--color-danger)", color: "var(--color-accent-contrast)" }}
         >
-          {t("room.stop")}
+          ⏹
         </button>
       ) : (
         <button
           type="button"
           onClick={submit}
           disabled={disabled || !value.trim()}
-          className="shrink-0 rounded-[var(--radius-md)] px-4 py-2 text-sm font-medium disabled:opacity-50"
-          style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
+          title={t("room.send") ?? ""}
+          className="shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base disabled:opacity-50"
+          style={{ borderColor: "var(--color-accent)", backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
         >
-          {t("room.send")}
+          ➤
         </button>
       )}
       </div>

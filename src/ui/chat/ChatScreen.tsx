@@ -376,28 +376,45 @@ export function ChatScreen() {
         )}
         <div className="flex items-center justify-end gap-2">
           {actions.fallbackCharacter && (
-            <button
-              type="button"
-              onClick={() => panels.setGroupOpen((v) => !v)}
-              title={`${t("room.gmLabel")} ${actions.fallbackCharacter.name}`}
-              aria-pressed={panels.groupOpen}
-            >
-              {actions.fallbackCharacter.avatarUrl ? (
-                <img
-                  src={actions.fallbackCharacter.avatarUrl}
-                  alt={actions.fallbackCharacter.name}
-                  className="h-7 w-7 rounded-full border object-cover"
-                  style={{ borderColor: panels.groupOpen ? "var(--color-accent)" : "var(--color-border-strong)" }}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => panels.setGroupOpen((v) => !v)}
+                title={`${t("room.gmLabel")} ${actions.fallbackCharacter.name}`}
+                aria-pressed={panels.groupOpen}
+              >
+                {actions.fallbackCharacter.avatarUrl ? (
+                  <img
+                    src={actions.fallbackCharacter.avatarUrl}
+                    alt={actions.fallbackCharacter.name}
+                    className="h-10 w-10 rounded-[var(--radius-md)] border object-cover"
+                    style={{ borderColor: panels.groupOpen ? "var(--color-accent)" : "var(--color-border-strong)" }}
+                  />
+                ) : (
+                  <span
+                    className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border text-sm font-medium"
+                    style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
+                  >
+                    {(actions.fallbackCharacter.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                  </span>
+                )}
+              </button>
+              {panels.groupOpen && chat && (
+                <GroupMembersPopover
+                  chatId={id}
+                  chatCharacterId={chat.characterId}
+                  members={members}
+                  memberCharacters={memberCharacters}
+                  allCharacters={characters}
+                  autoReply={autoReply}
+                  promotionConnection={promotionConnection}
+                  onAddMember={addMember}
+                  onRemoveMember={removeMember}
+                  onSetAutoReply={setAutoReplyMode}
+                  onClose={() => panels.setGroupOpen(false)}
                 />
-              ) : (
-                <span
-                  className="flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium"
-                  style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
-                >
-                  {(actions.fallbackCharacter.name || "?").trim().charAt(0).toUpperCase() || "?"}
-                </span>
               )}
-            </button>
+            </div>
           )}
           <div
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
@@ -900,21 +917,6 @@ export function ChatScreen() {
               </span>
             )}
           </button>
-          {panels.groupOpen && chat && (
-            <GroupMembersPopover
-              chatId={id}
-              chatCharacterId={chat.characterId}
-              members={members}
-              memberCharacters={memberCharacters}
-              allCharacters={characters}
-              autoReply={autoReply}
-              promotionConnection={promotionConnection}
-              onAddMember={addMember}
-              onRemoveMember={removeMember}
-              onSetAutoReply={setAutoReplyMode}
-              onClose={() => panels.setGroupOpen(false)}
-            />
-          )}
         </div>
       </div>
       )}
