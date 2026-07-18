@@ -8,8 +8,7 @@
       "personas": "Persony",
       "personasSub": "Tvoje postava — kým jsi ve hře ty",
       "lorebooks": "Lorebooky",
-      "settings": "Nastavení",
-      "context": "Kontext"
+      "settings": "Nastavení"
     },
     "actions": {
       "save": "Uložit",
@@ -123,7 +122,8 @@
       "calendarTooltip": "Herní kalendář a čas",
       "toolsSidebar": "Nástroje chatu",
       "gmLabel": "Vypravěč:",
-      "ageYears": "{{age}} let"
+      "ageYears": "{{age}} let",
+      "contextLabel": "Kontext"
     },
     "character": {
       "title": "Postava",

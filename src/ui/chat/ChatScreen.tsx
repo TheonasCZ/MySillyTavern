@@ -14,7 +14,6 @@ import { QuestPanel } from "./QuestPanel";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { useChatListStore } from "../../stores/chatListStore";
 import { useChatStore } from "../../stores/chatStore";
-import { useContextUsageStore } from "../../stores/contextUsageStore";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { usePersonasStore } from "../../stores/personasStore";
 import { useUnreadStore } from "../../stores/unreadStore";
@@ -124,7 +123,6 @@ export function ChatScreen() {
 
   // ── Panel state ────────────────────────────────────────────────────
   const panels = useChatPanels();
-  const setContextUsage = useContextUsageStore((s) => s.setValue);
   const [personaSwitcherOpen, setPersonaSwitcherOpen] = useState(false);
 
   // Calendar state
@@ -172,14 +170,6 @@ export function ChatScreen() {
   const lastMessage = messages[messages.length - 1];
 
   // ── Effects ────────────────────────────────────────────────────────
-  // Mirror contextUsage into the global store so the main app Sidebar
-  // (outside this component's tree) can render the compact indicator.
-  // Cleared on unmount so it doesn't linger on non-chat routes.
-  useEffect(() => {
-    setContextUsage(actions.contextUsage);
-    return () => setContextUsage(null);
-  }, [actions.contextUsage, setContextUsage]);
-
   useEffect(() => {
     if (!connectionsLoaded) void loadConnections();
   }, [connectionsLoaded, loadConnections]);
@@ -264,6 +254,92 @@ export function ChatScreen() {
       c.provider === "gemini" || c.purposes.includes("chat"),
   );
 
+  // Persona avatar + switcher, rendered as the first item in ChatInput's
+  // row so it's clear whose voice is being typed. Popover opens upward
+  // (this trigger sits at the very bottom of the window).
+  const personaSlot = (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setPersonaSwitcherOpen((v) => !v)}
+        title={persona ? `${t("room.personaLabel")} ${persona.name}` : t("room.noPersona")}
+        aria-pressed={personaSwitcherOpen}
+      >
+        {persona && avatarSrc(persona.avatarPath) ? (
+          <img
+            src={avatarSrc(persona.avatarPath) ?? undefined}
+            alt={persona.name}
+            className="h-10 w-10 rounded-full border object-cover"
+            style={{ borderColor: "var(--color-border-strong)" }}
+          />
+        ) : (
+          <span
+            className="flex h-10 w-10 items-center justify-center rounded-full border text-sm font-medium"
+            style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
+          >
+            {(persona?.name ?? "?").trim().charAt(0).toUpperCase() || "?"}
+          </span>
+        )}
+      </button>
+      {personaSwitcherOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setPersonaSwitcherOpen(false)} />
+          <div
+            className="absolute bottom-full left-0 z-50 mb-2 w-64 rounded-[var(--radius-md)] border p-1 shadow-lg"
+            style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
+          >
+            <button
+              type="button"
+              className="block w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-sm transition-colors hover:opacity-90"
+              style={{
+                backgroundColor: !chat?.personaId ? "var(--color-surface-2)" : "transparent",
+                color: "var(--color-text)",
+              }}
+              onClick={async () => {
+                await setPersona(id, null);
+                setPersonaSwitcherOpen(false);
+              }}
+            >
+              {t("room.noPersona")}
+            </button>
+            {personas.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-sm transition-colors hover:opacity-90"
+                style={{
+                  backgroundColor: chat?.personaId === p.id ? "var(--color-surface-2)" : "transparent",
+                  color: "var(--color-text)",
+                }}
+                onClick={async () => {
+                  await setPersona(id, p.id);
+                  setPersonaSwitcherOpen(false);
+                }}
+              >
+                {avatarSrc(p.avatarPath) ? (
+                  <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm"
+                    style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
+                  >
+                    {p.name.trim().charAt(0).toUpperCase() || "?"}
+                  </span>
+                )}
+                <span className="flex flex-col overflow-hidden">
+                  <span className="truncate">{p.name}</span>
+                  <span className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    {[p.age ? t("room.ageYears", { age: p.age }) : null, p.race || null].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   // ── Render ─────────────────────────────────────────────────────────
   return (
     <div className="relative flex h-full flex-col">
@@ -329,7 +405,11 @@ export function ChatScreen() {
               borderColor: connection ? "var(--color-success)" : "var(--color-danger)",
               backgroundColor: "var(--color-surface-2)",
             }}
-            title={connection ? `${t("room.connectionLabel")} ${connection.name}` : t("room.errors.noConnection")}
+            title={
+              connection
+                ? `${t("room.connectionLabel")} ${connection.name}\n${t("room.contextLabel")}: ${Math.round(actions.contextUsage * 100)}%`
+                : t("room.errors.noConnection")
+            }
           >
             {connection ? "🔌" : "⚠️"}
           </div>
@@ -726,89 +806,6 @@ export function ChatScreen() {
             </button>
           ))}
 
-          {/* ---- Divider + Persona (pinned to bottom, mirrors Settings in the main Sidebar) ---- */}
-          <div className="mt-auto flex w-full flex-col items-center gap-1 border-t pt-2" style={{ borderColor: "var(--color-border)" }}>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setPersonaSwitcherOpen((v) => !v)}
-                title={persona ? `${t("room.personaLabel")} ${persona.name}` : t("room.noPersona")}
-                aria-pressed={personaSwitcherOpen}
-              >
-                {persona && avatarSrc(persona.avatarPath) ? (
-                  <img
-                    src={avatarSrc(persona.avatarPath) ?? undefined}
-                    alt={persona.name}
-                    className="h-7 w-7 rounded-full border object-cover"
-                    style={{ borderColor: "var(--color-border-strong)" }}
-                  />
-                ) : (
-                  <span
-                    className="flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium"
-                    style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
-                  >
-                    {(persona?.name ?? "?").trim().charAt(0).toUpperCase() || "?"}
-                  </span>
-                )}
-              </button>
-              {personaSwitcherOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setPersonaSwitcherOpen(false)} />
-                  <div
-                    className="absolute bottom-0 right-full z-50 mr-2 w-64 rounded-[var(--radius-md)] border p-1 shadow-lg"
-                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-                  >
-                    <button
-                      type="button"
-                      className="block w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-sm transition-colors hover:opacity-90"
-                      style={{
-                        backgroundColor: !chat?.personaId ? "var(--color-surface-2)" : "transparent",
-                        color: "var(--color-text)",
-                      }}
-                      onClick={async () => {
-                        await setPersona(id, null);
-                        setPersonaSwitcherOpen(false);
-                      }}
-                    >
-                      {t("room.noPersona")}
-                    </button>
-                    {personas.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5 text-left text-sm transition-colors hover:opacity-90"
-                        style={{
-                          backgroundColor: chat?.personaId === p.id ? "var(--color-surface-2)" : "transparent",
-                          color: "var(--color-text)",
-                        }}
-                        onClick={async () => {
-                          await setPersona(id, p.id);
-                          setPersonaSwitcherOpen(false);
-                        }}
-                      >
-                        {avatarSrc(p.avatarPath) ? (
-                          <img src={avatarSrc(p.avatarPath) ?? undefined} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-                        ) : (
-                          <span
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm"
-                            style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
-                          >
-                            {p.name.trim().charAt(0).toUpperCase() || "?"}
-                          </span>
-                        )}
-                        <span className="flex flex-col overflow-hidden">
-                          <span className="truncate">{p.name}</span>
-                          <span className="truncate text-xs" style={{ color: "var(--color-text-muted)" }}>
-                            {[p.age ? t("room.ageYears", { age: p.age }) : null, p.race || null].filter(Boolean).join(" · ")}
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
         </nav>
 
       </div>
@@ -842,10 +839,11 @@ export function ChatScreen() {
             clearSuggestions();
             if (lastMessage?.role === "assistant") actions.setDismissedSuggestionsMsgId(lastMessage.id);
           }}
+          personaSlot={personaSlot}
         />
       </div>
 
-      {/* Bottom bar: group members (persona switcher moved to the right tools sidebar) */}
+      {/* Bottom bar: group members */}
       {memberCharacters.length > 1 && (
       <div className="flex shrink-0 items-center gap-3 border-t px-4 py-1.5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
         <div className="relative">

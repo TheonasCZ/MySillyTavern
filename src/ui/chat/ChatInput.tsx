@@ -26,6 +26,10 @@ interface Props {
   showSuggestButton?: boolean;
   onSuggest: () => void;
   onClearSuggestions: () => void;
+  /** Rendered before the textarea — the persona avatar/switcher, so it's
+   *  visually clear who is writing. Owned by the caller (ChatScreen) since
+   *  it needs the personas list + setPersona, not ChatInput's concern. */
+  personaSlot?: React.ReactNode;
 }
 
 export function ChatInput({
@@ -39,6 +43,7 @@ export function ChatInput({
   showSuggestButton = true,
   onSuggest,
   onClearSuggestions,
+  personaSlot,
 }: Props) {
   const { t } = useTranslation("chat");
   const [value, setValue] = useState("");
@@ -194,6 +199,22 @@ export function ChatInput({
         </div>
       )}
       <div className="flex items-end gap-2">
+      {personaSlot}
+      <textarea
+        ref={textareaRef}
+        className="min-h-[2.5rem] max-h-40 flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm transition-colors duration-150"
+        style={{
+          backgroundColor: diceFlash ? "var(--color-accent)" : "var(--color-surface-2)",
+          borderColor: diceFlash ? "var(--color-brass)" : "var(--color-border-strong)",
+          color: "var(--color-text)",
+        }}
+        placeholder={t("room.inputPlaceholder") ?? ""}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => handleChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        rows={1}
+      />
       {showSuggestButton && (
       <button
         type="button"
@@ -210,21 +231,9 @@ export function ChatInput({
         {suggesting ? "⏳" : "💡"}
       </button>
       )}
-      <textarea
-        ref={textareaRef}
-        className="min-h-[2.5rem] max-h-40 flex-1 resize-none rounded-[var(--radius-md)] border px-3 py-2 text-sm transition-colors duration-150"
-        style={{
-          backgroundColor: diceFlash ? "var(--color-accent)" : "var(--color-surface-2)",
-          borderColor: diceFlash ? "var(--color-brass)" : "var(--color-border-strong)",
-          color: "var(--color-text)",
-        }}
-        placeholder={t("room.inputPlaceholder") ?? ""}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => handleChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        rows={1}
-      />
+      {/* Extra gap so the suggest button isn't mistaken for / misclicked
+          into Send — a deliberate spacer, not just the row's own gap-2. */}
+      <div className="w-2 shrink-0" aria-hidden />
       {streaming ? (
         <button
           type="button"

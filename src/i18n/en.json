@@ -8,8 +8,7 @@
       "personas": "Personas",
       "personasSub": "Your character — who you are in the story",
       "lorebooks": "Lorebooks",
-      "settings": "Settings",
-      "context": "Context"
+      "settings": "Settings"
     },
     "actions": {
       "save": "Save",
@@ -123,7 +122,8 @@
       "calendarTooltip": "Game calendar and time",
       "toolsSidebar": "Chat tools",
       "gmLabel": "Narrator:",
-      "ageYears": "{{age}} yrs"
+      "ageYears": "{{age}} yrs",
+      "contextLabel": "Context"
     },
     "character": {
       "title": "Character",
