@@ -35,6 +35,14 @@ export async function processGameResponse(
   const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations } = parseGameTags(text);
   if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0) return text;
 
+  // Diagnostic messages for mutations that targeted state that doesn't
+  // actually exist (missing item, never-learned skill, nonexistent
+  // condition/modification, quest completed without being started). These
+  // are purely local DB-lookup checks — no extra API/LLM cost — appended to
+  // lastTagErrors below so the AI gets course-correction feedback next turn.
+  // The underlying mutations remain safe no-ops; only this diagnostic is new.
+  const staleTargetErrors: string[] = [];
+
   // Apply time mutations: [TIME:+Nd] advances the calendar by N days each.
   if (chatId) {
     for (const tm of timeMutations) {
@@ -54,6 +62,9 @@ export async function processGameResponse(
         if (qm.op === "start") {
           if (!existing) await createQuest({ chatId, name: qm.name, description: qm.note });
         } else if (qm.op === "complete" || qm.op === "fail") {
+          if (!existing) {
+            staleTargetErrors.push(`Tag [QUEST:${qm.op === "complete" ? "✓" : "-"}${qm.name}] se pokusil dokončit quest "${qm.name}", který nikdy nebyl založen tagem [QUEST:+${qm.name}]. Nejdřív quest založ, pak ho dokonči.`);
+          }
           const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
           await updateQuestStatus(quest.id, qm.op === "complete" ? "completed" : "failed");
           if (qm.note) await addQuestNote(quest.id, qm.note);
@@ -84,6 +95,8 @@ export async function processGameResponse(
         }
       } else if (idx !== -1) {
         conditions.splice(idx, 1);
+      } else {
+        staleTargetErrors.push(`Tag [COND:-${cm.name}] se pokusil odebrat stav "${cm.name}", který postava nemá. Odebírej jen stavy, které aktuálně existují.`);
       }
     }
   }
@@ -102,6 +115,8 @@ export async function processGameResponse(
         }
       } else if (idx !== -1) {
         modifications.splice(idx, 1);
+      } else {
+        staleTargetErrors.push(`Tag [MOD:-${mm.name}] se pokusil odebrat úpravu "${mm.name}", kterou postava nemá. Odebírej jen úpravy, které aktuálně existují.`);
       }
     }
   }
@@ -124,8 +139,13 @@ export async function processGameResponse(
         }
       } else {
         if (existing) {
+          if (existing.qty < m.qty) {
+            staleTargetErrors.push(`Tag [INV:-${m.qty}:${m.item}] se pokusil odebrat víc kusů "${m.item}" (${m.qty}), než hráč má (${existing.qty}). Odebírej jen tolik, kolik je skutečně v inventáři.`);
+          }
           existing.qty -= m.qty;
           if (existing.qty <= 0) inv.splice(inv.indexOf(existing), 1);
+        } else {
+          staleTargetErrors.push(`Tag [INV:-${m.item}] se pokusil odebrat předmět "${m.item}", který hráč nemá v inventáři. Odebírej jen předměty, které tam skutečně jsou.`);
         }
       }
     }
@@ -155,6 +175,8 @@ export async function processGameResponse(
         if (existing) {
           existing.level = Math.max(0, existing.level + s.delta);
           if (existing.level <= 0) skills.splice(skills.indexOf(existing), 1);
+        } else {
+          staleTargetErrors.push(`Tag [SKILL:${s.name}${s.delta}] se pokusil snížit dovednost "${s.name}", kterou postava nikdy neměla. Snižuj jen dovednosti, které postava skutečně má.`);
         }
       }
     }
@@ -294,7 +316,7 @@ export async function processGameResponse(
   const totalTags = mutations.length + skillChanges.length + levelChanges.length +
     factionMutations.length + craftMutations.length + craftedMutations.length +
     conditionMutations.length + modMutations.length + questMutations.length;
-  lastTagErrors = [];
+  lastTagErrors = [...staleTargetErrors];
   if (totalTags > 5) {
     lastTagErrors.push(`Příliš mnoho tagů v jedné odpovědi (${totalTags}). Maximum je 3–5. Rozděl změny do více odpovědí.`);
   }
