@@ -282,6 +282,8 @@
       "makeDefault": "Set as default",
       "saved": "Saved.",
       "deleteConfirm": "Delete this persona? Chats pointing to it will keep working but lose the reference.",
+      "resetState": "Reset game state",
+      "resetStateConfirm": "Reset inventory, skills, XP, level, and conditions to this persona's template? This does NOT affect existing chats — it only changes the template for future chats.",
       "generateAvatar": "Generate"
     },
     "importButton": "Import JSON",

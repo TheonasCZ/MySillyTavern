@@ -3,13 +3,11 @@ import { create } from "zustand";
 import type { Character } from "../db/repositories/charactersRepo";
 import {
   addChatMember,
-  removeChatMember,
-  setPrimaryCharacter,
-  type ChatMember,
 } from "../db/repositories/chatMembersRepo";
 import {
   getChat,
   setAutoReply,
+  setPrimaryCharacter,
   touchChat,
   type Chat,
 } from "../db/repositories/chatsRepo";

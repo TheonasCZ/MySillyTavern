@@ -49,8 +49,8 @@ export function useChatActions(params: ChatActionsParams) {
     memberCharacters,
     characters,
     connection,
-    autoReply,
-    selectedSpeakerId,
+    
+    
     isGroup,
     chatCharacterId,
   } = params;

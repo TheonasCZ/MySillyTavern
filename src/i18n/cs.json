@@ -282,6 +282,8 @@
       "makeDefault": "Nastavit jako výchozí",
       "saved": "Uloženo.",
       "deleteConfirm": "Opravdu smazat tuto personu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
+      "resetState": "Resetovat herní stav",
+      "resetStateConfirm": "Resetovat inventář, dovednosti, XP, úroveň a podmínky na šablonu persony? Existující chaty to neovlivní — jen změní šablonu pro budoucí chaty.",
       "generateAvatar": "Generovat"
     },
     "importButton": "Import JSON",
