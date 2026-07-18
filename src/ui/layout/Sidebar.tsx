@@ -9,14 +9,13 @@ type NavItem = {
   labelKey: string;
   icon: string;
   subtitleKey?: string;
-  secondary?: boolean;
 };
 
 const navItems: NavItem[] = [
   { to: "/", key: "chats", labelKey: "nav.chats", icon: "💬" },
   { to: "/characters", key: "characters", labelKey: "nav.characters", icon: "🎭", subtitleKey: "nav.charactersSub" },
-  { to: "/personas", key: "personas", labelKey: "nav.personas", icon: "👤", subtitleKey: "nav.personasSub", secondary: true },
-  { to: "/lorebooks", key: "lorebooks", labelKey: "nav.lorebooks", icon: "📚", secondary: true },
+  { to: "/personas", key: "personas", labelKey: "nav.personas", icon: "👤", subtitleKey: "nav.personasSub" },
+  { to: "/lorebooks", key: "lorebooks", labelKey: "nav.lorebooks", icon: "📚" },
 ];
 
 export function Sidebar() {
@@ -41,9 +40,6 @@ export function Sidebar() {
     window.addEventListener("toggle-sidebar", handler);
     return () => window.removeEventListener("toggle-sidebar", handler);
   }, []);
-
-  const primaryItems = navItems.filter((i) => !i.secondary);
-  const secondaryItems = navItems.filter((i) => i.secondary);
 
   const linkClass = (isActive: boolean) =>
     [
@@ -108,45 +104,13 @@ export function Sidebar() {
           )}
         </div>
 
-        {/* ---- Primary nav ---- */}
+        {/* ---- All nav items in one flat list ---- */}
         <ul className="flex flex-[0_0_auto] flex-col gap-1">
-          {primaryItems.map((item) => (
+          {navItems.map((item) => (
             <li key={item.key}>
               <NavLink
                 to={item.to}
                 end={item.to === "/"}
-                onClick={() => setMobileOpen(false)}
-                className={({ isActive }) => linkClass(isActive)}
-                style={({ isActive }) => linkStyle(isActive)}
-              >
-                <span className="shrink-0 text-base leading-none">{item.icon}</span>
-                {!collapsed && (
-                  <span className="flex flex-col">
-                    <span>{t(item.labelKey)}</span>
-                    {item.subtitleKey && (
-                      <span className="text-[0.75em] leading-tight opacity-70">
-                        {t(item.subtitleKey)}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-
-        {/* ---- Separator ---- */}
-        <div
-          className="my-3 border-t"
-          style={{ borderColor: "var(--color-border)" }}
-        />
-
-        {/* ---- Secondary nav ---- */}
-        <ul className="flex flex-col gap-1">
-          {secondaryItems.map((item) => (
-            <li key={item.key}>
-              <NavLink
-                to={item.to}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) => linkClass(isActive)}
                 style={({ isActive }) => linkStyle(isActive)}
