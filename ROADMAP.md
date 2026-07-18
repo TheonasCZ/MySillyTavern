@@ -552,7 +552,13 @@ licenci.
   Tabletop Audio (zdarma, dělané přímo pro RPG session), OpenGameArt.org
   a incompetech.com (Kevin MacLeod) jako CC/royalty-free zdroje stop.
   Uživatel by si vybíral/nahrával stopy podle žánru kampaně (les/město/
-  dungeon apod.). Čistě nápad, nezadáno k realizaci.
+  dungeon apod.). Vzor filtrace stop: Tabletop Audio má 4 kombinovatelné
+  dimenze (civilizace/prostředí/atmosféra/děj — např. "boj + les +
+  epický" najednou), inspirace pro to, jak by šlo tagovat i vlastní
+  nahrané stopy v naší apce a přepínat je podle právě probíhající scény
+  (mohlo by navazovat na `directorNote`/scene direction, co už existuje
+  pro tón vyprávění — stejný signál by mohl řídit i hudbu). Čistě nápad,
+  nezadáno k realizaci.
 - **Nápad (2026-07-18): centrální crash/error reporting (Sentry) — až
   bude víc uživatelů než vývojář sám.** Analog Crashlytics pro Tauri:
   `tauri-plugin-sentry` (Rust strana) + oficiální Sentry browser SDK
