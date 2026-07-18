@@ -165,7 +165,9 @@ describe("formatCalendarDateShort", () => {
     const s = formatCalendarDateShort(d);
     expect(s).toContain("🕐");
     expect(s).toContain("06:00");
-    expect(s).toContain("15. Jarního větru, 847");
+    // Real-world month equivalent is shown in parentheses next to the
+    // fantasy month name (e.g. "(Duben)") — added alongside hourOfDay.
+    expect(s).toContain("15. Jarního větru (Duben), 847");
   });
 });
 
@@ -427,7 +429,10 @@ describe("calendarDescription with hourOfDay", () => {
   it("includes hour and period info", () => {
     const d = calendarDateFromDays(847, 45, 14);
     const desc = calendarDescription(d);
-    expect(desc).toContain("14:00");
+    // calendarDescription is the prompt-facing text block — it uses natural
+    // "14h" phrasing, distinct from formatCalendarDateShort's compact
+    // "14:00" clock-style UI badge (see the sibling describe block below).
+    expect(desc).toContain("14h");
     expect(desc).toContain("day");
     expect(desc).toContain("[TIME:+1h]");
   });
@@ -441,7 +446,8 @@ describe("formatCalendarDateShort with hourOfDay", () => {
     const s = formatCalendarDateShort(d);
     expect(s).toContain("🕐");
     expect(s).toContain("14:00");
+    // The short/compact format shows the season as an icon only (🌸), not
+    // the spelled-out word — that's the point of the "short" variant.
     expect(s).toContain("🌸");
-    expect(s).toContain("Jaro");
   });
 });

@@ -118,7 +118,8 @@
       "questsTooltip": "Quest journal",
       "characterTooltip": "Character — status overview",
       "memoryTooltip": "Memory and recollections",
-      "exportTooltip": "Export chronicle"
+      "exportTooltip": "Export chronicle",
+      "calendarTooltip": "Game calendar and time"
     },
     "character": {
       "title": "Character",

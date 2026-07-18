@@ -291,22 +291,31 @@ export function ChatScreen() {
 
       {/* Right icon sidebar */}
       <div className="flex shrink-0 flex-col gap-1 border-l p-1" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
-        {[ 
-          ["📅", panels.calendarOpen, () => panels.setCalendarOpen(v => !v), "Kalendář"],
-          ["🎒", panels.inventoryOpen, () => panels.setInventoryOpen(v => !v), t("room.inventoryTooltip")],
-          ["📜", panels.questsOpen, () => panels.setQuestsOpen(v => !v), t("room.questsTooltip")],
-          ["🧍", panels.characterOpen, () => panels.setCharacterOpen(v => !v), t("room.characterTooltip")],
-          ["🎬", panels.directorOpen, () => panels.setDirectorOpen(v => !v), t("director.title")],
-          ["🧠", panels.memoryOpen, () => panels.setMemoryOpen(v => !v), t("room.memoryTooltip")],
-          ["📖", panels.exportOpen, () => panels.setExportOpen(v => !v), t("room.exportTooltip")],
-        ].map(([icon, open, onClick, title]) => (
-          <button key={String(icon)} type="button" onClick={onClick} title={String(title)}
+        {(
+          [
+            { icon: "📅", open: panels.calendarOpen, onToggle: () => panels.setCalendarOpen((v) => !v), title: t("room.calendarTooltip") },
+            { icon: "🎒", open: panels.inventoryOpen, onToggle: () => panels.setInventoryOpen((v) => !v), title: t("room.inventoryTooltip") },
+            { icon: "📜", open: panels.questsOpen, onToggle: () => panels.setQuestsOpen((v) => !v), title: t("room.questsTooltip") },
+            { icon: "🧍", open: panels.characterOpen, onToggle: () => panels.setCharacterOpen((v) => !v), title: t("room.characterTooltip") },
+            { icon: "🎬", open: panels.directorOpen, onToggle: () => panels.setDirectorOpen((v) => !v), title: t("director.title") },
+            { icon: "🧠", open: panels.memoryOpen, onToggle: () => panels.setMemoryOpen((v) => !v), title: t("room.memoryTooltip") },
+            { icon: "📖", open: panels.exportOpen, onToggle: () => panels.setExportOpen((v) => !v), title: t("room.exportTooltip") },
+          ] satisfies { icon: string; open: boolean; onToggle: () => void; title: string }[]
+        ).map(({ icon, open, onToggle, title }) => (
+          <button
+            key={icon}
+            type="button"
+            onClick={onToggle}
+            title={title}
+            aria-pressed={open}
             className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors"
             style={{
               backgroundColor: open ? "var(--color-accent)" : "transparent",
               color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
             }}
-          >{icon}</button>
+          >
+            {icon}
+          </button>
         ))}
       </div>
 

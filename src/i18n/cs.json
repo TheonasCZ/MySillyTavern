@@ -118,7 +118,8 @@
       "questsTooltip": "Deník questů",
       "characterTooltip": "Postava — přehled stavu",
       "memoryTooltip": "Paměť a vzpomínky",
-      "exportTooltip": "Export kroniky"
+      "exportTooltip": "Export kroniky",
+      "calendarTooltip": "Herní kalendář a čas"
     },
     "character": {
       "title": "Postava",
