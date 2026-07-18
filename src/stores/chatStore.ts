@@ -33,7 +33,7 @@ import { applyRegexRules } from "../chat/regexTransform";
 import { CONTINUE_AS, CONTINUE_EXACT, CONTINUE_EXACT_SOLO, SUGGEST_PROMPT } from "../prompt/promptTexts";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { chatComplete } from "../providers/chatComplete";
-import type { ChatMessage, ConnectionConfig } from "../providers/types";
+import type { ChatMessage } from "../providers/types";
 import { logUsage } from "../db/repositories/usageRepo";
 
 import type { ChatState } from "./chatStoreTypes";
