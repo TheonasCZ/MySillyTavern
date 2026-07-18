@@ -67,6 +67,7 @@ import {
   SECTION_PERSONA,
   SECTION_TWO_ROLES,
   SECTION_DIALOG_EXAMPLE,
+  SECTION_VOICE_EXAMPLES,
   SECTION_CANON_REMINDER,
   TWO_ROLES_INSTRUCTIONS,
   DIALOG_EXAMPLE_HEADER,
@@ -133,6 +134,7 @@ export interface ConditionLike {
   name: string;
   description: string;
   expiresAt?: string | null;
+  lastTouched?: string;
 }
 
 /** A lasting body modification (chat-scoped, see
@@ -141,6 +143,7 @@ export interface ConditionLike {
 export interface ModificationLike {
   name: string;
   description: string;
+  lastTouched?: string;
 }
 
 export interface PersonaLike {
@@ -153,8 +156,8 @@ export interface PersonaLike {
   progression?: "skill" | "level" | "none";
   xp?: number;
   level?: number;
-  skills?: Array<{ name: string; level: number }>;
-  inventory?: Array<{ item: string; qty: number; note?: string }>;
+  skills?: Array<{ name: string; level: number; lastTouched?: string }>;
+  inventory?: Array<{ item: string; qty: number; note?: string; lastTouched?: string }>;
   /** Current faction standings for this persona. */
   factions?: FactionRepLike[];
   /** Known crafting recipes for this persona. */
@@ -273,6 +276,10 @@ export interface PromptBuilderInput {
   directorNote?: string;
   /** Language the AI writes in (e.g. 'cs', 'en') — per-chat (M28). */
   gameLanguage?: string;
+  /** Voice-consistency examples: historically relevant replies from the same
+   * character, found via embedding similarity. Placed near the end of the
+   * prompt for maximum recency weight. Empty/absent = no examples yet. */
+  voiceExamples?: string[];
 }
 
 export interface PromptReport {
@@ -297,6 +304,9 @@ export interface PromptReport {
     historyMessagesIncluded: number;
     historyMessagesTotal: number;
     mesExampleIncluded: boolean;
+    /** Number of voice-consistency examples injected into the trailing
+     * system message. 0 when no embeddings are available yet. */
+    voiceExamplesIncluded: number;
     /** Tokens spent on the end-of-context `[Připomínka kánonu]` block (0 when
      * there are no world/player facts). Always rendered when non-empty —
      * never trimmed under budget pressure, only size-capped at build time
@@ -477,6 +487,11 @@ function buildMesExampleSection(character: CharacterLike, charName: string, user
   return `${SECTION_DIALOG_EXAMPLE}\n${substitutePlaceholders(trimmed, charName, userName)}`;
 }
 
+function buildVoiceExamplesSection(examples: string[]): string {
+  if (!examples || examples.length === 0) return "";
+  return `${SECTION_VOICE_EXAMPLES}\n${examples.map((e) => `---\n${e}`).join("\n")}`;
+}
+
 function factLine(fact: LedgerFactLike, charName: string, userName: string): string {
   return `- (${fact.category}/${substitutePlaceholders(fact.subject, charName, userName)}) ${substitutePlaceholders(fact.fact, charName, userName)}`;
 }
@@ -636,14 +651,26 @@ function selectDiverseFacts(
   return selected;
 }
 
+/** Sorts entries by `lastTouched` ascending so the most recently touched
+ * entries land at the end of the array (the "most recent" end for
+ * `formatCappedList`). Entries without `lastTouched` (legacy data) sort
+ * first — they're treated as the oldest and fold first under the cap. */
+function sortByLastTouched<T extends { lastTouched?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const at = a.lastTouched ?? "";
+    const bt = b.lastTouched ?? "";
+    return at.localeCompare(bt);
+  });
+}
+
 /** Renders a current-state list (inventory/skills/conditions/modifications)
  * for `[GAME TAGS]`, capping full-detail entries to the most recent
- * `capCount` (recency = array order, since all four lists are pushed-to on
- * add — see `inventoryProcessor.ts`) and folding any older entries into a
- * trailing names-only clause. Never drops a name, even at `capCount === 0`
- * (design constraint: the model must always be able to confirm/deny a
- * claimed item/skill/condition/modification by name, even with zero detail
- * — see the module doc comment / plan discussion this implements). */
+ * `capCount` (recency = `lastTouched` timestamp — see `sortByLastTouched`)
+ * and folding any older entries into a trailing names-only clause. Never
+ * drops a name, even at `capCount === 0` (design constraint: the model must
+ * always be able to confirm/deny a claimed item/skill/condition/modification
+ * by name, even with zero detail — see the module doc comment / plan
+ * discussion this implements). */
 function formatCappedList<T>(
   items: T[],
   fullLabel: (item: T) => string,
@@ -787,7 +814,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       let tagInstructions = `${SECTION_GAME_TAGS}\n`;
       // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
-        const inv = persona.inventory ?? [];
+        const inv = sortByLastTouched(persona.inventory ?? []);
         const list = formatCappedList(
           inv,
           (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""),
@@ -798,7 +825,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += `${TAG_INSTRUCTIONS_INVENTORY_CHANGES}\n`;
       }
       if (progression === "skill" && hasSkills && persona) {
-        const sk = persona.skills ?? [];
+        const sk = sortByLastTouched(persona.skills ?? []);
         const list = formatCappedList(
           sk,
           (s) => `${s.name} ${s.level}`,
@@ -815,7 +842,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CHANGES}\n`;
       }
       if (hasCond && persona) {
-        const cond = persona.conditions ?? [];
+        const cond = sortByLastTouched(persona.conditions ?? []);
         const list = formatCappedList(
           cond,
           (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""),
@@ -826,7 +853,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         tagInstructions += `${TAG_INSTRUCTIONS_CONDITION_CHANGES}\n`;
       }
       if (hasMod && persona) {
-        const mods = persona.modifications ?? [];
+        const mods = sortByLastTouched(persona.modifications ?? []);
         const list = formatCappedList(mods, (m) => m.name, (m) => m.name, stateListCap);
         tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS} ${list}.\n`;
         tagInstructions += `${TAG_INSTRUCTIONS_MODIFICATION_CHANGES}\n`;
@@ -869,6 +896,13 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     const director = input.directorNote?.trim();
     if (director) {
       phi = phi ? `${phi}\n\n${SECTION_SCENE_DIRECTION}\n${director}` : `${SECTION_SCENE_DIRECTION}\n${director}`;
+    }
+
+    // Voice-consistency examples — historically similar replies from this
+    // character, placed near the end for maximum recency weight.
+    const voiceSection = buildVoiceExamplesSection(input.voiceExamples ?? []);
+    if (voiceSection) {
+      phi = phi ? `${phi}\n\n${voiceSection}` : voiceSection;
     }
 
     // Canon reminder is appended last, closest to generation — see
@@ -1069,6 +1103,7 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
       historyMessagesIncluded: historyIncluded.length,
       historyMessagesTotal: historyTotal,
       mesExampleIncluded,
+      voiceExamplesIncluded: (input.voiceExamples ?? []).length,
       canonReminderTokens: current.canonReminderTokens,
       ...(input.groupMembers ? { groupMembersIncluded: groupMembers.length } : {}),
       systemText: current.systemText,

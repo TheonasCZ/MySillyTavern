@@ -86,6 +86,12 @@ function serializeArg(arg: unknown): string {
   }
 }
 
+/** Direct write to app.log bypassing dedup/rate-limit — for one-shot
+ *  diagnostic records (e.g. sampler-param warnings). */
+export function appendLog(line: string): void {
+  void invoke("append_log", { line }).catch(() => {});
+}
+
 function buildLine(level: string, args: unknown[]): string {
   const message = args.map(serializeArg).join(" ").slice(0, MAX_MESSAGE_LEN);
   return `${new Date().toISOString()} [${level}] ${message}`;

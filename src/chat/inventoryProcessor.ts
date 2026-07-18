@@ -12,6 +12,7 @@ import {
   setChatSkills,
   setChatXpLevel,
 } from "../db/repositories/chatsRepo";
+import { nowIso } from "../db/database";
 import { createFaction, listFactions, updateReputation } from "../db/repositories/factionsRepo";
 import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
 import { advanceAndPersistCalendar } from "../memory/memoryEngine";
@@ -91,6 +92,7 @@ export async function processGameResponse(
             name: cm.name,
             description: [cm.description, cm.duration].filter(Boolean).join(" — "),
             expiresAt: null,
+            lastTouched: nowIso(),
           });
         }
       } else if (idx !== -1) {
@@ -111,7 +113,7 @@ export async function processGameResponse(
       const idx = modifications.findIndex((m) => m.name.toLowerCase() === mm.name.toLowerCase());
       if (mm.op === "add") {
         if (idx === -1) {
-          modifications.push({ name: mm.name, description: mm.name });
+          modifications.push({ name: mm.name, description: mm.name, lastTouched: nowIso() });
         }
       } else if (idx !== -1) {
         modifications.splice(idx, 1);
@@ -133,8 +135,9 @@ export async function processGameResponse(
       if (m.op === "add") {
         if (existing) {
           existing.qty += m.qty;
+          existing.lastTouched = nowIso();
         } else {
-          inv.push({ item: m.item, qty: m.qty });
+          inv.push({ item: m.item, qty: m.qty, lastTouched: nowIso() });
           newlyAddedItems.push(m.item);
         }
       } else {
@@ -160,15 +163,17 @@ export async function processGameResponse(
         // Absolute set: [SKILL:+name:3]
         if (existing) {
           existing.level = s.absolute;
+          existing.lastTouched = nowIso();
         } else {
-          skills.push({ name: s.name, level: s.absolute });
+          skills.push({ name: s.name, level: s.absolute, lastTouched: nowIso() });
         }
       } else if (s.delta > 0) {
         // Relative increase: [SKILL:name+2] or [SKILL:+name]
         if (existing) {
           existing.level += s.delta;
+          existing.lastTouched = nowIso();
         } else {
-          skills.push({ name: s.name, level: s.delta });
+          skills.push({ name: s.name, level: s.delta, lastTouched: nowIso() });
         }
       } else {
         // Decrease: [SKILL:name-1] — remove if <= 0
@@ -257,8 +262,9 @@ export async function processGameResponse(
       const existingItem = inv.find((i) => i.item.toLowerCase() === cdm.resultItem.toLowerCase());
       if (existingItem) {
         existingItem.qty += 1;
+        existingItem.lastTouched = nowIso();
       } else {
-        inv.push({ item: cdm.resultItem, qty: 1 });
+        inv.push({ item: cdm.resultItem, qty: 1, lastTouched: nowIso() });
         newlyAddedItems.push(cdm.resultItem);
       }
       // Update the recipe's perks

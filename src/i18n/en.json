@@ -534,7 +534,9 @@
         "model": "Embedding model",
         "modelPlaceholder": "auto (per provider)",
         "topK": "Memories to retrieve (top K)",
-        "minScore": "Minimum similarity (0–1)"
+        "minScore": "Minimum similarity (0–1)",
+        "voiceExamplesEnabled": "Voice examples (experimental)",
+        "voiceExamplesHelp": "Uses embedding similarity to find historically relevant character replies as live style examples, instead of relying on a static mes_example."
       },
       "help": {
         "extractionInterval": "How often (after how many messages) the engine scans the recent chat and pulls durable facts (names, relationships, promises…) into the memory ledger. A lower number means memory updates more often, but costs more API calls.",
@@ -662,11 +664,20 @@
       "deleteConfirm": "Delete this preset?",
       "noPreset": "No preset"
     },
+    "samplers": {
+      "unsupported": "⚠️ {{provider}} does not support {{param}} — parameter ignored"
+    },
     "shortcuts": {
       "title": "Keyboard shortcuts",
       "regenerate": "Regenerate last reply",
       "send": "Send message",
       "close": "Close panel / popover"
+    },
+    "tabs": {
+      "connection": "Connection",
+      "play": "Play",
+      "appearance": "Appearance",
+      "data": "Data & diagnostics"
     },
     "resetButton": "Reset to defaults",
     "resetConfirm": "Reset all settings to defaults?",

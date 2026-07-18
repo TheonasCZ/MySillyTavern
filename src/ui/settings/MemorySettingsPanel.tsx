@@ -33,6 +33,9 @@ export function MemorySettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [disabledProviders, setDisabledProviders] = useState<string[]>([]);
 
+  // Voice examples toggle (experimental)
+  const [voiceExamplesEnabled, setVoiceExamplesEnabled] = useState(true);
+
   // Image gen settings
   const [imgEnabled, setImgEnabled] = useState(true);
   const [imgLimit, setImgLimit] = useState("0");
@@ -42,7 +45,7 @@ export function MemorySettingsPanel() {
 
   useEffect(() => {
     void (async () => {
-      const [interval, window, model, k, score, disabled, imgEn, imgLi, imgConn] = await Promise.all([
+      const [interval, window, model, k, score, disabled, imgEn, imgLi, imgConn, voiceEx] = await Promise.all([
         getSetting("extraction_interval"),
         getSetting("verbatim_window"),
         getSetting("embedding_model"),
@@ -52,6 +55,7 @@ export function MemorySettingsPanel() {
         getSetting("image_gen_enabled"),
         getSetting("image_gen_limit"),
         getSetting("image_gen_connection_id"),
+        getSetting("voice_examples_enabled"),
       ]);
       if (interval) setExtractionInterval(interval);
       if (window) setVerbatimWindow(window);
@@ -62,6 +66,7 @@ export function MemorySettingsPanel() {
       if (imgEn !== null) setImgEnabled(imgEn !== "0");
       if (imgLi !== null) setImgLimit(imgLi);
       if (imgConn) setImgConnectionId(imgConn);
+      if (voiceEx !== null) setVoiceExamplesEnabled(voiceEx !== "0");
     })();
   }, []);
 
@@ -87,6 +92,7 @@ export function MemorySettingsPanel() {
         setSetting("image_gen_enabled", imgEnabled ? "1" : "0"),
         setSetting("image_gen_limit", imgLimit),
         setSetting("image_gen_connection_id", imgConnectionId),
+        setSetting("voice_examples_enabled", voiceExamplesEnabled ? "1" : "0"),
       ]);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -182,6 +188,19 @@ export function MemorySettingsPanel() {
           />
         </label>
       </div>
+
+      <label className="mt-4 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={voiceExamplesEnabled}
+          onChange={(e) => setVoiceExamplesEnabled(e.target.checked)}
+          className="rounded"
+        />
+        <span className="flex items-center gap-1">
+          {t("memory.embedding.voiceExamplesEnabled")}
+          <FieldHelp text={t("memory.embedding.voiceExamplesHelp")} />
+        </span>
+      </label>
 
       {/* Illustration settings */}
       <h3 className="mb-1 mt-6 text-sm font-medium">{t("illustrations.title")}</h3>

@@ -121,6 +121,8 @@ export const SECTION_CRAFTING = "[CRAFTING]";
 export const SECTION_PERSONA = (name: string) => `[Player's persona — ${name}]`;
 export const SECTION_TWO_ROLES = "[YOUR TWO ROLES]";
 export const SECTION_DIALOG_EXAMPLE = "[DIALOG STYLE EXAMPLE]";
+export const SECTION_VOICE_EXAMPLES =
+  "[VOICE EXAMPLES — recent character replies most similar to the current situation]";
 export const SECTION_CANON_REMINDER = "[Canon reminder — these rules apply absolutely and must not change through story drift]";
 
 // ---- Role-split instructions (English + lang) --------------------------

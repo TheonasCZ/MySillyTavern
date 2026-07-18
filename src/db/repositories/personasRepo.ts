@@ -4,6 +4,9 @@ import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 export interface SkillEntry {
   name: string;
   level: number;
+  /** ISO-8601 timestamp of last add/modify — used for recency sorting in the
+   *  prompt's capped state lists. Absent on legacy entries (which sort last). */
+  lastTouched?: string;
 }
 
 export interface InventoryEntry {
@@ -11,6 +14,9 @@ export interface InventoryEntry {
   qty: number;
   note?: string;
   image_path?: string;
+  /** ISO-8601 timestamp of last add/modify — used for recency sorting in the
+   *  prompt's capped state lists. Absent on legacy entries (which sort last). */
+  lastTouched?: string;
 }
 
 export interface ConditionEntry {
@@ -18,6 +24,9 @@ export interface ConditionEntry {
   description: string;
   expiresAt: string | null;
   modifiers?: { stat: string; value: number }[];
+  /** ISO-8601 timestamp of last add/modify — used for recency sorting in the
+   *  prompt's capped state lists. Absent on legacy entries (which sort last). */
+  lastTouched?: string;
 }
 
 /** A lasting body modification (e.g. a scar, a magical mark, a prosthetic).
@@ -27,6 +36,9 @@ export interface ConditionEntry {
 export interface ModificationEntry {
   name: string;
   description: string;
+  /** ISO-8601 timestamp of last add/modify — used for recency sorting in the
+   *  prompt's capped state lists. Absent on legacy entries (which sort last). */
+  lastTouched?: string;
 }
 
 export interface Persona {

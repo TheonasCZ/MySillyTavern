@@ -8,6 +8,7 @@ import { CardEditor } from "./ui/characters/CardEditor";
 import { GalleryScreen } from "./ui/characters/GalleryScreen";
 import { ChatListScreen } from "./ui/chat/ChatListScreen";
 import { ChatScreen } from "./ui/chat/ChatScreen";
+import { SamplerToast } from "./ui/common/SamplerToast";
 import { UndoToast } from "./ui/common/UndoToast";
 import { AppShell } from "./ui/layout/AppShell";
 import { LorebookEditor } from "./ui/lorebooks/LorebookEditor";
@@ -70,6 +71,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <UpdateBanner />
+        <SamplerToast />
         <UndoToast />
       </AppShell>
     </HashRouter>

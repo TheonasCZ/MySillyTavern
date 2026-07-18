@@ -104,6 +104,20 @@ export async function listEmbeddingsByRefIds(
   return out;
 }
 
+/** Stores an embedding for a single assistant reply, keyed by message id.
+ * Uses ref_id prefix "voice:" to avoid collisions with chunked scene
+ * embeddings (which also use kind="message"). */
+export async function storeVoiceEmbedding(
+  chatId: string,
+  messageId: string,
+  text: string,
+  model: string,
+  dims: number,
+  vector: string,
+): Promise<void> {
+  await upsertEmbedding(chatId, "message", `voice:${messageId}`, text, model, dims, vector);
+}
+
 /** Everything embedded for a chat — the reindex path re-embeds these rows'
  * stored texts with the current model. */
 export async function listAllChatEmbeddings(chatId: string): Promise<StoredEmbedding[]> {

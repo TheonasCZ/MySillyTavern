@@ -534,7 +534,9 @@
         "model": "Embedding model",
         "modelPlaceholder": "auto (dle poskytovatele)",
         "topK": "Počet vzpomínek (top K)",
-        "minScore": "Minimální podobnost (0–1)"
+        "minScore": "Minimální podobnost (0–1)",
+        "voiceExamplesEnabled": "Hlasové příklady (experimentální)",
+        "voiceExamplesHelp": "Používá podobnost embeddingů k nalezení historicky relevantních odpovědí postavy jako živých stylových příkladů, namísto spoléhání na statický mes_example."
       },
       "help": {
         "extractionInterval": "Jak často (po kolika zprávách) engine projde nedávný chat a vytáhne z něj trvalé fakty (jména, vztahy, sliby…) do paměťového deníku. Nižší číslo = paměť se aktualizuje častěji, ale stojí to víc volání API.",
@@ -662,11 +664,20 @@
       "deleteConfirm": "Smazat tento preset?",
       "noPreset": "Bez presetu"
     },
+    "samplers": {
+      "unsupported": "⚠️ {{provider}} nepodporuje {{param}} — parametr ignorován"
+    },
     "shortcuts": {
       "title": "Klávesové zkratky",
       "regenerate": "Přegenerovat poslední odpověď",
       "send": "Odeslat zprávu",
       "close": "Zavřít panel / popover"
+    },
+    "tabs": {
+      "connection": "Připojení",
+      "play": "Hraní",
+      "appearance": "Vzhled",
+      "data": "Data a diagnostika"
     },
     "resetButton": "Obnovit výchozí hodnoty",
     "resetConfirm": "Opravdu obnovit všechna nastavení?",

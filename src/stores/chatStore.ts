@@ -30,7 +30,7 @@ import {
 } from "../db/repositories/messagesRepo";
 import { getDefaultPersona, getPersona, type Persona } from "../db/repositories/personasRepo";
 import { getDefaultPreset, getPreset, type Preset } from "../db/repositories/presetsRepo";
-import { getSetting } from "../db/repositories/settingsRepo";
+import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { getSummary } from "../db/repositories/summariesRepo";
 import {
   mergeConsecutiveRoles,
@@ -40,7 +40,11 @@ import {
 } from "../chat/groupSpeaker";
 import { loadTimedState, saveTimedState, selectActiveEntries, type LoreEntryLike } from "../lorebooks/activation";
 import { buildDirectorNote, getDirectorSettings } from "../chat/director";
-import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
+import { canEmbed, getEmbeddingSettings, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
+import { encodeVector } from "../memory/vector";
+import { storeVoiceEmbedding } from "../db/repositories/embeddingsRepo";
+import { embedTexts } from "../providers/embeddings";
+import { findRelevantReplies } from "../prompt/replyExamples";
 import { runCanonSeed } from "../memory/canonSeed";
 import { consumeDriftCorrections } from "../memory/driftDetector";
 import { scheduleMemoryWork, ensureCalendarInitialized } from "../memory/memoryEngine";
@@ -57,6 +61,9 @@ import { lookupItemDetailForChat } from "../chat/toolCalling";
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { logUsage } from "../db/repositories/usageRepo";
 import { useConnectionsStore } from "./connectionsStore";
+import i18n from "../i18n";
+import { useSamplerToastStore } from "../ui/useSamplerToast";
+import { appendLog } from "../logging";
 
 /** Fire-and-forget usage logging (M12 §3) — must never throw into a chat
  * flow, hence the empty catch (an empty catch is deliberate here, not a
@@ -246,6 +253,8 @@ async function buildApiMessages(
   let factRelevance: Record<string, number> | undefined;
   let retrievedMemories: string[] = [];
   let retrievedMemoriesDetail: RetrievedMemoryDetail[] = [];
+  let voiceExamples: string[] = [];
+  let queryEmbedding: number[] | undefined;
   const embeddingConnection = resolveConnection(chat.extractionConnectionId) ?? connection;
   if (canEmbed(embeddingConnection)) {
     try {
@@ -259,6 +268,7 @@ async function buildApiMessages(
       factRelevance = context.factRelevance;
       retrievedMemories = context.memories;
       retrievedMemoriesDetail = context.memoriesDetail;
+      queryEmbedding = context.queryEmbedding;
       if (context.loreEntryIds.length > 0) {
         const byId = new Map(activatableLore.map((e) => [e.id, e]));
         loreEntries = [
@@ -274,6 +284,20 @@ async function buildApiMessages(
       // the comment above. Not warn-worthy on its own; useful when actively
       // debugging why "relevant memories" aren't showing up.
       console.debug("chatStore: semantic retrieval failed for chat", chat.id, err);
+    }
+  }
+
+  // Voice-consistency examples: reuse the query embedding from semantic
+  // retrieval to find historically similar replies from this character.
+  // Respects the `voice_examples_enabled` setting toggle.
+  if (queryEmbedding) {
+    try {
+      const enabled = await getSetting("voice_examples_enabled");
+      if (enabled !== "0") {
+        voiceExamples = await findRelevantReplies(chat.id, speaker.id, queryEmbedding);
+      }
+    } catch {
+      // Degrades silently — voice examples are a bonus, never a blocker.
     }
   }
 
@@ -333,6 +357,7 @@ async function buildApiMessages(
     driftCorrections,
     directorNote,
     gameLanguage: chat.gameLanguage ?? "cs",
+    voiceExamples: voiceExamples.length > 0 ? voiceExamples : undefined,
   });
 
   const presetParams = activePreset ? {
@@ -576,6 +601,51 @@ function resolveConnection(connectionId: string | null): ConnectionConfig | null
   return useConnectionsStore.getState().connections.find((c) => c.id === connectionId) ?? null;
 }
 
+/** Fire-and-forget: embeds the assistant message text and stores it as a
+ * voice example for future style-consistency lookups. Skips when embeddings
+ * are disabled, the provider doesn't support them, or the voice-examples
+ * feature is toggled off. Stores only every 3rd assistant message (tracked
+ * via the `voice_example_counter_<chatId>` setting). */
+async function scheduleVoiceEmbedding(
+  chatId: string,
+  messageId: string,
+  text: string,
+  connection: ConnectionConfig | null,
+): Promise<void> {
+  if (!connection || !canEmbed(connection)) return;
+  // Respect the feature toggle.
+  try {
+    const enabled = await getSetting("voice_examples_enabled");
+    if (enabled === "0") return;
+  } catch {
+    return;
+  }
+  // Only embed every 3rd assistant message.
+  const counterKey = `voice_example_counter_${chatId}`;
+  try {
+    const raw = await getSetting(counterKey);
+    let counter = Number(raw) || 0;
+    counter++;
+    if (counter < 3) {
+      await setSetting(counterKey, String(counter));
+      return;
+    }
+    // Reset counter and proceed.
+    await setSetting(counterKey, "0");
+  } catch {
+    return;
+  }
+  // Compute and store the embedding.
+  try {
+    const settings = await getEmbeddingSettings();
+    const { model: usedModel, vectors } = await embedTexts(connection, [text], settings.model);
+    const vec = Float32Array.from(vectors[0]);
+    await storeVoiceEmbedding(chatId, messageId, text, usedModel, vec.length, encodeVector(vec));
+  } catch {
+    // Silently degrade — a failed voice embedding must never break the chat.
+  }
+}
+
 interface PresetParams {
   temperature?: number;
   topP?: number;
@@ -584,6 +654,43 @@ interface PresetParams {
   frequencyPenalty?: number;
   presencePenalty?: number;
   maxTokens?: number;
+}
+
+// M26: track which sampler-param warnings have already been shown so the
+// toast + app.log line fires only once per (provider × param) per session.
+const warnedParams = new Set<string>();
+
+/** Provider support matrix for extra sampler params (M26).
+ *  Ollama (OpenAI-compatible) is treated as supporting everything. */
+const UNSUPPORTED: Record<string, string[]> = {
+  openai: ["top_k", "min_p"],
+  gemini: ["frequency_penalty", "presence_penalty", "min_p"],
+  claude: ["top_k", "min_p", "frequency_penalty", "presence_penalty"],
+};
+
+const PARAM_LABEL: Record<string, string> = {
+  top_k: "top_k",
+  min_p: "min_p",
+  frequency_penalty: "frequency_penalty",
+  presence_penalty: "presence_penalty",
+};
+
+function warnUnsupportedSamplerParams(provider: string, params?: PresetParams): void {
+  if (!params) return;
+  const blocked = UNSUPPORTED[provider] ?? [];
+  if (blocked.length === 0) return;
+  for (const key of blocked) {
+    const value = (params as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    const dedupeKey = `${provider}:${key}`;
+    if (warnedParams.has(dedupeKey)) continue;
+    warnedParams.add(dedupeKey);
+    const providerLabel = provider === "openai" ? "OpenAI" : provider === "gemini" ? "Gemini" : provider === "claude" ? "Claude" : provider;
+    const paramLabel = PARAM_LABEL[key] ?? key;
+    const msg = i18n.t("samplers.unsupported", { ns: "settings", provider: providerLabel, param: paramLabel });
+    useSamplerToastStore.getState().show(msg);
+    appendLog(`${new Date().toISOString()} [warn] ${msg}`);
+  }
 }
 
 /** Returns a new ConnectionConfig with preset params overridden where present. */
@@ -596,6 +703,7 @@ function applyPreset(connection: ConnectionConfig, params?: PresetParams): Conne
   if (params.minP !== undefined) overridden.minP = params.minP;
   if (params.frequencyPenalty !== undefined) overridden.frequencyPenalty = params.frequencyPenalty;
   if (params.presencePenalty !== undefined) overridden.presencePenalty = params.presencePenalty;
+  warnUnsupportedSamplerParams(overridden.provider, params);
   if (params.maxTokens != null) overridden.maxTokens = params.maxTokens;
   return overridden;
 }
@@ -810,6 +918,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Fire-and-forget: decides on its own whether extraction/summary is
         // actually due, never throws, never blocks the chat (plan §6.3).
         if (!interrupted) scheduleMemoryWork(chatId);
+        // Store voice embedding for style-consistency lookups (every 3rd
+        // assistant message). Fire-and-forget, never blocks.
+        const embConn = resolveConnection(chat.extractionConnectionId) ?? connection;
+        void scheduleVoiceEmbedding(chatId, assistantMessage.id, finalText, embConn);
       }
       set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
@@ -889,6 +1001,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         void touchChat(chatId);
         if (!interrupted) scheduleMemoryWork(chatId);
+        const embConn2 = resolveConnection(chat.extractionConnectionId) ?? connection;
+        void scheduleVoiceEmbedding(chatId, assistantMessage.id, finalText, embConn2);
       }
       set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
@@ -963,6 +1077,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         void touchChat(chatId);
         if (!interrupted) scheduleMemoryWork(chatId);
+        const embConn3 = resolveConnection(chat.extractionConnectionId) ?? connection;
+        void scheduleVoiceEmbedding(chatId, messageId, finalText, embConn3);
       }
       set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
@@ -1034,6 +1150,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (!interrupted) scheduleMemoryWork(chatId);
       void touchChat(chatId);
+      const embConn4 = resolveConnection(chat.extractionConnectionId) ?? connection;
+      void scheduleVoiceEmbedding(chatId, messageId, combined, embConn4);
       set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
     };
 

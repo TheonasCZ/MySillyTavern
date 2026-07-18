@@ -446,6 +446,10 @@ export interface SemanticContext {
   memoriesDetail: RetrievedMemoryDetail[];
   /** Lorebook entry ids activated semantically (on top of keyword hits). */
   loreEntryIds: string[];
+  /** The raw query embedding (f32 array) that was used to score everything.
+   * Callers can reuse this for additional similarity lookups (e.g. voice
+   * examples) without a second embedding API call. */
+  queryEmbedding?: number[];
 }
 
 /** One embedding API call per send: embeds the conversation tail and scores
@@ -539,6 +543,7 @@ export async function retrieveSemanticContext(args: {
     memories,
     memoriesDetail,
     loreEntryIds: topRefIds(loreScores, settings.minScore, LORE_TOP_K),
+    queryEmbedding: Array.from(queryVec),
   };
 }
 
