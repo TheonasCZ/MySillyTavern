@@ -99,7 +99,7 @@ export function SettingsScreen() {
             className="flex-1 whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors first:rounded-l-[var(--radius-md)] last:rounded-r-[var(--radius-md)]"
             style={{
               backgroundColor: tab === id ? "var(--color-primary)" : "transparent",
-              color: tab === id ? "var(--color-primary-contrast, #fff)" : "var(--color-text)",
+              color: tab === id ? "var(--color-accent-contrast, #fff)" : "var(--color-text)",
             }}
           >
             {t(i18nKey)}
@@ -137,7 +137,7 @@ export function SettingsScreen() {
                   className="block w-full px-4 py-2 text-left text-sm transition-colors"
                   style={{
                     backgroundColor: tab === id ? "var(--color-primary)" : "transparent",
-                    color: tab === id ? "var(--color-primary-contrast, #fff)" : "var(--color-text)",
+                    color: tab === id ? "var(--color-accent-contrast, #fff)" : "var(--color-text)",
                   }}
                 >
                   {t(i18nKey)}

@@ -56,10 +56,10 @@ export function PersonasScreen() {
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-[var(--font-display)] text-2xl">{t("title")}</h1>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void handleImportJson()} className="rounded-[var(--radius-sm)] px-2 py-1.5 text-xs" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
+          <button type="button" onClick={() => void handleImportJson()} className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
             {t("importButton")}
           </button>
-          <button type="button" onClick={() => void handleImportPng()} className="rounded-[var(--radius-sm)] px-2 py-1.5 text-xs" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
+          <button type="button" onClick={() => void handleImportPng()} className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
             {t("importPngButton")}
           </button>
           <button
@@ -80,7 +80,7 @@ export function PersonasScreen() {
       {importError && (
         <div className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border px-3 py-2 text-sm" style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
           <span>{importError}</span>
-          <button type="button" onClick={() => setImportError(null)} className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors"
+          <button type="button" onClick={() => setImportError(null)} className="shrink-0 rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
             style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}>
             {t("actions.close", { ns: "common" })}
           </button>
@@ -140,7 +140,7 @@ export function PersonasScreen() {
                   <button
                     type="button"
                     onClick={() => setEditingId(persona.id)}
-                    className="rounded-[var(--radius-sm)] px-2 py-1 text-xs"
+                    className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
                     style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
                   >
                     ✎ {t("actions.edit", { ns: "common" })}
@@ -176,10 +176,10 @@ export function PersonasScreen() {
 
                 {/* Export row */}
                 <div className="flex items-center justify-end gap-2 border-t pt-2" style={{ borderColor: "var(--color-border)" }}>
-                  <button type="button" onClick={() => void handleExportPersona(persona.id)} className="rounded-[var(--radius-sm)] px-2 py-1 text-xs" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
+                  <button type="button" onClick={() => void handleExportPersona(persona.id)} className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
                     ↗ {t("exportJson")}
                   </button>
-                  <button type="button" onClick={() => void handleExportPng(persona.id)} className="rounded-[var(--radius-sm)] px-2 py-1 text-xs" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
+                  <button type="button" onClick={() => void handleExportPng(persona.id)} className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm" style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}>
                     ↗ {t("exportPng")}
                   </button>
                 </div>

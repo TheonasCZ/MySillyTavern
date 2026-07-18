@@ -113,7 +113,7 @@ export function GalleryScreen() {
             type="button"
             onClick={() => void handleCreateBlank()}
             className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm font-medium transition-colors"
-            style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-contrast)" }}
+            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
           >
             {t("gallery.newCharacter")}
           </button>
