@@ -50,6 +50,13 @@ pub fn parse_event_line(line: &str) -> Option<&str> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedEvent {
     Token(String),
+    /// EXPERIMENTAL (function-calling prototype, Gemini only): the model
+    /// emitted a `functionCall` part instead of (or alongside) text.
+    /// Carries the raw JSON args as a string (parsed back to `Value` by the
+    /// caller) so this enum can stay `Eq`-derivable for the existing tests,
+    /// plus Gemini's opaque `thoughtSignature` (must be echoed back verbatim
+    /// on the follow-up request or the API rejects it with HTTP 400).
+    FunctionCall(String, String, Option<String>),
     Done(String),
     None,
 }

@@ -370,6 +370,8 @@ async fn process_chunk(
     let mut messages: Vec<ChatMessage> = vec![ChatMessage {
         role: Role::System,
         content: CHRONICLER_PROMPT.to_string(),
+        function_call: None,
+        function_response: None,
     }];
 
     // Build a user message from the chunk's messages
@@ -390,6 +392,8 @@ async fn process_chunk(
     messages.push(ChatMessage {
         role: Role::User,
         content: format!("Přepiš následující herní deník do poutavé prózy:\n\n{diary_text}"),
+        function_call: None,
+        function_response: None,
     });
 
     providers::complete(connection, api_key, &messages)

@@ -95,7 +95,15 @@ pub async fn chat_stream(
     messages: Vec<ChatMessage>,
     on_event: Channel<StreamEvent>,
     registry: State<'_, StreamRegistry>,
+    // EXPERIMENTAL (function-calling prototype): when true and the
+    // connection's provider is Gemini, offers the `get_item_detail` tool
+    // and may terminate this call early with a `FunctionCall` event instead
+    // of `Done` — see `StreamEvent::FunctionCall` doc comment. `Option` (not
+    // a plain `bool`) so existing call sites that don't pass this argument
+    // at all still deserialize fine and default to no-tools behavior.
+    tools: Option<bool>,
 ) -> Result<(), String> {
+    let tools = tools.unwrap_or(false);
     let api_key = match get_api_key(&connection.id) {
         Ok(Some(key)) => key,
         Ok(None) => {
@@ -121,12 +129,18 @@ pub async fn chat_stream(
 
     let (tx, mut rx) = mpsc::unbounded_channel::<StreamEvent>();
     let task = tokio::spawn(async move {
-        providers::stream_chat(&connection, &api_key, &messages, cancel, tx).await;
+        providers::stream_chat(&connection, &api_key, &messages, cancel, tx, tools).await;
     });
 
     let mut saw_terminal = false;
     while let Some(event) = rx.recv().await {
-        let is_terminal = matches!(event, StreamEvent::Done { .. } | StreamEvent::Error { .. });
+        // `FunctionCall` ends this `chat_stream` call the same way `Done`/
+        // `Error` do (see its doc comment) — the frontend must issue a new
+        // `chat_stream` call to resume generation once it has the result.
+        let is_terminal = matches!(
+            event,
+            StreamEvent::Done { .. } | StreamEvent::Error { .. } | StreamEvent::FunctionCall { .. }
+        );
         let _ = on_event.send(event);
         if is_terminal {
             saw_terminal = true;

@@ -136,6 +136,9 @@ pub async fn stream(
                                     let _ = tx.send(StreamEvent::Done { finish_reason });
                                     return Ok(());
                                 }
+                                // Function calling is not wired up for this
+                                // provider (Gemini-only prototype scope).
+                                ParsedEvent::FunctionCall(..) => {}
                                 ParsedEvent::None => {}
                             }
                         }

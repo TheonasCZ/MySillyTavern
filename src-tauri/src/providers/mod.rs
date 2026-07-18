@@ -25,6 +25,39 @@ pub enum Role {
 pub struct ChatMessage {
     pub role: Role,
     pub content: String,
+    /// EXPERIMENTAL (function-calling prototype): present when this message
+    /// represents the model's own prior turn invoking a tool (Gemini wire
+    /// format wants this as a `functionCall` part on a `model`-role turn).
+    /// `content` is normally empty on these.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_call: Option<FunctionCallDto>,
+    /// EXPERIMENTAL: present when this message carries the app's response to
+    /// a tool call back to the model (Gemini wants this as a
+    /// `functionResponse` part, conventionally on a `user`-role turn).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_response: Option<FunctionResponseDto>,
+}
+
+/// One `functionCall` the model asked to invoke, as streamed back from
+/// Gemini and as replayed into the next request's history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionCallDto {
+    pub name: String,
+    #[serde(default)]
+    pub args: serde_json::Value,
+    /// Gemini's opaque per-call token from the original `FunctionCall`
+    /// stream event — must be replayed verbatim here or the follow-up
+    /// request is rejected with HTTP 400.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
+}
+
+/// The app's result for a previously-requested `FunctionCallDto`, sent back
+/// to the model on the follow-up request so it can resume generation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionResponseDto {
+    pub name: String,
+    pub response: serde_json::Value,
 }
 
 /// Mirrors the `connections` table row plus the fields needed to talk to a
@@ -64,6 +97,23 @@ pub enum ProviderError {
 pub enum StreamEvent {
     Start,
     Token { text: String },
+    /// EXPERIMENTAL (function-calling prototype, Gemini only): the model
+    /// paused generation to invoke a tool. This is a terminal event for the
+    /// current `chat_stream` call — Gemini does not continue streaming text
+    /// in the same turn after emitting a `functionCall` part. The frontend
+    /// is responsible for executing the tool, appending a function-call +
+    /// function-response message pair to the conversation, and issuing a
+    /// fresh `chat_stream` call to resume generation.
+    FunctionCall {
+        name: String,
+        args: serde_json::Value,
+        /// Gemini's opaque per-call token — must be echoed back verbatim on
+        /// the follow-up request's replayed `functionCall` part, or the API
+        /// rejects the request with HTTP 400. `None` for providers that
+        /// don't use this concept.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thought_signature: Option<String>,
+    },
     Done { finish_reason: String },
     Error { message: String, retryable: bool },
 }
@@ -195,9 +245,13 @@ pub async fn stream_chat(
     messages: &[ChatMessage],
     cancel: CancellationToken,
     tx: mpsc::UnboundedSender<StreamEvent>,
+    tools: bool,
 ) {
     let result = match connection.provider.as_str() {
-        "gemini" => gemini::stream(connection, api_key, messages, cancel, tx.clone()).await,
+        // EXPERIMENTAL: `tools` (function-calling prototype) is only wired
+        // up for Gemini per the current scope — the other providers ignore
+        // it and never emit `StreamEvent::FunctionCall`.
+        "gemini" => gemini::stream(connection, api_key, messages, cancel, tx.clone(), tools).await,
         "openai" => openai::stream(connection, api_key, messages, cancel, tx.clone()).await,
         "claude" => claude::stream(connection, api_key, messages, cancel, tx.clone()).await,
         other => Err(ProviderError::NotSupported(format!(
@@ -226,7 +280,7 @@ pub async fn complete(
     let key = api_key.to_string();
     let msgs = messages.to_vec();
     tokio::spawn(async move {
-        stream_chat(&conn, &key, &msgs, cancel, tx).await;
+        stream_chat(&conn, &key, &msgs, cancel, tx, false).await;
     });
 
     let mut text = String::new();
@@ -241,6 +295,11 @@ pub async fn complete(
                 })
             }
             StreamEvent::Start => {}
+            // `complete()` never requests tools, so this never fires — but
+            // match exhaustively rather than `_ =>` so a future StreamEvent
+            // variant fails to compile here instead of being silently
+            // dropped.
+            StreamEvent::FunctionCall { .. } => {}
         }
     }
     Ok(text)
