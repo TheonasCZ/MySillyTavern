@@ -219,7 +219,18 @@ export const TAG_INSTRUCTIONS_CURRENT_SKILLS = "Current skills:";
 export const TAG_INSTRUCTIONS_SKILL_CHANGES = "Skill changes: [SKILL:+name] learn (level 1), [SKILL:+name:level] set level, [SKILL:name+1] increase.";
 export const TAG_INSTRUCTIONS_LEVEL_CURRENT = (lvl: number, xp: number) => `Current: level ${lvl}, ${xp} XP.`;
 export const TAG_INSTRUCTIONS_LEVEL_CHANGES = "Changes: [LEVEL:+amount] adds XP.";
+export const TAG_INSTRUCTIONS_CURRENT_CONDITIONS = "Current conditions/status effects:";
+export const TAG_INSTRUCTIONS_CONDITION_CHANGES = "Condition changes: [COND:+name] add, [COND:+name:duration] add with duration, [COND:-name] remove. Check this list before adding — reuse the exact same name to update/avoid duplicates.";
+export const TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS = "Current body modifications:";
+export const TAG_INSTRUCTIONS_MODIFICATION_CHANGES = "Modification changes: [MOD:+description] add, [MOD:-description] remove. Check this list before adding — reuse the exact same wording to update/avoid duplicates.";
 export const TAG_PLACEMENT_HINT = "Place tags anywhere in the text — they will be automatically removed.";
+/** Fold clause appended to a capped current-state list (inventory/skills/
+ * conditions/modifications) once it exceeds the full-detail cap — the
+ * oldest entries beyond the cap keep their NAME (never dropped, see
+ * `promptBuilder.ts`'s state-list capping) but lose qty/level/duration
+ * detail, folded into this trailing clause. English/language-neutral,
+ * same category as the other GAME STATE labels above. */
+export const TAG_LIST_FOLD_SUFFIX = (count: number) => `; +${count} more (name only): `;
 
 // ---- Faction instructions (English) ------------------------------------
 
@@ -260,3 +271,4 @@ export const TRIM_SUMMARY = "Shrnutí: zkráceno od začátku (rozpočet kontext
 export const TRIM_FACT = (category: string, subject: string) =>
   `Fakta: vynechán fakt „(${category}/${subject})" (rozpočet kontextu).`;
 export const TRIM_MES_EXAMPLE = "Ukázka stylu dialogu: vynechána (rozpočet kontextu).";
+export const TRIM_STATE_LIST = "Herní stav (inventář/dovednosti/stavy/úpravy): omezen počet položek se stručným detailem, jména zůstávají (rozpočet kontextu).";

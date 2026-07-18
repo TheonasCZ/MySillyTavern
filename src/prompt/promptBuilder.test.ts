@@ -721,3 +721,97 @@ describe("director note (M25.3)", () => {
     expect(report.sections.phiText).toContain("Zpomal tempo");
   });
 });
+
+describe("[GAME TAGS] consolidated state block — dedup, conditions/modifications, capping", () => {
+  it("renders inventory/skills exactly once — not duplicated between the persona block and [GAME TAGS]", () => {
+    const input = baseInput({
+      persona: makePersona({
+        skills: [{ name: "Alchemy", level: 3 }],
+        inventory: [{ item: "Rusty Sword", qty: 1 }],
+      }),
+    });
+    const { messages } = buildPrompt(input);
+    const full = messages.map((m) => m.content).join("\n");
+    expect(full.split("Rusty Sword").length - 1).toBe(1);
+    expect(full.split("Alchemy").length - 1).toBe(1);
+    // The persona block still carries identity — just not the lists.
+    const last = messages[messages.length - 1];
+    expect(last.content).toContain("[GAME TAGS]");
+    expect(last.content).toContain("Rusty Sword");
+    expect(last.content).toContain("Alchemy");
+  });
+
+  it("does not list skills/inventory in the persona block at all", () => {
+    const input = baseInput({
+      persona: makePersona({
+        appearance: "Tall, dark-haired.",
+        skills: [{ name: "Alchemy", level: 3 }],
+        inventory: [{ item: "Rusty Sword", qty: 1 }],
+      }),
+    });
+    const { messages } = buildPrompt(input);
+    const system = messages[0].content;
+    const personaIdx = system.indexOf("[Player's persona");
+    expect(personaIdx).toBeGreaterThanOrEqual(0);
+    const personaBlock = system.slice(personaIdx);
+    expect(personaBlock).toContain("Tall, dark-haired");
+    expect(personaBlock).not.toContain("Rusty Sword");
+    expect(personaBlock).not.toContain("Alchemy");
+  });
+
+  it("renders conditions and modifications in [GAME TAGS] when present", () => {
+    const input = baseInput({
+      persona: makePersona({
+        conditions: [{ name: "Poisoned", description: "Taking damage over time", expiresAt: "3 days" }],
+        modifications: [{ name: "Scar on left cheek", description: "Scar on left cheek" }],
+      }),
+    });
+    const { report } = buildPrompt(input);
+    expect(report.sections.phiText).toContain("[GAME TAGS]");
+    expect(report.sections.phiText).toContain("Poisoned");
+    expect(report.sections.phiText).toContain("3 days");
+    expect(report.sections.phiText).toContain("Scar on left cheek");
+  });
+
+  it("renders nothing extra when conditions/modifications are absent", () => {
+    const { report } = buildPrompt(baseInput({ persona: makePersona() }));
+    expect(report.sections.phiText).not.toContain("conditions");
+    expect(report.sections.phiText).not.toContain("modifications");
+  });
+
+  it("caps full-detail inventory entries and folds older ones into a names-only tail, never dropping a name", () => {
+    const items = Array.from({ length: 30 }, (_, i) => ({ item: `Item${i}`, qty: 1 }));
+    const input = baseInput({ persona: makePersona({ inventory: items }) });
+    const { report } = buildPrompt(input);
+    const phi = report.sections.phiText;
+    // Every single item name must appear somewhere in the rendered output.
+    for (const it of items) {
+      expect(phi).toContain(it.item);
+    }
+    // The fold clause should be present since 30 > STATE_LIST_FULL_CAP (15).
+    expect(phi).toContain("more (name only)");
+    // The most recently added item (last in array = recency order) keeps
+    // its qty detail rendered in full form.
+    expect(phi).toContain("Item29");
+  });
+
+  it("does not fold when the list is at or under the cap", () => {
+    const items = Array.from({ length: 10 }, (_, i) => ({ item: `Item${i}`, qty: 1 }));
+    const input = baseInput({ persona: makePersona({ inventory: items }) });
+    const { report } = buildPrompt(input);
+    expect(report.sections.phiText).not.toContain("more (name only)");
+  });
+
+  it("shrinks the full-detail cap under budget pressure but still keeps every name", () => {
+    const items = Array.from({ length: 40 }, (_, i) => ({ item: `SwordOfNumber${i}`, qty: 1 }));
+    const loose = baseInput({ persona: makePersona({ inventory: items }), history: makeHistory(2) });
+    const baseline = buildPrompt(loose).report.estimatedTokens;
+
+    const tight = buildPrompt({ ...loose, contextBudget: Math.max(1, baseline - 50) });
+    const phi = tight.report.sections.phiText;
+    for (const it of items) {
+      expect(phi).toContain(it.item);
+    }
+    expect(tight.report.trimmedNotes.some((n) => n.includes("Herní stav"))).toBe(true);
+  });
+});

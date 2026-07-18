@@ -169,6 +169,7 @@ async function buildApiMessages(
         xp: chat.xp ?? 0,
         level: chat.level ?? 1,
         conditions: chat.conditions ?? [],
+        modifications: chat.modifications ?? [],
       }
     : null;
 

@@ -6,19 +6,38 @@
  * Composes, in order:
  *   1. system: character system_prompt (or default RP instructions) +
  *      description + personality + scenario + mes_example + persona
+ *      (identity/appearance/faction reputation only — inventory/skills are
+ *      NOT listed here, see point 5)
  *   2. `[FAKTA SVĚTA — závazná]`: active ledger facts grouped by category
  *   3. activated lorebook entries (already priority-ordered by the caller)
  *   4. `[DOSAVADNÍ PŘÍBĚH]`: running summary
  *   5. the last `verbatimWindow` messages of history, verbatim, followed by
- *      `post_history_instructions` + a `[Připomínka kánonu]` reminder of the
+ *      `post_history_instructions` + `[GAME TAGS]` (the single canonical
+ *      rendering of current inventory/skills/conditions/modifications,
+ *      paired right next to the tag instructions for changing them — see
+ *      `formatCappedList`) + a `[Připomínka kánonu]` reminder of the
  *      world/player facts, as a trailing system message
+ *
+ * Inventory/skills/conditions/modifications used to also be listed in full
+ * inside the persona block (point 1) — that was pure duplication (same data
+ * rendered twice per prompt) and has been removed. `[GAME TAGS]` near
+ * generation is the more logical single home for it: it's where the model
+ * also reads the instructions for how to change this state, and content
+ * closer to generation is weighted more heavily by the model.
  *
  * When the estimated token total exceeds `contextBudget`, trims in this
  * order until it fits (or the step is exhausted): (a0) retrieved memories
  * from least relevant, (a) lore entries from
  * lowest priority, (b) older verbatim messages (never below 4 most
  * recent), (c) summary text from its start, (d) ledger facts
- * event → quest → npc (world/player are never trimmed), (e) mes_example.
+ * event → quest → npc (world/player are never trimmed), (e) mes_example,
+ * (f) the `[GAME TAGS]` current-state lists' full-detail cap (see
+ * `STATE_LIST_FULL_CAP`/`formatCappedList`) — shrunk step by step down to 0
+ * as an absolute last resort. Even at cap 0, every item/skill/condition/
+ * modification NAME is still present (just with zero per-entry detail) —
+ * names are never dropped at any trim level, by design (a name lets the
+ * model verify a player's claim about it later; dropping it invites
+ * confabulated "yes-and" agreement instead of a grounded answer).
  * The system core (system_prompt/description/personality/scenario/persona)
  * and the most recent messages are never trimmed. Nor is the trailing
  * `[Připomínka kánonu]` block — it repeats the never-trimmed world/player
@@ -54,9 +73,6 @@ import {
   DIALOG_EXAMPLE_BODY,
   factionLabel,
   PERSONA_APPEARANCE,
-  PERSONA_SKILLS,
-  PERSONA_LEVEL,
-  PERSONA_INVENTORY,
   PERSONA_FACTION_REP,
   GROUP_SPEAKER_INSTRUCTION,
   TAG_INSTRUCTIONS_CURRENT_INVENTORY,
@@ -65,6 +81,11 @@ import {
   TAG_INSTRUCTIONS_SKILL_CHANGES,
   TAG_INSTRUCTIONS_LEVEL_CURRENT,
   TAG_INSTRUCTIONS_LEVEL_CHANGES,
+  TAG_INSTRUCTIONS_CURRENT_CONDITIONS,
+  TAG_INSTRUCTIONS_CONDITION_CHANGES,
+  TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS,
+  TAG_INSTRUCTIONS_MODIFICATION_CHANGES,
+  TAG_LIST_FOLD_SUFFIX,
   TAG_PLACEMENT_HINT,
   FACTION_INSTRUCTIONS_REACTIONS,
   FACTION_INSTRUCTIONS_CHANGES,
@@ -77,6 +98,7 @@ import {
   TRIM_SUMMARY,
   TRIM_FACT,
   TRIM_MES_EXAMPLE,
+  TRIM_STATE_LIST,
 } from "./promptTexts";
 
 export interface CharacterLike {
@@ -103,6 +125,24 @@ export interface CraftingRecipeLike {
   craftedAt: string | null;
 }
 
+/** A buff/debuff/wound-style status effect (chat-scoped, see
+ * `chatsRepo.Chat.conditions`). Only the fields PromptBuilder actually
+ * renders are declared here — kept local rather than importing
+ * `personasRepo.ConditionEntry` so this module stays free of DB imports. */
+export interface ConditionLike {
+  name: string;
+  description: string;
+  expiresAt?: string | null;
+}
+
+/** A lasting body modification (chat-scoped, see
+ * `chatsRepo.Chat.modifications`). See `ConditionLike` for why this is a
+ * local mirror rather than an import from `personasRepo`. */
+export interface ModificationLike {
+  name: string;
+  description: string;
+}
+
 export interface PersonaLike {
   name: string;
   description: string;
@@ -119,6 +159,10 @@ export interface PersonaLike {
   factions?: FactionRepLike[];
   /** Known crafting recipes for this persona. */
   craftingRecipes?: CraftingRecipeLike[];
+  /** Current buffs/debuffs/wounds (chat-scoped, M31-ish [COND:...] tags). */
+  conditions?: ConditionLike[];
+  /** Current lasting body modifications (chat-scoped, [MOD:...] tags). */
+  modifications?: ModificationLike[];
 }
 
 export type LedgerCategory = "player" | "world" | "npc" | "event" | "quest";
@@ -294,6 +338,18 @@ export interface PromptBuildResult {
 export const DEFAULT_VERBATIM_WINDOW = 6;
 export const MIN_VERBATIM_MESSAGES = 4;
 
+/** Default number of most-recent entries rendered in full detail (qty/level/
+ * duration) per current-state list (inventory/skills/conditions/
+ * modifications) in `[GAME TAGS]`, before older entries fold into a
+ * names-only tail. 15 is generous enough that almost no real campaign is
+ * ever capped in practice, while still bounding worst-case growth for
+ * long-running campaigns that accumulate dozens of items/skills. Reduced
+ * further (never below 0) as a last-resort trim step under budget pressure
+ * — see the `(f)` pass below. At 0, every entry is folded into the
+ * names-only tail (no per-item detail at all), but names are still never
+ * dropped. */
+export const STATE_LIST_FULL_CAP = 15;
+
 const DEFAULT_RP_INSTRUCTIONS_CS =
   "Jsi vypravěč hry na hrdiny (RP). Hraj roli postavy {{char}} podle popisu níže, " +
   "drž se jejího charakteru a scénáře. Akce a gesta piš kurzívou, přímou řeč normálně. " +
@@ -382,16 +438,11 @@ function buildSystemCore(
     if (persona.race) identity.push(persona.race);
     if (identity.length > 0) personaLines.push(identity.join(", "));
     if (persona.appearance) personaLines.push(`\n${PERSONA_APPEARANCE} ${persona.appearance}`);
-    if (persona.skills?.length) {
-      personaLines.push(`\n${PERSONA_SKILLS}`);
-      for (const s of persona.skills) personaLines.push(`- ${s.name} (${PERSONA_LEVEL} ${s.level})`);
-    }
-    if (persona.inventory?.length) {
-      personaLines.push(`\n${PERSONA_INVENTORY}`);
-      for (const inv of persona.inventory) {
-        personaLines.push(`- ${inv.item}${inv.qty > 1 ? ` x${inv.qty}` : ""}`);
-      }
-    }
+    // NOTE: skills/inventory are intentionally NOT listed here — they used
+    // to be duplicated in full both here and in the `[GAME TAGS]` block near
+    // generation. `[GAME TAGS]` (built in `render()` below, right next to
+    // the tag instructions for changing them) is now the single canonical
+    // place current inventory/skills/conditions/modifications are rendered.
     if (persona.factions?.length) {
       personaLines.push(`\n${PERSONA_FACTION_REP}`);
       for (const f of persona.factions) {
@@ -585,6 +636,33 @@ function selectDiverseFacts(
   return selected;
 }
 
+/** Renders a current-state list (inventory/skills/conditions/modifications)
+ * for `[GAME TAGS]`, capping full-detail entries to the most recent
+ * `capCount` (recency = array order, since all four lists are pushed-to on
+ * add — see `inventoryProcessor.ts`) and folding any older entries into a
+ * trailing names-only clause. Never drops a name, even at `capCount === 0`
+ * (design constraint: the model must always be able to confirm/deny a
+ * claimed item/skill/condition/modification by name, even with zero detail
+ * — see the module doc comment / plan discussion this implements). */
+function formatCappedList<T>(
+  items: T[],
+  fullLabel: (item: T) => string,
+  nameOnly: (item: T) => string,
+  capCount: number,
+): string {
+  if (items.length <= capCount) {
+    return items.map(fullLabel).join(", ");
+  }
+  const foldCount = items.length - capCount;
+  const folded = items.slice(0, foldCount); // oldest, names only
+  const shown = items.slice(foldCount); // most recent, full detail
+  const shownStr = shown.map(fullLabel).join(", ");
+  const foldedStr = folded.map(nameOnly).join(", ");
+  return capCount > 0
+    ? `${shownStr}${TAG_LIST_FOLD_SUFFIX(foldCount)}${foldedStr}`
+    : foldedStr; // capCount 0: nothing shown in full, just the names-only list
+}
+
 function assembleSystemMessage(sections: string[]): string {
   return sections.filter(Boolean).join("\n\n");
 }
@@ -611,6 +689,10 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   let summaryText = (input.summary ?? "").trim();
   let summaryTruncated = false;
   let mesExampleIncluded = character.mesExample.trim().length > 0;
+  // Full-detail cap for the [GAME TAGS] current-state lists (inventory/
+  // skills/conditions/modifications) — reduced under budget pressure by
+  // pass (f) below, never below 0. Names are never dropped regardless.
+  let stateListCap = STATE_LIST_FULL_CAP;
 
   const historyTotal = input.history.length;
   let historyIncluded = input.history.slice(-verbatimWindow);
@@ -685,21 +767,45 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n${SECTION_RIGHT_NOW}\n${gameTimeDesc}` : `${SECTION_RIGHT_NOW}\n${gameTimeDesc}`;
     }
-    // Game tag instructions — tells the model to annotate item + skill/level changes
+    // Game tag instructions — tells the model to annotate item/skill/level/
+    // condition/modification changes, and shows the CURRENT state of each
+    // (single canonical location for this — see the note in
+    // `buildSystemCore`). Each list is capped to `stateListCap` most-recent
+    // entries in full detail; older entries fold into a names-only tail via
+    // `formatCappedList` — see its doc comment for the never-drop-a-name
+    // rationale.
     const progression = persona?.progression ?? "skill";
-    const hasInv = persona?.inventory?.length;
-    const hasSkills = persona?.skills?.length;
-    if (progression !== "none" && (hasInv || (progression === "skill" && hasSkills))) {
+    const hasInv = !!persona?.inventory?.length;
+    const hasSkills = !!persona?.skills?.length;
+    const hasCond = !!persona?.conditions?.length;
+    const hasMod = !!persona?.modifications?.length;
+    if (
+      hasCond ||
+      hasMod ||
+      (progression !== "none" && (hasInv || (progression === "skill" && hasSkills)))
+    ) {
       let tagInstructions = `${SECTION_GAME_TAGS}\n`;
       // Inventory tags always emitted when inventory exists (regardless of progression)
       if (hasInv && persona) {
         const inv = persona.inventory ?? [];
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${inv.map((i) => i.item + (i.qty > 1 ? ` x${i.qty}` : "")).join(", ")}.\n`;
+        const list = formatCappedList(
+          inv,
+          (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""),
+          (i) => i.item,
+          stateListCap,
+        );
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${list}.\n`;
         tagInstructions += `${TAG_INSTRUCTIONS_INVENTORY_CHANGES}\n`;
       }
       if (progression === "skill" && hasSkills && persona) {
         const sk = persona.skills ?? [];
-        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${sk.map((s) => `${s.name} ${s.level}`).join(", ")}.\n`;
+        const list = formatCappedList(
+          sk,
+          (s) => `${s.name} ${s.level}`,
+          (s) => s.name,
+          stateListCap,
+        );
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${list}.\n`;
         tagInstructions += `${TAG_INSTRUCTIONS_SKILL_CHANGES}\n`;
       }
       if (progression === "level") {
@@ -707,6 +813,23 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
         const lvl = persona?.level ?? 1;
         tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CURRENT(lvl, xp)}\n`;
         tagInstructions += `${TAG_INSTRUCTIONS_LEVEL_CHANGES}\n`;
+      }
+      if (hasCond && persona) {
+        const cond = persona.conditions ?? [];
+        const list = formatCappedList(
+          cond,
+          (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""),
+          (c) => c.name,
+          stateListCap,
+        );
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_CONDITIONS} ${list}.\n`;
+        tagInstructions += `${TAG_INSTRUCTIONS_CONDITION_CHANGES}\n`;
+      }
+      if (hasMod && persona) {
+        const mods = persona.modifications ?? [];
+        const list = formatCappedList(mods, (m) => m.name, (m) => m.name, stateListCap);
+        tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS} ${list}.\n`;
+        tagInstructions += `${TAG_INSTRUCTIONS_MODIFICATION_CHANGES}\n`;
       }
       tagInstructions += TAG_PLACEMENT_HINT;
       phi = phi ? `${phi}\n\n${tagInstructions}` : tagInstructions;
@@ -905,6 +1028,20 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
   if (current.totalTokens > budget && mesExampleIncluded) {
     mesExampleIncluded = false;
     trimmedNotes.push(TRIM_MES_EXAMPLE);
+    current = render();
+  }
+
+  // (f) absolute last resort: shrink the [GAME TAGS] current-state lists
+  // (inventory/skills/conditions/modifications) by halving the full-detail
+  // cap each iteration, down to 0. Per-item detail (qty/level/duration) is
+  // dropped for more and more of the oldest entries, but every name always
+  // survives — even at cap 0, all lists still render as a plain names-only
+  // clause (see `formatCappedList`). This never runs for typical campaigns;
+  // it only kicks in when everything else has already been trimmed to the
+  // minimum and the state lists are themselves large enough to matter.
+  while (current.totalTokens > budget && stateListCap > 0) {
+    stateListCap = Math.max(0, Math.floor(stateListCap / 2));
+    trimmedNotes.push(TRIM_STATE_LIST);
     current = render();
   }
 
