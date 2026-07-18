@@ -14,8 +14,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { to: "/", key: "chats", labelKey: "nav.chats", icon: "💬" },
-  { to: "/characters", key: "characters", labelKey: "nav.characters", icon: "👤", subtitleKey: "nav.charactersSub" },
-  { to: "/personas", key: "personas", labelKey: "nav.personas", icon: "🎭", subtitleKey: "nav.personasSub", secondary: true },
+  { to: "/characters", key: "characters", labelKey: "nav.characters", icon: "🎭", subtitleKey: "nav.charactersSub" },
+  { to: "/personas", key: "personas", labelKey: "nav.personas", icon: "👤", subtitleKey: "nav.personasSub", secondary: true },
   { to: "/lorebooks", key: "lorebooks", labelKey: "nav.lorebooks", icon: "📚", secondary: true },
 ];
 
@@ -91,26 +91,14 @@ export function Sidebar() {
       >
         {/* ---- Header row ---- */}
         <div className={["mb-6 flex items-center gap-2", collapsed ? "justify-center" : "px-2"].join(" ")}>
+          <span
+            aria-hidden
+            className={["inline-block h-2.5 w-2.5 rounded-full", collapsed ? "" : "shrink-0"].join(" ")}
+            style={{ backgroundColor: "var(--color-accent)" }}
+          />
           {!collapsed && (
-            <>
-              <span
-                aria-hidden
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: "var(--color-accent)" }}
-              />
-              <span className="font-[var(--font-display)] text-lg tracking-tight">{t("appName")}</span>
-            </>
+            <span className="font-[var(--font-display)] text-lg tracking-tight">{t("appName")}</span>
           )}
-          {/* Desktop collapse toggle */}
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            className="hidden rounded-[var(--radius-sm)] p-1 text-xs transition-colors hover:opacity-70 sm:block"
-            style={{ color: "var(--color-text-muted)" }}
-            title={collapsed ? "Rozbalit" : "Sbalit"}
-          >
-            {collapsed ? "▸" : "◂"}
-          </button>
         </div>
 
         {/* ---- Primary nav ---- */}
@@ -171,6 +159,21 @@ export function Sidebar() {
             </li>
           ))}
         </ul>
+
+        {/* ---- Desktop collapse toggle (right edge, vertically centered) ---- */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 rounded-full border p-0.5 text-xs transition-colors hover:opacity-70 sm:block"
+          style={{
+            color: "var(--color-text-muted)",
+            backgroundColor: "var(--color-bg-elevated)",
+            borderColor: "var(--color-border)",
+          }}
+          title={collapsed ? "Rozbalit" : "Sbalit"}
+        >
+          {collapsed ? "▸" : "◂"}
+        </button>
 
         {/* ---- Settings + version (pinned to bottom) ---- */}
         <div
