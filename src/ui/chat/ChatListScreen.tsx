@@ -376,8 +376,8 @@ export function ChatListScreen() {
             <button
               type="button"
               onClick={() => setCreating(false)}
-              className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
-              style={{ color: "var(--color-text-muted)" }}
+              className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
+              style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
             >
               {t("actions.cancel", { ns: "common" })}
             </button>
@@ -488,8 +488,8 @@ export function ChatListScreen() {
                     e.stopPropagation();
                     startRename(chat.id, chat.title);
                   }}
-                  className="rounded-[var(--radius-sm)] px-2 py-1"
-                  style={{ color: "var(--color-text-muted)" }}
+                  className="rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors"
+                  style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
                 >
                   {t("actions.edit", { ns: "common" })}
                 </button>
@@ -521,8 +521,11 @@ export function ChatListScreen() {
                       }
                     })();
                   }}
-                  className="rounded-[var(--radius-sm)] px-2 py-1"
-                  style={{ color: "var(--color-danger)" }}
+                  className="rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors"
+                  style={{
+                    backgroundColor: "var(--color-surface-2)",
+                    color: "var(--color-danger)",
+                  }}
                 >
                   {t("actions.delete", { ns: "common" })}
                 </button>

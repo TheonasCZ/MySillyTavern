@@ -54,7 +54,7 @@ export function Sidebar() {
     ].join(" ");
 
   const linkStyle = (isActive: boolean): React.CSSProperties => ({
-    backgroundColor: isActive ? "var(--color-surface-2)" : "transparent",
+    backgroundColor: isActive ? "var(--color-surface-2)" : "var(--color-surface)",
     color: isActive ? "var(--color-text)" : "var(--color-text-muted)",
   });
 

@@ -80,7 +80,8 @@ export function PersonasScreen() {
       {importError && (
         <div className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border px-3 py-2 text-sm" style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}>
           <span>{importError}</span>
-          <button type="button" onClick={() => setImportError(null)} className="shrink-0 opacity-80 hover:opacity-100">
+          <button type="button" onClick={() => setImportError(null)} className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors"
+            style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}>
             {t("actions.close", { ns: "common" })}
           </button>
         </div>

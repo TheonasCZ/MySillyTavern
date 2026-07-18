@@ -335,8 +335,11 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
             <button
               type="button"
               onClick={() => removeSkill(i)}
-              className="text-xs"
-              style={{ color: "var(--color-danger)" }}
+              className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs transition-colors"
+              style={{
+                backgroundColor: "var(--color-surface-2)",
+                color: "var(--color-danger)",
+              }}
             >
               ×
             </button>
@@ -384,8 +387,11 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
             <button
               type="button"
               onClick={() => removeItem(i)}
-              className="text-xs"
-              style={{ color: "var(--color-danger)" }}
+              className="rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs transition-colors"
+              style={{
+                backgroundColor: "var(--color-surface-2)",
+                color: "var(--color-danger)",
+              }}
             >
               ×
             </button>
@@ -414,8 +420,11 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
-          style={{ color: "var(--color-text-muted)" }}
+          className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
+          style={{
+            backgroundColor: "var(--color-surface-2)",
+            color: "var(--color-text)",
+          }}
         >
           {t("actions.cancel", { ns: "common" })}
         </button>
@@ -435,8 +444,11 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
             onClick={() => {
               void (async () => { if (await showConfirm(t("form.deleteConfirm") ?? "")) void onDelete(); })();
             }}
-            className="ml-auto rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
-            style={{ color: "var(--color-danger)" }}
+            className="ml-auto rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
+            style={{
+              backgroundColor: "var(--color-surface-2)",
+              color: "var(--color-danger)",
+            }}
           >
             {t("actions.delete", { ns: "common" })}
           </button>

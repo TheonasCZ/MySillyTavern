@@ -145,8 +145,11 @@ function ListEditor({
           <button
             type="button"
             onClick={() => onChange(values.filter((_, idx) => idx !== i))}
-            className="mt-1 shrink-0 text-xs"
-            style={{ color: "var(--color-danger)" }}
+            className="mt-1 shrink-0 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs transition-colors"
+            style={{
+              backgroundColor: "var(--color-surface-2)",
+              color: "var(--color-danger)",
+            }}
           >
             ✕
           </button>
@@ -234,9 +237,12 @@ export function CardEditor() {
         <button
           type="button"
           onClick={() => navigate("/characters")}
-          className="text-sm"
-          style={{ color: "var(--color-text-muted)" }}
-        >
+          className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
+          style={{
+            backgroundColor: "var(--color-surface-2)",
+            color: "var(--color-text)",
+          }}
+       >
           ← {t("editor.backToGallery")}
         </button>
         <div className="flex items-center gap-2">
@@ -252,8 +258,11 @@ export function CardEditor() {
           <button
             type="button"
             onClick={handleDelete}
-            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
-            style={{ color: "var(--color-danger)" }}
+            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm transition-colors"
+            style={{
+              backgroundColor: "var(--color-surface-2)",
+              color: "var(--color-danger)",
+            }}
           >
             {t("actions.delete", { ns: "common" })}
           </button>
@@ -275,7 +284,8 @@ export function CardEditor() {
           style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
         >
           <span>{t("editor.exportError", { message: exportError })}</span>
-          <button type="button" onClick={() => setExportError(null)} className="shrink-0 opacity-80 hover:opacity-100">
+          <button type="button" onClick={() => setExportError(null)} className="shrink-0 rounded-[var(--radius-sm)] px-2 py-1 text-xs transition-colors"
+            style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}>
             {t("actions.close", { ns: "common" })}
           </button>
         </div>
