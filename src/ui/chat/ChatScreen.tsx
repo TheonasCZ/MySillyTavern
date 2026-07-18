@@ -285,6 +285,28 @@ export function ChatScreen() {
           </span>
         </div>
       </header>
+
+      {/* Right icon sidebar */}
+      <div className="flex shrink-0 flex-col gap-1 border-l p-1" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-elevated)" }}>
+        {[ 
+          ["📅", panels.calendarOpen, () => panels.setCalendarOpen(v => !v), "Kalendář"],
+          ["🎒", panels.inventoryOpen, () => panels.setInventoryOpen(v => !v), t("room.inventoryTooltip")],
+          ["📜", panels.questsOpen, () => panels.setQuestsOpen(v => !v), t("room.questsTooltip")],
+          ["🧍", panels.characterOpen, () => panels.setCharacterOpen(v => !v), t("room.characterTooltip")],
+          ["🎬", panels.directorOpen, () => panels.setDirectorOpen(v => !v), t("director.title")],
+          ["🧠", panels.memoryOpen, () => panels.setMemoryOpen(v => !v), t("room.memoryTooltip")],
+          ["📖", panels.exportOpen, () => panels.setExportOpen(v => !v), t("room.exportTooltip")],
+        ].map(([icon, open, onClick, title]) => (
+          <button key={String(icon)} type="button" onClick={onClick} title={String(title)}
+            className="rounded-[var(--radius-sm)] p-1 text-sm transition-colors"
+            style={{
+              backgroundColor: open ? "var(--color-accent)" : "transparent",
+              color: open ? "var(--color-accent-contrast)" : "var(--color-text-muted)",
+            }}
+          >{icon}</button>
+        ))}
+      </div>
+
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 flex-col overflow-hidden">
           {error && (
