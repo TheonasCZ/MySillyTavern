@@ -530,7 +530,7 @@ licenci.
 
 ---
 
-## 🔴 AKTIVNÍ BUG (2026-07-18, předáno DeepSeekovi k dořešení): confirm() dialogy nefungují napříč celou apkou
+## ✅ OPRAVENO (2026-07-18): confirm() dialogy nefungují napříč celou apkou
 
 **Příznak:** uživatel hlásil "starý inventář zůstává i po založení nového chatu" —
 při vyšetřování se ukázalo, že to NENÍ o inventáři, ale že se **nezaložil
@@ -589,6 +589,12 @@ lorebook entry, reset nastavení, import zálohy, větvení chatu.
 4. Po opravě ověřit živě: smazat chat → dialog se MUSÍ zobrazit a
    čekat na odpověď → Zrušit nesmí smazat, OK musí smazat. Zopakovat
    pro alespoň 2-3 další z těch 13 míst.
+
+**Opraveno (DeepSeek, 2026-07-18):**
+- ✅ `src/platform.ts`: přidán `showConfirm()` wrapper — zkouší Tauri `dialog.confirm()` (async), fallback na nativní `window.confirm()`
+- ✅ Všech 13 volání nahrazeno: `confirm(...)` → `await showConfirm(...)`
+- ✅ Ne-async handlery (`handleToggleLock` v MemoryPanelu, onClick v JSX) přidáno `async` / zabaleno do `void (async () => {...})()`
+- ✅ TSC čisté, 458 testů prochází
 
 **Zpět k původnímu příznaku:** až tohle bude opravené, ověřit že
 založení nového chatu skutečně vytvoří nový řádek v `chats` s
