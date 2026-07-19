@@ -268,7 +268,7 @@ export async function processGameResponse(
   const newlyAddedItems: string[] = [];
   if (chatId) {
     for (const m of mutations) {
-      const existing = inv.find((i) => i.item.toLowerCase() === m.item.toLowerCase());
+      const existing = inv.find((i) => namesMatch(i.item, m.item));
       if (m.op === "add") {
         if (existing) {
           existing.qty += m.qty;
@@ -296,7 +296,7 @@ export async function processGameResponse(
     // "the knife is now slightly damaged" — not [MOD:...], which is
     // body-only (see TWO_ROLES_INSTRUCTIONS).
     for (const im of itemNoteMutations) {
-      const existing = inv.find((i) => i.item.toLowerCase() === im.item.toLowerCase());
+      const existing = inv.find((i) => namesMatch(i.item, im.item));
       if (existing) {
         existing.note = im.note;
         existing.lastTouched = nowIso();
@@ -412,7 +412,7 @@ export async function processGameResponse(
       }
       // Consume ingredients from inventory (always consumed, even on failure)
       for (const ing of cm.ingredients) {
-        const entry = inv.find((i) => i.item.toLowerCase() === ing.toLowerCase());
+        const entry = inv.find((i) => namesMatch(i.item, ing));
         if (entry) {
           entry.qty -= 1;
           if (entry.qty <= 0) inv.splice(inv.indexOf(entry), 1);
@@ -427,7 +427,7 @@ export async function processGameResponse(
   for (const cdm of craftedMutations) {
     try {
       // Add the crafted item to inventory
-      const existingItem = inv.find((i) => i.item.toLowerCase() === cdm.resultItem.toLowerCase());
+      const existingItem = inv.find((i) => namesMatch(i.item, cdm.resultItem));
       if (existingItem) {
         existingItem.qty += 1;
         existingItem.lastTouched = nowIso();
