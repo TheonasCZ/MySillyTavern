@@ -23,6 +23,9 @@ import { setGameOverState } from "./gameOver";
 import { setPendingCheckSkill } from "./pendingCheck";
 import { resolveDiceNotation } from "./diceCommand";
 import { serializeChangeSummary, type ChangeSummaryEntry } from "./changeSummary";
+import { namesMatch } from "./fuzzyMatch";
+import { parseDurationMinutes } from "./duration";
+import { advanceMinutes, formatCalendarDate, toAbsoluteMinutes, type CalendarDate } from "../memory/calendar";
 
 /** Tag validation feedback — stored across turns so the next prompt can
  *  warn the AI about malformed tags from the previous response. */
@@ -37,6 +40,13 @@ export interface GameResponseResult {
   changeSummary: string | null;
 }
 
+/** Small, varied idle-drift fallback (in minutes) applied when a reply has
+ *  no explicit [TIME:...] tag — represents roughly one conversational beat
+ *  so the clock keeps creeping forward even if the model never tags time. */
+function idleDriftMinutes(): number {
+  return 2 + Math.floor(Math.random() * 7); // 2–8 minutes
+}
+
 /** Parses game tags (inventory + skill + level + faction) from the AI response,
  *  updates the persona in DB, and returns the cleaned text plus a display-only
  *  summary of what changed. */
@@ -47,7 +57,49 @@ export async function processGameResponse(
 ): Promise<GameResponseResult> {
   if (!persona) return { cleanText: text, changeSummary: null };
   const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations } = parseGameTags(text);
-  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0 && gameOverReason === null && checkSkill === null && itemNoteMutations.length === 0) {
+
+  // Advance the in-game clock on every reply, tag or not: an explicit
+  // [TIME:+Nd/h/m] tag drives a real narrative jump (and re-rolls weather —
+  // see weather.ts), but if the model doesn't write one we still nudge the
+  // clock by a small idle-drift amount so a long scene without tags doesn't
+  // leave the calendar frozen. This merges the old per-message clock design
+  // into the tag-driven calendar rather than running two separate systems.
+  // Pure local math against the DB-persisted calendar — costs no prompt tokens.
+  let currentCal: CalendarDate | null = null;
+  const expiredConditionNames: string[] = [];
+  if (chatId) {
+    const tagMinutes = timeMutations.reduce((sum, tm) => sum + tm.minutes, 0);
+    const minutes = tagMinutes > 0 ? tagMinutes : idleDriftMinutes();
+    try {
+      const nextCal = await advanceAndPersistCalendar(chatId, minutes);
+      currentCal = nextCal;
+      // Only re-roll weather on an explicit jump, not idle drift, so it
+      // can't flicker within one stationary scene (see advanceAndPersistWeather).
+      if (tagMinutes > 0) {
+        await advanceAndPersistWeather(chatId, nextCal.season);
+      }
+
+      // Auto-expire timed conditions (e.g. "6 hodin" burns/exhaustion) once
+      // enough game-time has actually passed — runs on every reply, tagged
+      // or not, so a condition doesn't just sit forever because the model
+      // never explicitly writes [COND:-name] to clear it (see M-time-audit,
+      // 2026-07-19: burns/exhaustion never ticked down before this).
+      const nowAbs = toAbsoluteMinutes(nextCal);
+      const conds = (await getChatConditions(chatId)).map((c) => ({ ...c }));
+      const stillActive = conds.filter((c) => {
+        const expired = c.expiresAtMinutes != null && c.expiresAtMinutes <= nowAbs;
+        if (expired) expiredConditionNames.push(c.name);
+        return !expired;
+      });
+      if (expiredConditionNames.length > 0) {
+        await setChatConditions(chatId, stillActive);
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  if (mutations.length === 0 && skillChanges.length === 0 && levelChanges.length === 0 && factionMutations.length === 0 && craftMutations.length === 0 && craftedMutations.length === 0 && conditionMutations.length === 0 && modMutations.length === 0 && questMutations.length === 0 && timeMutations.length === 0 && gameOverReason === null && checkSkill === null && itemNoteMutations.length === 0 && expiredConditionNames.length === 0) {
     return { cleanText: text, changeSummary: null };
   }
 
@@ -91,21 +143,8 @@ export async function processGameResponse(
   // footer under the reply. Built inline as each mutation is successfully
   // applied below, so it can never drift from what actually happened.
   const summaryParts: ChangeSummaryEntry[] = [];
-
-  // Apply time mutations: [TIME:+Nd] / [TIME:+Nh] / [TIME:+Nm], already
-  // normalized to minutes by the parser — sum and apply in one go.
-  if (chatId) {
-    const totalMinutes = timeMutations.reduce((sum, tm) => sum + tm.minutes, 0);
-    if (totalMinutes > 0) {
-      try {
-        const nextCal = await advanceAndPersistCalendar(chatId, totalMinutes);
-        // Re-roll weather alongside real time actually moving — not on
-        // every message, so it doesn't flicker within a stationary scene.
-        await advanceAndPersistWeather(chatId, nextCal.season);
-      } catch {
-        // Non-critical
-      }
-    }
+  for (const name of expiredConditionNames) {
+    summaryParts.push({ text: `✨ ${name} pominulo`, kind: "add" });
   }
 
   // Apply quest mutations: [QUEST:+name] / [QUEST:✓name] / [QUEST:-name] / [QUEST:name: note]
@@ -144,7 +183,11 @@ export async function processGameResponse(
   const conditions = chatId ? (await getChatConditions(chatId)).map((c) => ({ ...c })) : [];
   if (chatId) {
     for (const cm of conditionMutations) {
-      const idx = conditions.findIndex((c) => c.name.toLowerCase() === cm.name.toLowerCase());
+      // Fuzzy match, not exact string equality — the model isn't consistent
+      // about word form between turns (e.g. "vyčerpaný" vs "vyčerpání" for
+      // the same exhaustion) and exact matching duplicated the condition
+      // instead of refreshing it (see M-time-audit, 2026-07-19).
+      const idx = conditions.findIndex((c) => namesMatch(c.name, cm.name));
       if (cm.op === "add") {
         if (idx === -1) {
           // The model may write unresolved dice notation into `duration`
@@ -153,13 +196,38 @@ export async function processGameResponse(
           // to do arithmetic/randomness, and so the player sees a concrete
           // number instead of a raw expression they can't act on.
           const duration = cm.duration ? await resolveDiceNotation(cm.duration) : cm.duration;
+          // Turn the resolved duration into a real expiry against the game
+          // calendar (not just decorative text) so it can actually be
+          // auto-cleared later instead of sitting forever — see the
+          // auto-expire pass above.
+          let expiresAt: string | null = null;
+          let expiresAtMinutes: number | undefined;
+          const durationMinutes = duration ? parseDurationMinutes(duration) : null;
+          if (durationMinutes != null && currentCal) {
+            const expiryCal = advanceMinutes(currentCal, durationMinutes);
+            expiresAtMinutes = toAbsoluteMinutes(expiryCal);
+            expiresAt = `${formatCalendarDate(expiryCal)}, ${String(expiryCal.hourOfDay).padStart(2, "0")}:${String(expiryCal.minuteOfHour).padStart(2, "0")}`;
+          }
           conditions.push({
             name: cm.name,
             description: [cm.description, duration].filter(Boolean).join(" — "),
-            expiresAt: null,
+            expiresAt,
+            expiresAtMinutes,
             lastTouched: nowIso(),
           });
           summaryParts.push({ text: `🩹 ${cm.name}${duration ? ` (${duration})` : ""}`, kind: "remove" });
+        } else if (cm.duration) {
+          // Refresh an already-active condition's duration instead of
+          // silently no-oping (the model may legitimately re-apply/extend
+          // it, e.g. stepping into more fire).
+          const duration = await resolveDiceNotation(cm.duration);
+          const durationMinutes = parseDurationMinutes(duration);
+          if (durationMinutes != null && currentCal) {
+            const expiryCal = advanceMinutes(currentCal, durationMinutes);
+            conditions[idx].expiresAtMinutes = toAbsoluteMinutes(expiryCal);
+            conditions[idx].expiresAt = `${formatCalendarDate(expiryCal)}, ${String(expiryCal.hourOfDay).padStart(2, "0")}:${String(expiryCal.minuteOfHour).padStart(2, "0")}`;
+            conditions[idx].lastTouched = nowIso();
+          }
         }
       } else if (idx !== -1) {
         conditions.splice(idx, 1);
@@ -177,7 +245,7 @@ export async function processGameResponse(
   const modifications = chatId ? (await getChatModifications(chatId)).map((m) => ({ ...m })) : [];
   if (chatId) {
     for (const mm of modMutations) {
-      const idx = modifications.findIndex((m) => m.name.toLowerCase() === mm.name.toLowerCase());
+      const idx = modifications.findIndex((m) => namesMatch(m.name, mm.name));
       if (mm.op === "add") {
         if (idx === -1) {
           modifications.push({ name: mm.name, description: mm.name, lastTouched: nowIso() });
@@ -247,12 +315,18 @@ export async function processGameResponse(
       if (s.absolute !== null) {
         // Absolute set: [SKILL:+name:3]
         if (existing) {
-          existing.level = s.absolute;
-          existing.lastTouched = nowIso();
+          // Model sometimes re-issues the same absolute level (e.g. it
+          // "re-teaches" a skill the player already has) — that's a no-op,
+          // not progress, so don't log it as if the skill just leveled up.
+          if (existing.level !== s.absolute) {
+            existing.level = s.absolute;
+            existing.lastTouched = nowIso();
+            summaryParts.push({ text: `📈 ${s.name} → úroveň ${s.absolute}`, kind: "add" });
+          }
         } else {
           skills.push({ name: s.name, level: s.absolute, lastTouched: nowIso() });
+          summaryParts.push({ text: `📈 Naučeno: ${s.name}`, kind: "add" });
         }
-        summaryParts.push({ text: existing ? `📈 ${s.name} → úroveň ${s.absolute}` : `📈 Naučeno: ${s.name}`, kind: "add" });
       } else if (s.delta > 0) {
         // Relative increase: [SKILL:name+2] or [SKILL:+name]
         if (existing) {

@@ -1,58 +1,12 @@
-/** Game-time & weather system (plan B3). Pure functions — no DB/Tauri
- * imports — so they're unit-testable in isolation. Time advances with each
- * message, weather changes via a Markov chain, and the PromptBuilder
- * renders a `[PRÁVĚ TEĎ]` block from the resulting state. */
-
-export interface GameTimeState {
-  /** Unix-epoch milliseconds in game-world time. */
-  timestamp_ingame: number;
-  /** How many *real* seconds → one game-minute (default 1 = real-time).
-   *  Higher values make game-time run faster. */
-  time_scale: number;
-  weather: Weather;
-  season: Season;
-  time_of_day: TimeOfDay;
-}
+/** Weather & time-of-day helpers (plan B3, later folded into the calendar
+ * system — see calendar.ts and weather.ts). Pure functions — no DB/Tauri
+ * imports — so they're unit-testable in isolation. */
 
 export type Weather = "jasno" | "polojasno" | "zataženo" | "déšť" | "bouřka" | "sníh" | "mlha";
 
 export type Season = "zima" | "jaro" | "léto" | "podzim";
 
 export type TimeOfDay = "ráno" | "dopoledne" | "poledne" | "odpoledne" | "podvečer" | "večer" | "noc";
-
-const MS_PER_MINUTE = 60_000;
-
-/** Default state factory — winter noon on 1 Jan 2024, real-time scale. */
-export function defaultGameTimeState(): GameTimeState {
-  // 2024-01-01T12:00:00Z
-  const noon = new Date(Date.UTC(2024, 0, 1, 12, 0, 0));
-  return {
-    timestamp_ingame: noon.getTime(),
-    time_scale: 1,
-    weather: "zataženo",
-    season: "zima",
-    time_of_day: "poledne",
-  };
-}
-
-/** Advances the game clock by `messageCount * time_scale` minutes. */
-export function advanceTime(state: GameTimeState, messageCount: number): GameTimeState {
-  const addedMs = messageCount * state.time_scale * MS_PER_MINUTE;
-  const nextTs = state.timestamp_ingame + addedMs;
-  const date = new Date(nextTs);
-  const month = date.getUTCMonth() + 1; // 1–12
-  const hour = date.getUTCHours();
-  const season = seasonFromMonth(month);
-  const tod = timeOfDay(hour);
-  const weather = nextWeather(state.weather, season);
-  return {
-    ...state,
-    timestamp_ingame: nextTs,
-    season,
-    time_of_day: tod,
-    weather,
-  };
-}
 
 /** Maps month 1–12 to Czech season name. */
 export function seasonFromMonth(month: number): Season {
@@ -156,39 +110,6 @@ function pickWeighted(weights: Record<string, number>): string {
     if (roll <= 0) return key;
   }
   return entries[entries.length - 1][0];
-}
-
-// ---- Time description (Czech natural language) -------------------------
-
-/** Returns a Czech natural-language scene-setting sentence combining
- *  time-of-day, season, and current weather. Deterministic — callers
- *  that want variety should pass different states. */
-export function timeDescription(state: GameTimeState): string {
-  const tod = timeOfDayDescription(state.time_of_day);
-  const season = seasonDescription(state.season);
-  const weather = weatherDescription(state.weather, state.season, state.time_of_day);
-  return `Je ${tod}, ${season}. ${weather}`;
-}
-
-function timeOfDayDescription(tod: TimeOfDay): string {
-  switch (tod) {
-    case "ráno":       return "časné ráno";
-    case "dopoledne":  return "dopoledne";
-    case "poledne":    return "poledne";
-    case "odpoledne":  return "odpoledne";
-    case "podvečer":   return "pozdní odpoledne";
-    case "večer":      return "večer";
-    case "noc":        return "hluboká noc";
-  }
-}
-
-function seasonDescription(season: Season): string {
-  switch (season) {
-    case "zima":   return "zima";
-    case "jaro":   return "jaro";
-    case "léto":   return "léto";
-    case "podzim": return "podzim";
-  }
 }
 
 export function weatherDescription(weather: Weather, season: Season, tod: TimeOfDay): string {

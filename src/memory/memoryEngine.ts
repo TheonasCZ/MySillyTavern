@@ -28,11 +28,6 @@ import { runExtraction, type TranscriptChatMessage } from "./extractor";
 import { listAllFacts } from "../db/repositories/ledgerRepo";
 import { runSummarization, type TranscriptMessage } from "./summarizer";
 import {
-  advanceTime,
-  defaultGameTimeState,
-  type GameTimeState,
-} from "./gameTime";
-import {
   advanceMinutes,
   calendarToJSON,
   calendarFromJSON,
@@ -289,41 +284,12 @@ async function drainQueue(chatId: string, entry: QueueEntry): Promise<void> {
   }
 }
 
-const GAME_TIME_SETTING_PREFIX = "game_time_";
-
-/** Advances the game clock for a chat after each assistant message and
- *  persists the updated state to the settings table. The returned
- *  `GameTimeState` can be passed directly to `PromptBuilder` via
- *  `timeDescription`. Never throws — on any failure the original state
- *  (or default) is returned so the game continues. */
-export async function advanceAndPersistTime(
-  chatId: string,
-  messageCount: number,
-): Promise<GameTimeState> {
-  try {
-    const key = `${GAME_TIME_SETTING_PREFIX}${chatId}`;
-    const raw = await getSetting(key);
-    let state: GameTimeState;
-    if (raw) {
-      state = JSON.parse(raw) as GameTimeState;
-    } else {
-      state = defaultGameTimeState();
-    }
-    const next = advanceTime(state, messageCount);
-    await setSetting(key, JSON.stringify(next));
-    return next;
-  } catch (err) {
-    console.warn("memoryEngine: advanceAndPersistTime failed for chat", chatId, err);
-    return defaultGameTimeState();
-  }
-}
-
 const CALENDAR_SETTING_PREFIX = "game_calendar_";
 
 /** Advances the fantasy calendar for a chat by `minutes` (one day, 1440, by
- * default) and persists it. Companion to `advanceAndPersistTime` — the
- * calendar tracks named days, months and seasons separately from the
- * real-time game clock. Never throws: on any failure the default calendar
+ * default) and persists it — called on every assistant reply, either with
+ * an explicit [TIME:...] tag jump or a small idle-drift fallback (see
+ * inventoryProcessor.ts). Never throws: on any failure the default calendar
  * (Rok 847, day 1) is returned. */
 export async function advanceAndPersistCalendar(
   chatId: string,

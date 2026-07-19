@@ -22,7 +22,14 @@ export interface InventoryEntry {
 export interface ConditionEntry {
   name: string;
   description: string;
+  /** Human-readable expiry for display/prompt (e.g. "3. Jarního větru,
+   *  Rok 847, 14h") — null for indefinite conditions. */
   expiresAt: string | null;
+  /** Same expiry as an absolute game-calendar minute count (see
+   *  `calendar.ts#toAbsoluteMinutes`) — what auto-expiry actually compares
+   *  against. Absent on indefinite conditions or legacy entries predating
+   *  auto-expiry. */
+  expiresAtMinutes?: number;
   modifiers?: { stat: string; value: number }[];
   /** ISO-8601 timestamp of last add/modify — used for recency sorting in the
    *  prompt's capped state lists. Absent on legacy entries (which sort last). */

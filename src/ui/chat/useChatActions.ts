@@ -245,9 +245,18 @@ export function useChatActions(params: ChatActionsParams) {
     memberCharacters.map((c) => [c.id, { name: c.name, avatarUrl: avatarSrc(c.avatarPath) }]),
   );
 
-  const contextUsage = connection
-    ? Math.min(1, messages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) / 3 / connection.contextBudget)
-    : 0;
+  // Prefer the real per-section estimate from the last actually-built prompt
+  // (PromptBuilder already trims/summarizes history before counting — see
+  // PromptInspector) over a raw sum of every message's character length,
+  // which ignores trimming entirely and hits 100% far too early in long
+  // chats. Fall back to the crude estimate only before a report exists yet
+  // (e.g. a brand-new chat with no message sent).
+  const lastPromptReport = useChatStore((s) => s.lastPromptReport);
+  const contextUsage = lastPromptReport
+    ? Math.min(1, lastPromptReport.estimatedTokens / Math.max(lastPromptReport.budget, 1))
+    : connection
+      ? Math.min(1, messages.reduce((sum, m) => sum + (m.content?.length ?? 0), 0) / 3 / connection.contextBudget)
+      : 0;
 
   const primaryCharacter = memberCharacters.find((c) => c.id === chatCharacterId);
   const fallbackCharacter: MemberInfo = {

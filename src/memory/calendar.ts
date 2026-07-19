@@ -130,6 +130,13 @@ export function advanceMinutes(current: CalendarDate, minutes: number): Calendar
   return calendarDateFromDays(year, dayOfYear, hourOfDay, minuteOfHour);
 }
 
+/** Converts a calendar date to a single comparable minute count (relative to
+ * year 0) — used to check whether a stored expiry has passed, since two
+ * `CalendarDate` objects can't be compared directly. */
+export function toAbsoluteMinutes(date: CalendarDate): number {
+  return (date.year * DAYS_PER_YEAR + (date.dayOfYear - 1)) * 1440 + date.hourOfDay * 60 + date.minuteOfHour;
+}
+
 /** Advances the calendar by one day, wrapping year boundaries. Preserves the time of day. */
 export function advanceDay(current: CalendarDate): CalendarDate {
   return advanceMinutes(current, 1440);

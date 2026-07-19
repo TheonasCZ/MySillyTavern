@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  advanceTime,
-  defaultGameTimeState,
   nextWeather,
   seasonFromMonth,
-  timeDescription,
   timeOfDay,
-  type GameTimeState,
   type Weather,
 } from "./gameTime";
 
@@ -91,42 +87,6 @@ describe("timeOfDay", () => {
   });
 });
 
-// ---- advanceTime --------------------------------------------------------
-
-describe("advanceTime", () => {
-  it("advances timestamp by messageCount * time_scale minutes", () => {
-    const state = defaultGameTimeState();
-    const result = advanceTime(state, 5);
-    // 5 messages × scale 1 = 5 minutes = 300_000 ms
-    expect(result.timestamp_ingame).toBe(state.timestamp_ingame + 5 * 60_000);
-  });
-
-  it("respects time_scale", () => {
-    const state = { ...defaultGameTimeState(), time_scale: 3 };
-    const result = advanceTime(state, 2);
-    // 2 messages × scale 3 = 6 minutes = 360_000 ms
-    expect(result.timestamp_ingame).toBe(state.timestamp_ingame + 6 * 60_000);
-  });
-
-  it("updates season and time_of_day as time advances", () => {
-    // Start at Jan 1 noon (month 1, hour 12) → zima, poledne
-    const state = defaultGameTimeState();
-    // Advance by ~90 days worth of minutes (129600 minutes) to cross into April
-    const result = advanceTime(state, 129600);
-    expect(result.season).toBe("jaro");
-    // After 90 days from noon, hour should still be around noon
-    // (129600 * 60_000 ms / 3600000 ms_per_hour = 2160 hours = 90 days)
-    expect(result.time_of_day).toBe("poledne");
-  });
-
-  it("never throws", () => {
-    const state = defaultGameTimeState();
-    expect(() => advanceTime(state, 0)).not.toThrow();
-    expect(() => advanceTime(state, -5)).not.toThrow();
-    expect(() => advanceTime(state, 1_000_000)).not.toThrow();
-  });
-});
-
 // ---- nextWeather --------------------------------------------------------
 
 describe("nextWeather", () => {
@@ -165,63 +125,5 @@ describe("nextWeather", () => {
 
     // Summer should produce more storms from "zataženo"
     expect(summerStorms).toBeGreaterThan(winterStorms);
-  });
-});
-
-// ---- timeDescription ----------------------------------------------------
-
-describe("timeDescription", () => {
-  it("returns a non-empty Czech string", () => {
-    const state = defaultGameTimeState();
-    const desc = timeDescription(state);
-    expect(desc.length).toBeGreaterThan(0);
-    expect(desc).toContain("Je ");
-  });
-
-  it("contains time-of-day, season, and weather references", () => {
-    // Morning in spring with clear skies
-    const state: GameTimeState = {
-      timestamp_ingame: new Date(Date.UTC(2024, 3, 1, 6, 0, 0)).getTime(),
-      time_scale: 1,
-      weather: "jasno",
-      season: "jaro",
-      time_of_day: "ráno",
-    };
-    const desc = timeDescription(state);
-    expect(desc).toContain("časné ráno");
-    expect(desc).toContain("jaro");
-    // should mention clear sky
-    expect(desc.toLowerCase()).toContain("obloha");
-  });
-
-  it("produces distinctive descriptions for different times", () => {
-    const dayState: GameTimeState = {
-      timestamp_ingame: 0, time_scale: 1,
-      weather: "jasno", season: "léto", time_of_day: "poledne",
-    };
-    const nightState: GameTimeState = {
-      timestamp_ingame: 0, time_scale: 1,
-      weather: "jasno", season: "léto", time_of_day: "noc",
-    };
-
-    const dayDesc = timeDescription(dayState);
-    const nightDesc = timeDescription(nightState);
-
-    // Night description should differ from day
-    expect(dayDesc).not.toBe(nightDesc);
-    expect(nightDesc).toContain("hluboká noc");
-  });
-});
-
-// ---- defaultGameTimeState -----------------------------------------------
-
-describe("defaultGameTimeState", () => {
-  it("returns a valid state with winter noon", () => {
-    const state = defaultGameTimeState();
-    expect(state.season).toBe("zima");
-    expect(state.time_of_day).toBe("poledne");
-    expect(state.weather).toBe("zataženo");
-    expect(state.time_scale).toBe(1);
-    expect(state.timestamp_ingame).toBeGreaterThan(0);
   });
 });
