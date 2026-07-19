@@ -258,7 +258,7 @@ export function ChatScreen() {
   // Filter connections for the export dropdown: gemini provider OR purpose=chat
   const exportConnections = connections.filter(
     (c) =>
-      c.provider === "gemini" || c.purposes.includes("chat"),
+      c.provider === "gemini" || c.purpose === "chat",
   );
 
   // Persona avatar + switcher, rendered as the first item in ChatInput's

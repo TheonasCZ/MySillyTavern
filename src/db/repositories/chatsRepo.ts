@@ -9,6 +9,8 @@ export interface Chat {
   personaId: string | null;
   connectionId: string | null;
   extractionConnectionId: string | null;
+  embeddingConnectionId: string | null;
+  imageConnectionId: string | null;
   lastExtractedMessageId: string | null;
   lastSummarizedMessageId: string | null;
   /** Prompt preset selected for this chat (M12.4). */
@@ -61,6 +63,8 @@ interface ChatRow {
   persona_id: string | null;
   connection_id: string | null;
   extraction_connection_id: string | null;
+  embedding_connection_id: string | null;
+  image_connection_id: string | null;
   last_extracted_message_id: string | null;
   last_summarized_message_id: string | null;
   preset_id: string | null;
@@ -117,6 +121,8 @@ function toChat(row: ChatRow): Chat {
     personaId: row.persona_id,
     connectionId: row.connection_id,
     extractionConnectionId: row.extraction_connection_id,
+    embeddingConnectionId: row.embedding_connection_id,
+    imageConnectionId: row.image_connection_id,
     lastExtractedMessageId: row.last_extracted_message_id,
     lastSummarizedMessageId: row.last_summarized_message_id,
     presetId: row.preset_id,

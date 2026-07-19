@@ -23,7 +23,7 @@ function detectProvider(key: string): Provider | null {
 const DEFAULT_DRAFT: ConnectionDraft = {
   name: "",
   provider: "gemini",
-  purposes: ["chat", "image", "embedding"],
+  purpose: "chat",
   baseUrl: null,
   model: "",
   temperature: 0.8,
@@ -53,7 +53,7 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
       ? {
           name: initial.name,
           provider: initial.provider,
-          purposes: initial.purposes,
+          purpose: initial.purpose,
           baseUrl: initial.baseUrl,
           model: initial.model,
           temperature: initial.temperature,
@@ -223,25 +223,16 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
             {t("connections.fields.purpose")}
             <FieldHelp text={t("connections.help.purpose")} />
           </span>
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <select
+            value={draft.purpose}
+            onChange={(e) => setDraft({ ...draft, purpose: e.target.value as ConnectionPurpose })}
+            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+            style={inputStyle}
+          >
             {(["chat", "image", "embedding"] as ConnectionPurpose[]).map((p) => (
-              <label key={p} className="flex items-center gap-1.5 text-xs cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={draft.purposes.includes(p)}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...draft.purposes, p]
-                      : draft.purposes.filter((x) => x !== p);
-                    if (next.length === 0) return; // at least one purpose required
-                    setDraft({ ...draft, purposes: next });
-                  }}
-                  className="rounded"
-                />
-                {t(`connections.purposes.${p}`)}
-              </label>
+              <option key={p} value={p}>{t(`connections.purposes.${p}`)}</option>
             ))}
-          </div>
+          </select>
         </div>
       </div>
 

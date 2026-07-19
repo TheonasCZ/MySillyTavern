@@ -171,7 +171,9 @@ export async function buildApiMessages(
   let retrievedMemoriesDetail: RetrievedMemoryDetail[] = [];
   let voiceExamples: string[] = [];
   let queryEmbedding: number[] | undefined;
-  const embeddingConnection = resolveConnection(chat.extractionConnectionId) ?? connection;
+  const embeddingConnection = resolveConnection(chat.embeddingConnectionId)
+    ?? resolveConnection(chat.extractionConnectionId)
+    ?? connection;
   if (canEmbed(embeddingConnection)) {
     try {
       const selectedIds = new Set(loreEntries.map((e) => e.id));

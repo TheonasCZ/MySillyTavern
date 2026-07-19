@@ -115,7 +115,7 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
 
       const connId =
         (await getSetting("image_gen_connection_id")) ??
-        useConnectionsStore.getState().connections.find((c) => c.purposes.includes("image"))?.id;
+        useConnectionsStore.getState().connections.find((c) => c.purpose === "image")?.id;
       if (!connId) throw new Error("Není dostupné žádné Gemini připojení. Vytvoř ho v Nastavení → Připojení.");
       const cfg = useConnectionsStore.getState().connections.find((c) => c.id === connId);
       if (!cfg) throw new Error("Ilustrační připojení nenalezeno.");

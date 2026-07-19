@@ -41,7 +41,7 @@ export function MemorySettingsPanel() {
   const [imgLimit, setImgLimit] = useState("0");
   const [imgConnectionId, setImgConnectionId] = useState("");
   const connections = useConnectionsStore((s) => s.connections);
-  const imageConnections = connections.filter((c) => c.purposes.includes("image"));
+  const imageConnections = connections.filter((c) => c.purpose === "image");
 
   useEffect(() => {
     void (async () => {

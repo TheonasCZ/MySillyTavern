@@ -73,7 +73,7 @@ async function resolveConnection(): Promise<ConnectionConfig | null> {
   }
   // Fall back to the first connection that lists "image" in its purposes.
   const all = await listConnections();
-  return all.find((c) => c.purposes.includes("image")) ?? null;
+  return all.find((c) => c.purpose === "image") ?? null;
 }
 
 // ---- main loop ------------------------------------------------------------

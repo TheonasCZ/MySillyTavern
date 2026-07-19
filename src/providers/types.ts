@@ -38,7 +38,8 @@ export interface ConnectionConfig {
   id: string;
   name: string;
   provider: Provider;
-  purposes: ConnectionPurpose[];
+  /** Single purpose — one connection now serves exactly one role (chat, embedding, or image). */
+  purpose: ConnectionPurpose;
   baseUrl: string | null;
   model: string;
   temperature: number;

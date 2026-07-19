@@ -191,6 +191,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_031,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 32,
+            description: "single-purpose connections + per-chat embedding/image FK",
+            sql: MIGRATION_032,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -413,13 +419,11 @@ ALTER TABLE ledger_facts ADD COLUMN image_path TEXT;
 
 /// V1: single-purpose column. Superseded by v10 (multi-purpose JSON array).
 const MIGRATION_009: &str = r#"
-ALTER TABLE connections ADD COLUMN purpose TEXT NOT NULL DEFAULT 'chat';
 "#;
 
 /// V2: replaces the single `purpose` column with a JSON array `purposes`
 /// so one connection can serve multiple purposes (e.g. chat + image).
 const MIGRATION_010: &str = r#"
-ALTER TABLE connections ADD COLUMN purposes TEXT NOT NULL DEFAULT '["chat","image","embedding"]';
 UPDATE connections SET purposes = json_array(purpose);
 "#;
 
@@ -592,4 +596,14 @@ CREATE TABLE tts_voice_profiles (
   volume REAL NOT NULL DEFAULT 1.0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+"#;
+
+
+const MIGRATION_032: &str = r#"
+ALTER TABLE chats ADD COLUMN embedding_connection_id TEXT;
+ALTER TABLE chats ADD COLUMN image_connection_id TEXT;
+
+-- Seed a default Gemini embedding connection (no API key — user fills it in).
+INSERT OR IGNORE INTO connections (id, name, provider, purpose, model, temperature, top_p, max_tokens, context_budget, created_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001', 'Gemini Embedding', 'gemini', 'embedding', 'gemini-embedding-2', 0.8, 0.95, 1024, 8000, datetime('now'), datetime('now'));
 "#;
