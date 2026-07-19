@@ -120,6 +120,11 @@ export function ChatInput({
     return pool;
   }, [inventory, skills]);
 
+  /** Case- and diacritic-insensitive normalization for fuzzy matching.
+   *  "válec" → "valec", "ČÍŠE" → "cise". */
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   const checkAutocomplete = (val: string) => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -127,9 +132,9 @@ export function ChatInput({
     const before = val.slice(0, cursor);
     const m = before.match(/(?:^|\s)@([^\s]*)$/);
     if (m) {
-      const query = m[1].toLowerCase();
+      const query = normalize(m[1]);
       const filtered = acPool.filter((item) =>
-        item.text.toLowerCase().includes(query)
+        normalize(item.text).includes(query)
       );
       if (filtered.length > 0) {
         setAc({
