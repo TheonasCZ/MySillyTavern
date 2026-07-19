@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
@@ -27,6 +27,9 @@ interface Props {
   /** Chat-scoped skills — matched against `pendingCheckSkill` to auto-add a
    *  bonus to the quick roll (see `rollQuickDice`). */
   skills?: SkillEntry[];
+  /** Chat-scoped inventory items — used by @-autocomplete to suggest
+   *  existing item names while typing. */
+  inventory?: { item: string; qty: number }[];
   /** The skill named by the GM's last [CHECK:skill name] tag, decided by
    *  the model itself from full scene context — not derived from local text
    *  matching, which is too easy to fool (the player's own draft is
@@ -55,6 +58,7 @@ export function ChatInput({
   onSend,
   onDiceRoll,
   skills = [],
+  inventory = [],
   pendingCheckSkill = null,
   onStop,
   suggestions,
@@ -87,6 +91,78 @@ export function ChatInput({
   const historyRef = useRef<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const draftBeforeHistoryRef = useRef("");
+
+  // --- @-autocomplete ---------------------------------------------------
+  interface AutocompleteItem {
+    text: string;
+    kind: "item" | "skill";
+    detail?: string; // e.g. "qty 3" or "level 2"
+  }
+
+  const [ac, setAc] = useState<{
+    open: boolean;
+    query: string;
+    atPos: number; // position of @ in textarea value
+    items: AutocompleteItem[];
+    selected: number;
+  } | null>(null);
+
+  /** Build the combined suggestion pool from inventory + skills, one-shot
+   *  per render — filtered client-side on each keystroke below. */
+  const acPool = useMemo<AutocompleteItem[]>(() => {
+    const pool: AutocompleteItem[] = [];
+    for (const inv of inventory) {
+      pool.push({ text: inv.item, kind: "item", detail: inv.qty > 1 ? `×${inv.qty}` : undefined });
+    }
+    for (const sk of skills) {
+      pool.push({ text: sk.name, kind: "skill", detail: sk.level > 0 ? `lv.${sk.level}` : undefined });
+    }
+    return pool;
+  }, [inventory, skills]);
+
+  const checkAutocomplete = (val: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const cursor = ta.selectionStart;
+    const before = val.slice(0, cursor);
+    const m = before.match(/(?:^|\s)@([^\s]*)$/);
+    if (m) {
+      const query = m[1].toLowerCase();
+      const filtered = acPool.filter((item) =>
+        item.text.toLowerCase().includes(query)
+      );
+      if (filtered.length > 0) {
+        setAc({
+          open: true,
+          query,
+          atPos: (before.lastIndexOf("@")),
+          items: filtered.slice(0, 6), // cap at 6 for dropdown size
+          selected: 0,
+        });
+        return;
+      }
+    }
+    setAc(null);
+  };
+
+  const insertAutocomplete = (item: AutocompleteItem) => {
+    if (!ac) return;
+    const before = value.slice(0, ac.atPos);
+    const after = value.slice(ac.atPos + 1 + ac.query.length);
+    const replacement = before + item.text + " " + after;
+    setValue(replacement);
+    localStorage.setItem(draftKey, replacement);
+    setAc(null);
+    // Place cursor after the inserted name + trailing space
+    const newPos = ac.atPos + item.text.length + 1;
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(newPos, newPos);
+      }
+    });
+  };
 
   // --- Android soft keyboard / viewport handling ---
   // On mobile, the soft keyboard pushes the visual viewport up. We adjust
@@ -130,6 +206,7 @@ export function ChatInput({
   const handleChange = (val: string) => {
     setValue(val);
     localStorage.setItem(draftKey, val);
+    checkAutocomplete(val);
   };
 
   // Expose insertText via a global callback — InventoryPanel calls this
@@ -206,6 +283,35 @@ export function ChatInput({
   }, [pendingRoll, pendingCheckSkill, skills]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // --- @-autocomplete keyboard navigation ---
+    if (ac?.open) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setAc((prev) => prev ? { ...prev, selected: Math.min(prev.selected + 1, prev.items.length - 1) } : null);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setAc((prev) => prev ? { ...prev, selected: Math.max(prev.selected - 1, 0) } : null);
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        insertAutocomplete(ac.items[ac.selected]);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        insertAutocomplete(ac.items[ac.selected]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setAc(null);
+        return;
+      }
+    }
+
     // Enter or Ctrl+Enter sends
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -272,6 +378,47 @@ export function ChatInput({
           </button>
         </div>
       )}
+
+      {/* @-autocomplete dropdown */}
+      {ac?.open && (
+        <div className="relative">
+          <div
+            className="absolute bottom-full left-0 mb-1 z-50 rounded-[var(--radius-sm)] border py-1 shadow-lg"
+            style={{
+              borderColor: "var(--color-border)",
+              backgroundColor: "var(--color-bg-elevated)",
+              minWidth: 220,
+              maxHeight: 200,
+              overflowY: "auto",
+            }}
+          >
+            {ac.items.map((item, i) => (
+              <button
+                key={`${item.kind}:${item.text}`}
+                type="button"
+                onClick={() => insertAutocomplete(item)}
+                onMouseEnter={() => setAc((prev) => prev ? { ...prev, selected: i } : null)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm"
+                style={{
+                  backgroundColor: i === ac.selected ? "var(--color-surface-2)" : "transparent",
+                  color: "var(--color-text)",
+                }}
+              >
+                <span className="shrink-0 text-xs">
+                  {item.kind === "item" ? "🎒" : "📈"}
+                </span>
+                <span className="flex-1 truncate">{item.text}</span>
+                {item.detail && (
+                  <span className="shrink-0 text-xs" style={{ color: "var(--color-text-faint)" }}>
+                    {item.detail}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
       {personaSlot}
       <textarea

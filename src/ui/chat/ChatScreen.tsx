@@ -885,6 +885,7 @@ export function ChatScreen() {
           onSend={(content) => void sendMessage(content)}
           onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
           skills={chat?.skills}
+          inventory={chat?.inventory}
           pendingCheckSkill={pendingCheckSkill}
           onStop={() => void stop()}
           suggestions={combinedSuggestions}

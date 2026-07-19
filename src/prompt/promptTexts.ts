@@ -171,6 +171,12 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "A player message may end with an app-generated `[ROLL:expression=total]` tag (e.g. `[ROLL:1d20=14]`) — " +
   "this is the actual, already-resolved roll for that message's action, not something the player typed " +
   "themselves; treat `total` as authoritative and never ask them to roll again for the same action.\n" +
+  "Items already listed in [GAME TAGS] inventory were tagged in a previous response and have been applied — " +
+  "do not re-tag them. Only tag items that are being acquired or lost RIGHT NOW in this response. " +
+  "This includes when your own narration says a listed item was 'just acquired' or 'found' for narrative " +
+  "flow — it was already tagged, describe it in prose only, do not re-tag. " +
+  "Showing, holding, handing over, placing down, or discussing an item the player already owns is never " +
+  "a gain and never needs an [INV:+] tag.\n" +
   "IMPORTANT for [INV:+item]: only emit it when the item actually enters the player's possession — picked " +
   "up, looted, handed to them, crafted, pulled from a container and kept. Touching, examining, noticing, or " +
   "reaching for an item that stays where it was (still embedded in a wall, still on someone else's body, " +
@@ -285,8 +291,8 @@ export const DIRECTOR_HARDCORE_NOTE =
 
 // ---- Game tag instructions (English) -----------------------------------
 
-export const TAG_INSTRUCTIONS_CURRENT_INVENTORY = "Current inventory:";
-export const TAG_INSTRUCTIONS_INVENTORY_CHANGES = "Inventory changes: [INV:+item] gain, [INV:-item] lose, [INV:+count:item] quantity. Only tag a gain when the item actually ends up in the player's possession — merely touching, examining, or noticing an item that stays where it was is not a gain, no tag. If the narration has the player consume/use up/lose an item from this list, always emit the matching [INV:-item] tag — don't just describe it in prose.";
+export const TAG_INSTRUCTIONS_CURRENT_INVENTORY = "Current inventory (already applied — do not re-tag):";
+export const TAG_INSTRUCTIONS_INVENTORY_CHANGES = "Inventory changes for this response ONLY: [INV:+item] gain, [INV:-item] lose, [INV:+count:item] quantity. Tag only NEW acquisitions or losses that happen in this response — never re-tag items already listed above (they were tagged in a previous response). Only tag a gain when the item actually ends up in the player's possession — merely touching, examining, noticing, showing, holding, placing, or discussing an item that stays where it was is not a gain, no tag. If the narration has the player consume/use up/lose an item from this list, always emit the matching [INV:-item] tag — don't just describe it in prose.";
 export const TAG_INSTRUCTIONS_CURRENT_SKILLS = "Current skills:";
 export const TAG_INSTRUCTIONS_SKILL_CHANGES = "Skill changes: [SKILL:+name] learn (level 1), [SKILL:+name:level] set level, [SKILL:name+1] increase.";
 export const TAG_INSTRUCTIONS_LEVEL_CURRENT = (lvl: number, xp: number) => `Current: level ${lvl}, ${xp} XP.`;
