@@ -383,7 +383,7 @@ const CANON_REMINDER_CATEGORIES: LedgerCategory[] = ["world", "player"];
  * reinforcement compact rather than repeating the entire ledger. Locked
  * facts (explicitly pinned by the user as canon) are kept first so they
  * survive the cap before unlocked ones. */
-const CANON_REMINDER_MAX_CHARS = 2400;
+const CANON_REMINDER_MAX_CHARS = 4000;
 
 // ---- Section builders ---------------------------------------------------
 
@@ -510,10 +510,22 @@ function buildFactsSection(facts: LedgerFactLike[], charName: string, userName: 
  * facts to remind the model of. */
 function buildCanonReminderSection(facts: LedgerFactLike[], charName: string, userName: string): string {
   // Canon facts (locked or soft) of ANY category are included alongside the
-  // always-reinforced world/player categories; hard locks sort first.
+  // always-reinforced world/player categories. Sort priority:
+  // 1. Hard-locked facts (user explicitly pinned)
+  // 2. Negative-constraint facts ("NENÍ"/"NEMÁ" — losing these invites confabulation)
+  // 3. Soft-canon facts (auto-promoted)
+  // 4. Everything else
+  const negativePattern = /\b(není|nejsou|nemá|nemají|nesmí|nelze|is not|are not|does not|do not|must not|cannot|no(?!\w))\b/i;
+  const hasNegative = (f: LedgerFactLike) => negativePattern.test(f.fact);
+  const sortKey = (f: LedgerFactLike): number => {
+    if (f.locked) return 0;          // user-pinned, absolute top
+    if (hasNegative(f)) return 1;     // "what X is NOT" — critical guardrail
+    if (f.canon) return 2;           // auto-promoted canon
+    return 3;                         // regular world/player facts
+  };
   const relevant = facts
     .filter((f) => isCanonFact(f) || CANON_REMINDER_CATEGORIES.includes(f.category))
-    .sort((a, b) => Number(isCanonFact(b)) - Number(isCanonFact(a)));
+    .sort((a, b) => sortKey(a) - sortKey(b));
   if (relevant.length === 0) return "";
 
   const header = SECTION_CANON_REMINDER;

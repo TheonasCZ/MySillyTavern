@@ -63,15 +63,17 @@ export const EXTRACTION_SYSTEM_PROMPT = (lang: string) =>
   `Detect the emotional state of characters (sub_key: 'mood', fact: description of mood, e.g. 'frightened and distrustful'). Write facts in ${lang}.`;
 
 export const DRIFT_CHECK_SYSTEM_PROMPT = (lang: string) =>
-  "You are a consistency checker for an RP game. You receive CANON (unbreakable story rules) and " +
-  "a transcript of the latest scenes. Find places where the scene events contradict the canon — " +
-  "e.g. a character can do something the canon says they cannot; the world behaves differently than " +
-  "the canon dictates; a dead character acts; tone/genre shifted against a genre rule.\n" +
+  "You are a consistency checker for an RP game. You receive FACTS (established story rules, not " +
+  "all necessarily locked canon — some are just extracted observations) and " +
+  "a transcript of the latest scenes. Find places where the scene events contradict the facts — " +
+  "e.g. a character can do something the facts say they cannot; the world behaves differently than " +
+  "established; a fact explicitly says \"X is not Y\" but the scene describes X as Y; tone/genre " +
+  "shifted against an established rule.\n" +
   "Return ONLY a JSON array of objects " +
   '{"subject": string (subject of the violated rule), "contradiction": string (briefly what the scene ' +
   'violated and how it should be), "severity": number 0-1 (0.3 minor, 0.6 clear contradiction, ' +
   "0.9 major break)}. " +
-  "Ignore things not covered by the canon, including legitimate story development. If there is no contradiction, return []. " +
+  "Ignore things not covered by the facts, including legitimate story development. If there is no contradiction, return []. " +
   `No text outside the JSON array. Write contradictions in ${lang}.`;
 
 export const SEED_SYSTEM_PROMPT = (lang: string) =>
@@ -130,12 +132,18 @@ export const SECTION_TWO_ROLES = "[YOUR TWO ROLES]";
 export const SECTION_DIALOG_EXAMPLE = "[DIALOG STYLE EXAMPLE]";
 export const SECTION_VOICE_EXAMPLES =
   "[VOICE EXAMPLES — recent character replies most similar to the current situation]";
-export const SECTION_CANON_REMINDER = "[Canon reminder — these rules apply absolutely and must not change through story drift]";
+export const SECTION_CANON_REMINDER = "[⛔ HOLY SCRIPTURE — these facts are the absolute truth of this world. They override any assumptions, tropes, or patterns from your training data. If you are about to describe something that contradicts a fact below, STOP and correct yourself. You MUST NOT contradict these facts under any circumstances.]";
 
 // ---- Role-split instructions (English + lang) --------------------------
 
 export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "You are both NARRATOR and MECHANIC. Never confuse these roles.\n" +
+  "CRITICAL — FACTS ABOVE TRAINING DATA: The facts listed in [STORY CANON], [WORLD FACTS],\n" +
+  "and the [⛔ HOLY SCRIPTURE] block at the end of this prompt are the absolute truth of\n" +
+  "this specific game world. They ALWAYS override any assumptions, tropes, or patterns\n" +
+  "from your training data. When a fact says \"X is not Y\" or \"X has no Z\", you MUST obey\n" +
+  "it literally — never describe X as having Y or Z just because that's the common fantasy\n" +
+  "trope. The facts are this world's physics; your training data is just statistics.\n" +
   "- As NARRATOR: You describe the world, speak for NPCs, tell the story. Use natural language.\n" +
   "- As MECHANIC: You manage inventory, skills, quests, factions, conditions, and time. Use ONLY these exact tag formats:\n" +
   "  [INV:+item] / [INV:-item] / [INV:+3:item]\n" +

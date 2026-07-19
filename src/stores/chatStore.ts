@@ -29,6 +29,13 @@ import {
 } from "../chat/groupSpeaker";
 import { runCanonSeed } from "../memory/canonSeed";
 import { scheduleMemoryWork } from "../memory/memoryEngine";
+import {
+  detectFactViolations,
+  prepareFactForDetection,
+  violationCorrectionText,
+  type FactForDetection,
+} from "../memory/driftDetector";
+import { listAllFacts } from "../db/repositories/ledgerRepo";
 import { setOnInventoryImageWritten } from "../memory/imageGenQueue";
 import { getGameOverState } from "../chat/gameOver";
 import { getPendingCheckSkill, clearPendingCheckSkill } from "../chat/pendingCheck";
@@ -254,9 +261,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const effectiveConnection = applyPreset(connection, presetParams);
 
+    // Auto-retry guard: prevent infinite regeneration loops on drift violations.
+    let autoRetryCount = 0;
+    const MAX_AUTO_RETRIES = 2;
+
     const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       finalText = applyRegexRules(finalText, regexRules ?? "");
+
+      // M28c: fast rule-based drift check before saving the message.
+      // When a contradiction is found against active world/player facts,
+      // discard the response and auto-retry with a correction injected
+      // into the next prompt (max 2 auto-retries to prevent loops).
+      if (finalText && !interrupted && autoRetryCount < MAX_AUTO_RETRIES) {
+        try {
+          const activeFacts = (await listAllFacts(chatId))
+            .filter((f) => f.status === "active" && (f.category === "world" || f.category === "player"));
+          const detectionFacts: FactForDetection[] = activeFacts.map(prepareFactForDetection);
+          const violations = detectFactViolations(finalText, detectionFacts);
+          const severe = violations.filter((v) => v.severity >= 0.7);
+          if (severe.length > 0) {
+            autoRetryCount++;
+            const correctionLines = severe.map(violationCorrectionText);
+            // Queue corrections into the drift state so the retry picks them up
+            // via consumeDriftCorrections in the next buildApiMessages call.
+            const { mergeCorrections, getDriftState } = await import("../memory/driftDetector");
+            const { setSetting } = await import("../db/repositories/settingsRepo");
+            const driftKey = `drift_state_${chatId}`;
+            const state = await getDriftState(chatId);
+            state.corrections = mergeCorrections(state.corrections, correctionLines);
+            await setSetting(driftKey, JSON.stringify(state));
+            // Clear streaming state and trigger retry — the response is discarded.
+            set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
+            retry();
+            return;
+          }
+        } catch (err) {
+          // Degrade gracefully — save the message anyway.
+        }
+      }
+
       if (finalText) {
         const assistantMessage = await createMessage(chatId, "assistant", finalText, speaker.id, changeSummary);
         // Guard (M11 bug sweep): the user may have switched/closed the chat

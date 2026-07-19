@@ -89,7 +89,7 @@ describe("buildPrompt — composition order & placeholders", () => {
     const system = messages[0];
     expect(system.role).toBe("system");
 
-    const factsIdx = system.content.indexOf("[WORLD FACTS");
+    const factsIdx = system.content.indexOf("[WORLD FACTS — established");
     const loreIdx = system.content.indexOf("keep stands north");
     const summaryIdx = system.content.indexOf("[STORY SO FAR]");
     const descriptionIdx = system.content.indexOf("A wandering mage");
@@ -108,7 +108,7 @@ describe("buildPrompt — composition order & placeholders", () => {
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
     expect(last.content.startsWith("Stay in character, Elara.")).toBe(true);
-    expect(last.content).toContain("[Canon reminder");
+    expect(last.content).toContain("[⛔ HOLY SCRIPTURE");
     expect(last.content).toContain("- (world/Ashford) The capital.");
   });
 
@@ -370,7 +370,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("[Canon reminder");
+    expect(last.content).toContain("[⛔ HOLY SCRIPTURE");
     expect(last.content).toContain("(world/Ashford)");
     expect(last.content).toContain("(player/Kai)");
     expect(last.content).not.toContain("(npc/Innkeeper)");
@@ -384,7 +384,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    expect(last.content).not.toContain("[Canon reminder");
+    expect(last.content).not.toContain("[⛔ HOLY SCRIPTURE");
   });
 
   it("sends the canon reminder as its own trailing system message when the card has no post_history_instructions", () => {
@@ -395,7 +395,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
     expect(last.role).toBe("system");
-    expect(last.content).toContain("[Canon reminder");
+    expect(last.content).toContain("[⛔ HOLY SCRIPTURE");
   });
 
   it("substitutes {{char}}/{{user}} placeholders in the canon reminder", () => {
@@ -415,7 +415,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const input = baseInput({ ledgerFacts: facts });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    const canonBlock = last.content.slice(last.content.indexOf("[Canon reminder"));
+    const canonBlock = last.content.slice(last.content.indexOf("[⛔ HOLY SCRIPTURE"));
     expect(canonBlock.indexOf("(world/Locked)")).toBeLessThan(canonBlock.indexOf("(world/Unlocked)"));
   });
 
@@ -426,8 +426,8 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     const input = baseInput({ ledgerFacts: facts });
     const { messages, report } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    const canonBlock = last.content.slice(last.content.indexOf("[Canon reminder"));
-    expect(canonBlock.length).toBeLessThan(2600);
+    const canonBlock = last.content.slice(last.content.indexOf("[⛔ HOLY SCRIPTURE"));
+    expect(canonBlock.length).toBeLessThan(4200);
     expect(report.sections.canonReminderTokens).toBeGreaterThan(0);
   });
 
@@ -439,7 +439,7 @@ describe("buildPrompt — canon reminder (memory anchoring)", () => {
     });
     const { messages } = buildPrompt(input);
     const last = messages[messages.length - 1];
-    expect(last.content).toContain("[Canon reminder");
+    expect(last.content).toContain("[⛔ HOLY SCRIPTURE");
   });
 
   it("reports canonReminderTokens as 0 when there are no world/player facts", () => {
@@ -652,7 +652,7 @@ describe("canon facts (M25.1)", () => {
     const sys = report.sections.systemText;
     expect(sys).toContain("[STORY CANON");
     expect(sys).toContain("[WORLD FACTS");
-    expect(sys.indexOf("[STORY CANON")).toBeLessThan(sys.indexOf("[WORLD FACTS"));
+    expect(sys.indexOf("[STORY CANON")).toBeLessThan(sys.indexOf("[WORLD FACTS — established"));
     expect(report.sections.canonFactsIncluded).toBe(1);
   });
 

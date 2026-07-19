@@ -213,14 +213,15 @@ async function runDueWork(chatId: string): Promise<void> {
       await runExtraction(chatId, connection, transcript, chat.gameLanguage);
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
 
-      // Drift check (M25.2) — same cadence and connection as extraction.
-      // Canon = hard-locked or auto-promoted (M25.5); with auto-canon the
-      // guard kicks in by itself, no user action needed.
+      // Drift check (M25.2/M28c) — same cadence and connection as extraction.
+      // Now checks ALL active facts, not just canon (M28c): the rule-based
+      // detector already catches obvious violations post-generation, and the
+      // LLM check here catches subtler drift across all facts.
       try {
-        const canon = (await listAllFacts(chatId)).filter(
-          (f) => (f.locked || f.canon) && f.status === "active",
+        const allActive = (await listAllFacts(chatId)).filter(
+          (f) => f.status === "active",
         );
-        await runDriftCheck(chatId, connection, canon, transcript, chat.gameLanguage);
+        await runDriftCheck(chatId, connection, allActive, transcript, chat.gameLanguage);
       } catch (err) {
         console.warn("memoryEngine: drift check scheduling failed for chat", chatId, err);
       }

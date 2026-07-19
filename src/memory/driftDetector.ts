@@ -185,6 +185,124 @@ export interface CanonFactLike {
   fact: string;
 }
 
+// ---- Rule-based contradiction detection (M28c) ---------------------------
+
+/** A fact ready for lightweight rule-based violation scanning — carries
+ *  the original fact text plus pre-parsed "forbidden concepts" extracted
+ *  from negative-constraint phrases (e.g. "nemá krystalická jádra" →
+ *  forbidden = ["krystalická jádra"]). */
+export interface FactForDetection {
+  subject: string;
+  fact: string;
+  /** Lowercased words/phrases the AI's response must NOT contain near the
+   *  subject. Extracted from negation patterns in the fact text. */
+  forbidden: string[];
+}
+
+export interface FactViolation {
+  subject: string;
+  /** The forbidden concept found in the response. */
+  found: string;
+  /** 0–1 estimated severity. */
+  severity: number;
+}
+
+/** Patterns that signal a negation constraint in a fact. The text after the
+ *  negation is the "forbidden concept". Group 1 captures the negated phrase. */
+const NEGATION_PATTERNS: RegExp[] = [
+  /\bnení\s+(.+?)(?:[.;]|$)/i,
+  /\bnejsou\s+(.+?)(?:[.;]|$)/i,
+  /\bnemá\s+(.+?)(?:[.;]|$)/i,
+  /\bnemají\s+(.+?)(?:[.;]|$)/i,
+  /\bnesmí\s+(.+?)(?:[.;]|$)/i,
+  /\bnelze\s+(.+?)(?:[.;]|$)/i,
+  /\bis not\s+(.+?)(?:[.;]|$)/i,
+  /\bare not\s+(.+?)(?:[.;]|$)/i,
+  /\bdoes not\s+(.+?)(?:[.;]|$)/i,
+  /\bdo not\s+(.+?)(?:[.;]|$)/i,
+  /\bmust not\s+(.+?)(?:[.;]|$)/i,
+  /\bcannot\s+(.+?)(?:[.;]|$)/i,
+  /\bhas no\s+(.+?)(?:[.;]|$)/i,
+  /\bhave no\s+(.+?)(?:[.;]|$)/i,
+];
+
+/** Extracts forbidden concepts from a fact's text. For each negation pattern
+ *  match, the captured phrase is normalised (lowercased, trimmed, common
+ *  stopwords stripped) and added to the forbidden list. */
+export function extractForbidden(factText: string): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const pat of NEGATION_PATTERNS) {
+    let m: RegExpExecArray | null;
+    const re = new RegExp(pat.source, "gi");
+    while ((m = re.exec(factText)) !== null) {
+      let phrase = m[1].trim().toLowerCase();
+      // Strip leading stopwords that aren't the actual forbidden concept
+      phrase = phrase.replace(/^(a|an|the|any|nějak[ée]|žádn[ée]|jak[ée]koli|další|více|jin[ée])\s+/i, "");
+      // Take only the meaningful part (up to 60 chars)
+      phrase = phrase.slice(0, 60).replace(/[.,;:!?]$/, "").trim();
+      if (phrase.length >= 2 && !seen.has(phrase)) {
+        seen.add(phrase);
+        result.push(phrase);
+      }
+    }
+  }
+  return result;
+}
+
+/** Prepares a fact for rule-based detection — extracts forbidden concepts
+ *  from the fact text. Facts without negation patterns yield empty forbidden
+ *  lists and are skipped during detection. */
+export function prepareFactForDetection(fact: { subject: string; fact: string }): FactForDetection {
+  return {
+    subject: fact.subject,
+    fact: fact.fact,
+    forbidden: extractForbidden(fact.fact),
+  };
+}
+
+/** Fast, rule-based contradiction detection — no LLM call. Checks whether
+ *  the AI response text contains any forbidden concept from any active fact,
+ *  with extra weight when the concept appears near the fact's subject.
+ *
+ *  Returns violations sorted by severity descending. Empty array = clean. */
+export function detectFactViolations(
+  text: string,
+  facts: FactForDetection[],
+): FactViolation[] {
+  if (!text || facts.length === 0) return [];
+  const textLower = text.toLowerCase();
+  const violations: FactViolation[] = [];
+
+  for (const f of facts) {
+    if (f.forbidden.length === 0) continue;
+    const subjectLower = f.subject.toLowerCase();
+    for (const forbidden of f.forbidden) {
+      if (!textLower.includes(forbidden)) continue;
+
+      // Compute severity: higher when the forbidden concept appears near
+      // the fact's subject (same paragraph/within 300 chars).
+      const subjectIdx = textLower.indexOf(subjectLower);
+      const forbiddenIdx = textLower.indexOf(forbidden);
+      const proximity = subjectIdx >= 0 && forbiddenIdx >= 0
+        ? Math.abs(subjectIdx - forbiddenIdx)
+        : 1000;
+      const nearSubject = proximity < 300;
+      const severity = nearSubject ? 0.9 : 0.6;
+
+      violations.push({ subject: f.subject, found: forbidden, severity });
+      break; // one violation per fact is enough
+    }
+  }
+
+  return violations.sort((a, b) => b.severity - a.severity);
+}
+
+/** Builds a human-readable correction text from a rule-based violation. */
+export function violationCorrectionText(v: FactViolation): string {
+  return `${v.subject}: v odpovědi bylo zmíněno "${v.found}", ale fakta říkají, že to není pravda. Příště to nezmiňuj.`;
+}
+
 function formatCanon(facts: CanonFactLike[]): string {
   return facts.map((f) => `- (${f.subject}) ${f.fact}`).join("\n");
 }
@@ -195,19 +313,20 @@ function formatTranscript(messages: TranscriptChatMessage[]): string {
     .join("\n");
 }
 
-/** One background drift check. Only runs when there are canon (locked)
- * facts; updates the EMA score every time and queues silent corrections for
- * findings above the threshold. Runs on the extraction connection at
- * temperature 0. Never throws. */
+/** One background drift check. Runs on the extraction cadence; compares the
+ * latest scenes against ALL active facts (not just canon — M28c) via a cheap
+ * temperature-0 LLM check. Updates the EMA score every time and queues
+ * silent corrections for findings above the threshold. Runs on the
+ * extraction connection at temperature 0. Never throws. */
 export async function runDriftCheck(
   chatId: string,
   connection: ConnectionConfig,
-  canonFacts: CanonFactLike[],
+  allFacts: CanonFactLike[],
   messages: TranscriptChatMessage[],
   lang?: string,
 ): Promise<void> {
   try {
-    if (canonFacts.length === 0 || messages.length === 0) return;
+    if (allFacts.length === 0 || messages.length === 0) return;
 
     const language = lang ?? "cs";
 
@@ -215,7 +334,7 @@ export async function runDriftCheck(
       { role: "system", content: DRIFT_CHECK_SYSTEM_PROMPT(language) },
       {
         role: "user",
-        content: `CANON:\n${formatCanon(canonFacts)}\n\nLATEST SCENES:\n${formatTranscript(messages)}`,
+        content: `FACTS:\n${formatCanon(allFacts)}\n\nLATEST SCENES:\n${formatTranscript(messages)}`,
       },
     ];
 
