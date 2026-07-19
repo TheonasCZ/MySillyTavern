@@ -136,9 +136,32 @@ export function pickNextSpeaker(
 
 /** Strips a leading `Name:` or `**Name:**` prefix (case/diacritics
  * insensitive, matched via `foldForSearch`), including the optional space
- * after the colon. Leaves occurrences elsewhere in the text untouched. */
+ * after the colon. Leaves occurrences elsewhere in the text untouched.
+ *
+ * Also strips known generic narrator prefixes ("Vypravěč:", "Vypravěč:",
+ * "Narrator:", "GM:", "GM") — these don't need a name match since they're
+ * never valid player/character names in the output. */
 export function stripSpeakerPrefix(text: string, name: string): string {
   const foldedName = foldForSearch(name).trim();
+
+  // Generic narrator/role prefixes to always strip (case/diacritics
+  // insensitive — already handled by foldForSearch but compared here
+  // against pre-folded constants).
+  const narratorPrefixes = ["vypraveč", "vypravěč", "narrator", "gm"];
+  const tryStripNarrator = (pattern: RegExp): string | null => {
+    const m = pattern.exec(text);
+    if (!m) return null;
+    const candidate = foldForSearch(m[1]);
+    if (narratorPrefixes.includes(candidate)) return text.slice(m[0].length);
+    return null;
+  };
+  // Bold **Narrator:**
+  const boldNarr = tryStripNarrator(/^\*\*([^*:\n]+):\*\*[ \t]?/);
+  if (boldNarr !== null) return boldNarr;
+  // Plain Narrator:
+  const plainNarr = tryStripNarrator(/^([^:\n*]+):[ \t]?/);
+  if (plainNarr !== null) return plainNarr;
+
   if (!foldedName) return text;
 
   const tryStrip = (prefixPattern: RegExp): string | null => {
