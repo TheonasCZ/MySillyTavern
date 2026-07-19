@@ -475,15 +475,43 @@ export async function processGameResponse(
     }
   }
 
-  // Tag validation: warn about excessive or malformed tags in next prompt
-  const totalTags = mutations.length + skillChanges.length + levelChanges.length +
-    factionMutations.length + craftMutations.length + craftedMutations.length +
-    conditionMutations.length + modMutations.length + questMutations.length;
+  // Per-category tag budgets — mirrors promptTexts.ts TWO_ROLES_INSTRUCTIONS.
+  // [TIME:...] and [CHECK:...] are exempt (no budget limit).
+  const condModCount = conditionMutations.length + modMutations.length;
+  const invItemCount = mutations.length + itemNoteMutations.length;
+  const skillLevelCount = skillChanges.length + levelChanges.length;
+  const questFactionCount = questMutations.length + factionMutations.length;
+  const craftCount = craftMutations.length + craftedMutations.length;
+
   lastTagErrors = [...staleTargetErrors];
-  if (totalTags > 5) {
-    lastTagErrors.push(`Příliš mnoho tagů v jedné odpovědi (${totalTags}). Maximum je 3–5. Rozděl změny do více odpovědí.`);
+
+  if (condModCount > 3) {
+    lastTagErrors.push(`Příliš mnoho tagů stavů/úprav (${condModCount}). Maximum pro [COND:...] + [MOD:...] jsou 3 tagy.`);
   }
-  if (totalTags === 0 && cleanText.length > 2000) {
+  if (invItemCount > 3) {
+    lastTagErrors.push(`Příliš mnoho tagů inventáře (${invItemCount}). Maximum pro [INV:...] + [ITEM:...] jsou 3 tagy.`);
+  }
+  if (skillLevelCount > 2) {
+    lastTagErrors.push(`Příliš mnoho tagů dovedností/úrovně (${skillLevelCount}). Maximum pro [SKILL:...] + [LEVEL:...] jsou 2 tagy.`);
+  }
+  if (questFactionCount > 2) {
+    lastTagErrors.push(`Příliš mnoho tagů questů/frakcí (${questFactionCount}). Maximum pro [QUEST:...] + [FACTION:...] jsou 2 tagy.`);
+  }
+  if (craftCount > 2) {
+    lastTagErrors.push(`Příliš mnoho tagů craftingu (${craftCount}). Maximum pro [CRAFT:...] + [CRAFTED:...] jsou 2 tagy.`);
+  }
+
+  // Detect narrated time skip without [TIME:...] tag (best-effort — Czech + English patterns).
+  if (timeMutations.length === 0 && cleanText.length > 300) {
+    const timeSkipPattern = /spal|spala|spíš|usnul|usnula|probouzí|probudil|probudila|ráno|další den|následující den|druhý den|o několik hodin|po několika hodinách|večer se|stmívá|svítá|slept|sleeps|falls asleep|fell asleep|wakes? up|woke up|next day|next morning|the following day|several hours|a few hours|hours later|night falls|dawn breaks/i;
+    if (timeSkipPattern.test(cleanText)) {
+      lastTagErrors.push("Tvá odpověď popisuje plynutí času (spánek, ráno, další den...), ale chybí tag [TIME:...]. Kdykoli v příběhu uplyne významný čas, MUSÍŠ použít odpovídající [TIME:...] tag. / Your response describes time passing (sleep, morning, next day...) but is missing a [TIME:...] tag. Whenever significant in-game time passes, you MUST emit a matching [TIME:...] tag.");
+    }
+  }
+
+  const anyTagCount = condModCount + invItemCount + skillLevelCount + questFactionCount + craftCount +
+    timeMutations.length + (checkSkill ? 1 : 0);
+  if (anyTagCount === 0 && cleanText.length > 2000) {
     lastTagErrors.push("Dlouhá odpověď bez tagů. Pokud došlo ke změně inventáře, dovedností, questů nebo frakcí, použij odpovídající tagy.");
   }
 

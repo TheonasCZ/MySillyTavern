@@ -289,7 +289,7 @@ export function calendarDescription(date: CalendarDate, mode: CalendarMode = "fa
   // so it needs to read as an unambiguous, on-language fact it can't miss.
   const period = timeOfDay(hour);
   const time = formatTimeHHMM(hour, minute);
-  const tagNote = `Pro posun času použij tag [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}) — nenabízej hráči noční/tmavé taktiky (schování se ve tmě, noční přesun apod.), pokud právě není noc.`;
+  const tagNote = `KDYKOLI v příběhu uplyne čas (spánek, cestování, čekání, práce trvající hodiny), MUSÍŠ použít [TIME:...] tag. Bez něj se hodiny posunou jen o pár minut a časované stavy nikdy nevyprší. Pro posun: [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}) — nenabízej hráči noční/tmavé taktiky (schování se ve tmě, noční přesun apod.), pokud právě není noc.`;
   return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${time} — ${period})\n${effects}\n${tagNote}`;
 }
 

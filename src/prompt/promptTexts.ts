@@ -147,6 +147,20 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "  [MOD:+popis] (add body modification) / [MOD:-popis] (remove body modification)\n" +
   "  [TIME:+1d] (advance N days) / [TIME:+1h] (advance N hours) / [TIME:+15m] (advance N minutes) — relative only, never write an absolute clock time like [TIME:14:00]\n" +
   "  [CHECK:skill name] (names whatever expertise a roll you're calling for actually needs — see RISK AND COST)\n" +
+  "TIME MANAGEMENT — MANDATORY WHEN TIME PASSES:\n" +
+  "When the narrative includes any significant passage of time — sleeping, traveling,\n" +
+  "waiting for hours, a task that takes time — you MUST emit a [TIME:...] tag with\n" +
+  "the elapsed duration. Without this tag, the game clock only advances by idle drift\n" +
+  "(2–8 minutes per message) and timed conditions will never expire. This tag is\n" +
+  "MANDATORY and does NOT count against the per-category tag budgets below. Examples:\n" +
+  "- Player character goes to sleep → [TIME:+8h]\n" +
+  "- Traveling to the next town → [TIME:+4h]\n" +
+  "- Waiting for someone to arrive → [TIME:+30m]\n" +
+  "Do NOT manually remove timed conditions (those with a listed duration/expiry) just\n" +
+  "because the narration said time passed — the game auto-expires them once enough\n" +
+  "real game time elapses. Manual [COND:-name] is correct for magical/special healing\n" +
+  "(potion, fountain, spell), instant cures, or removing a condition that has no\n" +
+  "duration at all.\n" +
   "RISK AND COST: when the player attempts something risky, dangerous, or of uncertain outcome, don't just " +
   "narrate an automatic clean success — and don't hard-block the action just because the player lacks a " +
   "skill either. Default to letting the attempt succeed, but make success cost something scaled to how " +
@@ -185,7 +199,7 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "lose, or otherwise consume an item they were carrying, you MUST emit a matching [INV:-item] (or " +
   "[INV:-n:item]) tag for that exact item — never let it silently vanish from the prose only. If you also " +
   "want to add new byproduct/loot items in the same response, the removal tag for the consumed item takes " +
-  "priority over adding flavor items — the 3-tag budget below exists for this, so drop an optional add-tag " +
+  "priority over adding flavor items — the tag budgets below exist for this, so drop an optional add-tag " +
   "before you drop a required remove-tag.\n" +
   "IMPORTANT for [SKILL:+name]: keep names broad, reusable categories the player will plausibly invoke " +
   "again (\"Herbalism\", \"Lockpicking\", \"Swordsmanship\"), never a narrow one-off description of the single " +
@@ -211,7 +225,16 @@ export const TWO_ROLES_INSTRUCTIONS = (lang: string) =>
   "actually supports it right now — an ancient, decrepit, isolated threat doesn't imply a garrison of " +
   "backup arriving within seconds; that kind of response-time needs its own in-fiction justification (an " +
   "alarm, a nearby patrol) or should simply not happen yet.\n" +
-  `Write tags as the Mechanic — never mix them into narrator text. Each tag on its own line, using the exact format above. At most 3 tags per response. Always respond in ${lang}.`;
+  "TAG BUDGET — per category, soft limits. [TIME:...] and [CHECK:...] are exempt:\n" +
+  "- [COND:...] + [MOD:...]: at most 3 combined\n" +
+  "- [INV:...] + [ITEM:...]: at most 3 combined\n" +
+  "- [SKILL:...] + [LEVEL:...]: at most 2 combined\n" +
+  "- [QUEST:...] + [FACTION:...]: at most 2 combined\n" +
+  "- [CRAFT:...] + [CRAFTED:...]: at most 2 combined\n" +
+  "If you have more changes than fit, prioritize: (1) [TIME:...] if time passed,\n" +
+  "(2) conditions/mods affecting the current scene, (3) inventory directly\n" +
+  "interacted with, (4) everything else. Write tags as the Mechanic — never mix\n" +
+  `them into narrator text. Each tag on its own line, using the exact format above. Always respond in ${lang}.`;
 
 export const DIALOG_EXAMPLE_HEADER = "[EXAMPLE OF CORRECT RESPONSE]";
 export const DIALOG_EXAMPLE_BODY =
