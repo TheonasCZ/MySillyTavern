@@ -419,6 +419,7 @@ ALTER TABLE ledger_facts ADD COLUMN image_path TEXT;
 
 /// V1: single-purpose column. Superseded by v10 (multi-purpose JSON array).
 const MIGRATION_009: &str = r#"
+ALTER TABLE connections ADD COLUMN purpose TEXT NOT NULL DEFAULT 'chat';
 "#;
 
 /// V2: replaces the single `purpose` column with a JSON array `purposes`
