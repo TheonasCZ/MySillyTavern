@@ -425,6 +425,7 @@ ALTER TABLE connections ADD COLUMN purpose TEXT NOT NULL DEFAULT 'chat';
 /// V2: replaces the single `purpose` column with a JSON array `purposes`
 /// so one connection can serve multiple purposes (e.g. chat + image).
 const MIGRATION_010: &str = r#"
+ALTER TABLE connections ADD COLUMN purposes TEXT NOT NULL DEFAULT '["chat","image","embedding"]';
 UPDATE connections SET purposes = json_array(purpose);
 "#;
 
