@@ -1,6 +1,7 @@
 import { execute, newId, nowIso, query } from "../database";
 import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 import { getPersona, type ConditionEntry, type InventoryEntry, type ModificationEntry, type SkillEntry } from "./personasRepo";
+import { copyRecipesToChat } from "./craftingRepo";
 
 export interface Chat {
   id: string;
@@ -9,6 +10,7 @@ export interface Chat {
   personaId: string | null;
   connectionId: string | null;
   extractionConnectionId: string | null;
+  tagExtractionConnectionId: string | null;
   embeddingConnectionId: string | null;
   imageConnectionId: string | null;
   lastExtractedMessageId: string | null;
@@ -49,11 +51,18 @@ export interface ChatDraft {
    * (`chats.character_id`) and a `chat_members` row is inserted per id. */
   characterIds: string[];
   connectionId: string | null;
+  /** Optional secondary connection for embeddings/semantic retrieval. */
+  embeddingConnectionId?: string | null;
+  /** Optional secondary connection for illustration generation. */
+  imageConnectionId?: string | null;
   personaId: string | null;
   /** Language the AI writes in (e.g. 'cs', 'en'). Defaults to 'cs'. (M28) */
   gameLanguage?: string;
   /** Hardcore mode at creation time — defaults to false. */
   hardcoreMode?: boolean;
+  /** Optional connection for AI tag extraction (Gemini Flash etc.) —
+   * separates game-mechanics extraction from storytelling. */
+  tagExtractionConnectionId?: string | null;
 }
 
 interface ChatRow {
@@ -63,6 +72,7 @@ interface ChatRow {
   persona_id: string | null;
   connection_id: string | null;
   extraction_connection_id: string | null;
+  tag_extraction_connection_id: string | null;
   embedding_connection_id: string | null;
   image_connection_id: string | null;
   last_extracted_message_id: string | null;
@@ -121,6 +131,7 @@ function toChat(row: ChatRow): Chat {
     personaId: row.persona_id,
     connectionId: row.connection_id,
     extractionConnectionId: row.extraction_connection_id,
+    tagExtractionConnectionId: row.tag_extraction_connection_id,
     embeddingConnectionId: row.embedding_connection_id,
     imageConnectionId: row.image_connection_id,
     lastExtractedMessageId: row.last_extracted_message_id,
@@ -175,14 +186,17 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
   }
 
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, tag_extraction_connection_id, embedding_connection_id, image_connection_id, preset_id, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, NULL, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)`,
     [
       id,
       draft.title,
       primaryCharacterId,
       draft.personaId,
       draft.connectionId,
+      draft.tagExtractionConnectionId ?? null,
+      draft.embeddingConnectionId ?? null,
+      draft.imageConnectionId ?? null,
       draft.gameLanguage ?? "cs",
       draft.hardcoreMode ? 1 : 0,
       JSON.stringify(inventory),
@@ -201,6 +215,11 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
       [newId(), id, draft.characterIds[i], i, now],
     );
   }
+  // Copy persona crafting recipes into the chat at creation time —
+  // same snapshot pattern as inventory/skills/conditions above.
+  if (draft.personaId) {
+    await copyRecipesToChat(id, draft.personaId).catch(() => {});
+  }
   const chat: Chat = {
     id,
     title: draft.title,
@@ -208,6 +227,9 @@ export async function createChat(draft: ChatDraft): Promise<Chat> {
     personaId: draft.personaId,
     connectionId: draft.connectionId,
     extractionConnectionId: null,
+    tagExtractionConnectionId: null,
+    embeddingConnectionId: draft.embeddingConnectionId ?? null,
+    imageConnectionId: draft.imageConnectionId ?? null,
     lastExtractedMessageId: null,
     lastSummarizedMessageId: null,
     presetId: null,
@@ -454,6 +476,45 @@ export async function setExtractionConnection(
   journalEntityWrite("chat", { id, extraction_connection_id: extractionConnectionId, updated_at: now });
 }
 
+export async function setTagExtractionConnection(
+  id: string,
+  tagExtractionConnectionId: string | null,
+): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET tag_extraction_connection_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    tagExtractionConnectionId,
+    now,
+  ]);
+  journalEntityWrite("chat", { id, tag_extraction_connection_id: tagExtractionConnectionId, updated_at: now });
+}
+
+export async function setChatEmbeddingConnection(
+  id: string,
+  embeddingConnectionId: string | null,
+): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET embedding_connection_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    embeddingConnectionId,
+    now,
+  ]);
+  journalEntityWrite("chat", { id, embedding_connection_id: embeddingConnectionId, updated_at: now });
+}
+
+export async function setChatImageConnection(
+  id: string,
+  imageConnectionId: string | null,
+): Promise<void> {
+  const now = nowIso();
+  await execute("UPDATE chats SET image_connection_id = $2, updated_at = $3 WHERE id = $1", [
+    id,
+    imageConnectionId,
+    now,
+  ]);
+  journalEntityWrite("chat", { id, image_connection_id: imageConnectionId, updated_at: now });
+}
+
 /** Advances the "already extracted up to" marker — used by the memory
  * engine after a successful extraction pass (plan §6.3). Does not bump
  * `updated_at`: this is background bookkeeping, not a user-visible chat
@@ -513,7 +574,7 @@ export async function branchChat(
   const now = nowIso();
   const title = `${source.title} ${titleSuffix}`.trim();
   await execute(
-    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, preset_id, auto_reply, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
+    `INSERT INTO chats (id, title, character_id, persona_id, connection_id, extraction_connection_id, tag_extraction_connection_id, preset_id, auto_reply, game_language, hardcore_mode, inventory, skills, conditions, xp, level, modifications, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17)`,
     [
       id,
@@ -522,6 +583,7 @@ export async function branchChat(
       source.personaId,
       source.connectionId,
       source.extractionConnectionId,
+      source.tagExtractionConnectionId,
       source.presetId,
       source.autoReply ? 1 : 0,
       source.gameLanguage ?? "cs",

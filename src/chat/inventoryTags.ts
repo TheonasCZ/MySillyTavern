@@ -123,7 +123,7 @@ export interface FactionMutation {
   showOnly: boolean;
 }
 
-interface ParsedTags {
+export interface ParsedTags {
   cleanText: string;
   mutations: InvMutation[];
   skillChanges: SkillMutation[];
@@ -346,6 +346,12 @@ export function parseGameTags(text: string): ParsedTags {
     checkSkill = skill.trim();
     return "";
   });
+
+  // Strip any remaining tag-like patterns — covers:
+  // - Unknown tag prefixes the model hallucinated
+  // - Unclosed tags from truncated responses (e.g. "[INV:+sword")
+  // - Tags with extra whitespace that didn't match stricter patterns
+  cleanText = cleanText.replace(/\[(?:INV|SKILL|LEVEL|COND|MOD|FACTION|CRAFT|CRAFTED|QUEST|TIME|GAMEOVER|CHECK|ITEM)\s*:/gi, "");
 
   return { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations };
 }

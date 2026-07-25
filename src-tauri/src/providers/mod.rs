@@ -9,6 +9,8 @@ pub mod image_gen;
 pub mod openai;
 pub mod sse;
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -125,7 +127,11 @@ pub async fn list_models(
     base_url: Option<&str>,
     api_key: &str,
 ) -> Result<Vec<String>, ProviderError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| ProviderError::Http(e))?;
 
     // If the base URL looks like a localhost address, try the Ollama API
     // first — it's a best-effort fallback so a failure silently drops
@@ -274,6 +280,9 @@ pub async fn complete(
     messages: &[ChatMessage],
 ) -> Result<String, ProviderError> {
     let (tx, mut rx) = mpsc::unbounded_channel::<StreamEvent>();
+    // CancellationToken is deliberately never cancelled here — the caller
+    // holds `rx` and drops it when done, which causes the spawned task's
+    // `tx` send to fail and the inner `stream_chat` to naturally exit.
     let cancel = CancellationToken::new();
 
     let conn = connection.clone();

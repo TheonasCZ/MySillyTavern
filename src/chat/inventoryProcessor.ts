@@ -17,8 +17,8 @@ import { createFaction, listFactions, updateReputation } from "../db/repositorie
 import { addQuestNote, createQuest, getQuestByName, updateQuestStatus } from "../db/repositories/questsRepo";
 import { advanceAndPersistCalendar } from "../memory/memoryEngine";
 import { advanceAndPersistWeather } from "../memory/weather";
-import { createRecipe, getRecipeByResult, updateRecipePerks } from "../db/repositories/craftingRepo";
-import { parseGameTags } from "./inventoryTags";
+import { createRecipe, getRecipeByResult, updateRecipePerks, createChatRecipe, getChatRecipeByResult, updateChatRecipePerks } from "../db/repositories/craftingRepo";
+import { parseGameTags, type ParsedTags, type InvMutation, type SkillMutation, type LevelMutation, type FactionMutation, type CraftMutation, type CraftedMutation, type ConditionMutation, type ModMutation, type QuestMutation, type TimeMutation, type ItemNoteMutation } from "./inventoryTags";
 import { setGameOverState } from "./gameOver";
 import { setPendingCheckSkill } from "./pendingCheck";
 import { resolveDiceNotation } from "./diceCommand";
@@ -26,6 +26,9 @@ import { serializeChangeSummary, type ChangeSummaryEntry } from "./changeSummary
 import { namesMatch } from "./fuzzyMatch";
 import { parseDurationMinutes } from "./duration";
 import { advanceMinutes, formatCalendarDate, toAbsoluteMinutes, type CalendarDate } from "../memory/calendar";
+import { invoke } from "@tauri-apps/api/core";
+import type { ConnectionDto } from "../providers/dto";
+import { appendLog } from "../logging";
 
 /** Tag validation feedback — stored across turns so the next prompt can
  *  warn the AI about malformed tags from the previous response. */
@@ -47,18 +50,239 @@ function idleDriftMinutes(): number {
   return 2 + Math.floor(Math.random() * 7); // 2–8 minutes
 }
 
+/** What skills, items, and recipes are relevant to the current scene —
+ *  extracted by the AI alongside game-mechanical changes. Used to filter
+ *  what state context the storyteller receives in the next prompt. */
+export interface RelevantContext {
+  skills: string[];
+  itemKeywords: string[];
+  recipeKeywords: string[];
+}
+
+/** JSON shape returned by the Rust `extract_game_tags` command. */
+interface AiExtractionResult {
+  time_elapsed_minutes: number | null;
+  inventory: Array<{ op: "add" | "remove"; item: string; qty: number }>;
+  skills: Array<{ name: string; delta: number }>;
+  levels: { xp_delta: number; level_delta: number } | null;
+  conditions: Array<{ op: "add" | "remove"; name: string; description?: string | null; duration?: string | null }>;
+  modifications: Array<{ op: "add" | "remove"; name: string }>;
+  factions: Array<{ name: string; delta: number }>;
+  crafting: Array<{ result_item: string; ingredients: string[] }>;
+  crafted: Array<{ result_item: string; perks: string[] }>;
+  quests: Array<{ op: "start" | "complete" | "fail" | "note"; name: string; note?: string | null }>;
+  game_over: string | null;
+  check_skill: string | null;
+  relevant_context?: { skills?: string[]; item_keywords?: string[]; recipe_keywords?: string[] };
+}
+
+/** Module-level storage for the last AI-extracted relevant context.
+ *  Read by the prompt builder to filter state context for the next turn. */
+let lastRelevantContext: RelevantContext | null = null;
+export function getLastRelevantContext(): RelevantContext | null { return lastRelevantContext; }
+export function clearRelevantContext(): void { lastRelevantContext = null; }
+
+/** Calls the tag-extraction model (Gemini Flash etc.) to extract structured
+ *  game-state changes from the narrator's prose. Returns ParsedTags on
+ *  success, or null on any failure — the caller should fall back to regex. */
+export interface ExtractionContext {
+  skills: Array<{ name: string; level: number }>;
+  inventory: Array<{ item: string; qty: number }>;
+  conditions: Array<{ name: string }>;
+  modifications: Array<{ name: string }>;
+  xp: number;
+  level: number;
+  progression: string;
+  hardcoreMode: boolean;
+  /** Current faction reputations (name → score). */
+  factions?: Array<{ name: string; reputation: number }>;
+  /** Known crafting recipes. */
+  recipes?: Array<{ resultItem: string; ingredients: string[] }>;
+  /** Active quests. */
+  quests?: Array<{ name: string; status: string }>;
+  /** Current in-game date/time description. */
+  calendarDescription?: string;
+  /** What the player just wrote (last user message). */
+  playerMessage?: string;
+}
+
+export async function extractTagsWithAI(
+  connection: ConnectionDto,
+  responseText: string,
+  context: ExtractionContext | null,
+): Promise<ParsedTags | null> {
+  try {
+    // Build state context so the extractor knows what the character
+    // already has — without this it can't distinguish "used an existing
+    // skill" from "learned a new skill", or "drew his own sword" from
+    // "found a sword".
+    let stateContext = "";
+    if (context) {
+      const parts: string[] = [];
+      if (context.skills?.length) {
+        parts.push(`Current skills: ${context.skills.map((s) => `${s.name} lv.${s.level}`).join(", ")}`);
+      }
+      if (context.inventory?.length) {
+        parts.push(`Current inventory: ${context.inventory.map((i) => `${i.item}${i.qty > 1 ? ` x${i.qty}` : ""}`).join(", ")}`);
+      }
+      if (context.conditions?.length) {
+        parts.push(`Active conditions: ${context.conditions.map((c) => c.name).join(", ")}`);
+      }
+      if (context.modifications?.length) {
+        parts.push(`Body modifications: ${context.modifications.map((m) => m.name).join(", ")}`);
+      }
+      parts.push(`Progression mode: ${context.progression}`);
+      if (context.progression === "level") {
+        parts.push(`Current level: ${context.level}, XP: ${context.xp}`);
+      }
+      if (context.hardcoreMode) {
+        parts.push("Hardcore mode: ON — character death is permanent.");
+      }
+      if (context.factions?.length) {
+        parts.push(`Faction reputations: ${context.factions.map((f) => `${f.name} (${f.reputation > 0 ? "+" : ""}${f.reputation})`).join(", ")}`);
+      }
+      if (context.recipes?.length) {
+        parts.push(`Known recipes: ${context.recipes.map((r) => r.resultItem).join(", ")}`);
+      }
+      if (context.quests?.length) {
+        parts.push(`Active quests: ${context.quests.map((q) => `${q.name} [${q.status}]`).join(", ")}`);
+      }
+      if (context.calendarDescription) {
+        parts.push(`Current in-game time: ${context.calendarDescription}`);
+      }
+      if (context.playerMessage) {
+        parts.push(`Player's last message: "${context.playerMessage}"`);
+      }
+      stateContext = parts.join("\n");
+    }
+
+    const raw = await invoke<string>("extract_game_tags", {
+      connection,
+      responseText,
+      stateContext: stateContext || null,
+    });
+    const ai: AiExtractionResult = JSON.parse(raw);
+
+    // Log the extraction result to app.log for debugging — truncated to
+    // avoid flooding the log with huge LLM responses.
+    const summary = JSON.stringify({
+      time: ai.time_elapsed_minutes,
+      inv: ai.inventory?.length ?? 0,
+      skills: ai.skills?.length ?? 0,
+      cond: ai.conditions?.length ?? 0,
+      ctx_skills: ai.relevant_context?.skills?.length ?? 0,
+    });
+    appendLog(`${new Date().toISOString()} [info] [extractor] ${summary}`);
+
+    // Store the scene-relevance context for the next prompt build —
+    // tells the frontend which skills/items/recipes to surface.
+    const rc = ai.relevant_context;
+    lastRelevantContext = rc
+      ? {
+          skills: rc.skills || [],
+          itemKeywords: rc.item_keywords || [],
+          recipeKeywords: rc.recipe_keywords || [],
+        }
+      : null;
+
+    // Sanity-check extractor mutations against reasonable bounds.
+    // The extractor may hallucinate absurd values (qty=9999, delta=500).
+    const MAX_ITEM_QTY = 99;
+    const MAX_SKILL_DELTA = 3;
+
+    const invMutations: InvMutation[] = (ai.inventory || [])
+      .filter((i) => i.item && i.op)
+      .map((i) => ({
+        op: i.op,
+        item: String(i.item).trim(),
+        qty: Math.max(1, Math.min(MAX_ITEM_QTY, i.qty || 1)),
+      }));
+    const invNotes: ItemNoteMutation[] = [];
+    const skillChanges: SkillMutation[] = (ai.skills || [])
+      .filter((s) => s.name)
+      .map((s) => ({
+        name: String(s.name).trim(),
+        delta: Math.max(-MAX_SKILL_DELTA, Math.min(MAX_SKILL_DELTA, s.delta || 0)),
+        absolute: null,
+      }));
+    const levelChanges: LevelMutation = ai.levels
+      ? { xpDelta: ai.levels.xp_delta || 0, levelDelta: ai.levels.level_delta || 0 }
+      : { xpDelta: 0, levelDelta: 0 };
+    const factionMutations: FactionMutation[] = (ai.factions || []).map((f) => ({
+      name: f.name,
+      delta: f.delta,
+      showOnly: false,
+    }));
+    const craftMutations: CraftMutation[] = (ai.crafting || []).map((c) => ({
+      resultItem: c.result_item,
+      ingredients: c.ingredients || [],
+    }));
+    const craftedMutations: CraftedMutation[] = (ai.crafted || []).map((c) => ({
+      resultItem: c.result_item,
+      perks: c.perks || [],
+    }));
+    const conditionMutations: ConditionMutation[] = (ai.conditions || []).map((c) => ({
+      op: c.op,
+      name: c.name,
+      description: c.description ?? undefined,
+      duration: c.duration ?? undefined,
+    }));
+    const modMutations: ModMutation[] = (ai.modifications || []).map((m) => ({
+      op: m.op,
+      name: m.name,
+    }));
+    const questMutations: QuestMutation[] = (ai.quests || []).map((q) => ({
+      op: q.op,
+      name: q.name,
+      note: q.note ?? undefined,
+    }));
+    const timeMutations: TimeMutation[] =
+      ai.time_elapsed_minutes != null && ai.time_elapsed_minutes > 0
+        ? [{ minutes: ai.time_elapsed_minutes }]
+        : [];
+    const gameOverReason: string | null = ai.game_over || null;
+    const checkSkill: string | null = ai.check_skill || null;
+
+    return {
+      // Strip any inline tags the model may have written anyway (habit),
+      // but don't use them for mutations — the AI extraction result is the
+      // source of truth. The cleaned text is what the player sees.
+      cleanText: parseGameTags(responseText).cleanText,
+      mutations: invMutations,
+      skillChanges,
+      levelChanges: [levelChanges],
+      factionMutations,
+      craftMutations,
+      craftedMutations,
+      conditionMutations,
+      modMutations,
+      questMutations,
+      timeMutations,
+      gameOverReason,
+      checkSkill,
+      itemNoteMutations: invNotes,
+    };
+  } catch (err) {
+    appendLog(`${new Date().toISOString()} [warn] [extractor] failed: ${String(err).slice(0, 200)}`);
+    return null;
+  }
+}
+
 /** Parses game tags (inventory + skill + level + faction) from the AI response,
  *  updates the persona in DB, and returns the cleaned text plus a display-only
- *  summary of what changed. */
+ *  summary of what changed. When `aiTags` is provided (from a tag-extraction
+ *  model), regex parsing is skipped entirely. */
 export async function processGameResponse(
   persona: Persona | null,
   text: string,
   chatId?: string,
+  aiTags: ParsedTags | null = null,
 ): Promise<GameResponseResult> {
-  if (!persona) return { cleanText: text, changeSummary: null };
-  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations } = parseGameTags(text);
+  const parsed = aiTags ?? parseGameTags(text);
+  const { cleanText, mutations, skillChanges, levelChanges, factionMutations, craftMutations, craftedMutations, conditionMutations, modMutations, questMutations, timeMutations, gameOverReason, checkSkill, itemNoteMutations } = parsed;
 
-  // Advance the in-game clock on every reply, tag or not: an explicit
+  // Advance the in-game clock on every reply, tag or not — runs even without
+  // a persona (the clock is chat-scoped, not persona-scoped). An explicit
   // [TIME:+Nd/h/m] tag drives a real narrative jump (and re-rolls weather —
   // see weather.ts), but if the model doesn't write one we still nudge the
   // clock by a small idle-drift amount so a long scene without tags doesn't
@@ -365,10 +589,21 @@ export async function processGameResponse(
   if (totalLevelDelta > 0) summaryParts.push({ text: `⭐ Úroveň +${totalLevelDelta}`, kind: "add" });
 
   // Apply faction mutations
-  for (const fm of factionMutations) {
-    if (fm.showOnly) continue; // show-only tags are no-ops at processing time
-    try {
-      const existing = await listFactions(persona.id);
+  //
+  // NOTE: Factions are persona-scoped (the `factions` table is keyed by
+  // `persona_id`).  Unlike inventory, skills, conditions, and recipes —
+  // which all have per-chat tables — there is no `chat_factions` table
+  // yet.  If per-chat faction isolation is desired in the future, a
+  // `chat_faction_reputations` table (chat_id, faction_name, reputation)
+  // must be created and this block should prefer chatId when available.
+  // For now, faction mutations always apply to the persona.
+  //
+  // (persona-scoped — requires persona)
+  if (persona) {
+    for (const fm of factionMutations) {
+      if (fm.showOnly) continue; // show-only tags are no-ops at processing time
+      try {
+        const existing = await listFactions(persona.id);
       const match = existing.find(
         (f) => f.factionName.toLowerCase() === fm.name.toLowerCase(),
       );
@@ -378,16 +613,22 @@ export async function processGameResponse(
         await createFaction(persona.id, fm.name, fm.delta);
       }
       summaryParts.push({ text: `🤝 ${fm.name} ${fm.delta > 0 ? "+" : ""}${fm.delta}`, kind: fm.delta > 0 ? "add" : "remove" });
-    } catch {
-      // Non-critical
+      } catch {
+        // Non-critical
+      }
     }
   }
 
   // Apply craft mutations: [CRAFT:result:ingredient1+ingredient2]
+  if (persona || chatId) {
   for (const cm of craftMutations) {
     try {
       // Create the recipe in DB (or skip if already known)
-      const existing = await getRecipeByResult(persona.id, cm.resultItem);
+      const existing = chatId
+        ? await getChatRecipeByResult(chatId, cm.resultItem)
+        : persona
+          ? await getRecipeByResult(persona.id, cm.resultItem)
+          : null;
       if (!existing) {
         // Determine tier based on skill level (AI may set later, default 0)
         const relatedSkill = skills.find(
@@ -402,13 +643,23 @@ export async function processGameResponse(
         else if (!inferredSkill && cm.resultItem.toLowerCase().includes("jed")) inferredSkill = "Alchymie";
         else if (!inferredSkill) inferredSkill = "Kovářství";
 
-        await createRecipe({
-          personaId: persona.id,
-          resultItem: cm.resultItem,
-          ingredients: cm.ingredients,
-          skillName: inferredSkill,
-          tier: 0,
-        });
+        if (chatId) {
+          await createChatRecipe({
+            chatId,
+            resultItem: cm.resultItem,
+            ingredients: cm.ingredients,
+            skillName: inferredSkill,
+            tier: 0,
+          });
+        } else if (persona) {
+          await createRecipe({
+            personaId: persona.id,
+            resultItem: cm.resultItem,
+            ingredients: cm.ingredients,
+            skillName: inferredSkill,
+            tier: 0,
+          });
+        }
       }
       // Consume ingredients from inventory (always consumed, even on failure)
       for (const ing of cm.ingredients) {
@@ -422,8 +673,10 @@ export async function processGameResponse(
       // Non-critical
     }
   }
+  } // if (persona) — craft mutations
 
   // Apply crafted mutations: [CRAFTED:result] or [CRAFTED:result:perk1+perk2]
+  if (persona || chatId) {
   for (const cdm of craftedMutations) {
     try {
       // Add the crafted item to inventory
@@ -437,14 +690,22 @@ export async function processGameResponse(
       }
       summaryParts.push({ text: `🔨 Vyrobeno: ${cdm.resultItem}`, kind: "add" });
       // Update the recipe's perks
-      const recipe = await getRecipeByResult(persona.id, cdm.resultItem);
-      if (recipe) {
-        await updateRecipePerks(recipe.id, cdm.perks);
+      if (chatId) {
+        const recipe = await getChatRecipeByResult(chatId, cdm.resultItem);
+        if (recipe) {
+          await updateChatRecipePerks(recipe.id, cdm.perks);
+        }
+      } else if (persona) {
+        const recipe = await getRecipeByResult(persona.id, cdm.resultItem);
+        if (recipe) {
+          await updateRecipePerks(recipe.id, cdm.perks);
+        }
       }
     } catch {
       // Non-critical
     }
   }
+  } // if (persona || chatId) — crafted mutations
 
   // Persona is a template — never update during gameplay. Live state lives on
   // the chat (inventory/skills/conditions/xp/level/mods all chat-scoped).
@@ -475,8 +736,13 @@ export async function processGameResponse(
     }
   }
 
+  const isAiMode = aiTags !== null;
+
   // Per-category tag budgets — mirrors promptTexts.ts TWO_ROLES_INSTRUCTIONS.
   // [TIME:...] and [CHECK:...] are exempt (no budget limit).
+  // In AI extraction mode, the storyteller doesn't write tags — only
+  // diagnostic feedback (staleTargetErrors) is relevant. Budget warnings
+  // would scold the storyteller for something it's not supposed to do.
   const condModCount = conditionMutations.length + modMutations.length;
   const invItemCount = mutations.length + itemNoteMutations.length;
   const skillLevelCount = skillChanges.length + levelChanges.length;
@@ -485,34 +751,47 @@ export async function processGameResponse(
 
   lastTagErrors = [...staleTargetErrors];
 
-  if (condModCount > 3) {
-    lastTagErrors.push(`Příliš mnoho tagů stavů/úprav (${condModCount}). Maximum pro [COND:...] + [MOD:...] jsou 3 tagy.`);
-  }
-  if (invItemCount > 3) {
-    lastTagErrors.push(`Příliš mnoho tagů inventáře (${invItemCount}). Maximum pro [INV:...] + [ITEM:...] jsou 3 tagy.`);
-  }
-  if (skillLevelCount > 2) {
-    lastTagErrors.push(`Příliš mnoho tagů dovedností/úrovně (${skillLevelCount}). Maximum pro [SKILL:...] + [LEVEL:...] jsou 2 tagy.`);
-  }
-  if (questFactionCount > 2) {
-    lastTagErrors.push(`Příliš mnoho tagů questů/frakcí (${questFactionCount}). Maximum pro [QUEST:...] + [FACTION:...] jsou 2 tagy.`);
-  }
-  if (craftCount > 2) {
-    lastTagErrors.push(`Příliš mnoho tagů craftingu (${craftCount}). Maximum pro [CRAFT:...] + [CRAFTED:...] jsou 2 tagy.`);
-  }
-
-  // Detect narrated time skip without [TIME:...] tag (best-effort — Czech + English patterns).
-  if (timeMutations.length === 0 && cleanText.length > 300) {
-    const timeSkipPattern = /spal|spala|spíš|usnul|usnula|probouzí|probudil|probudila|ráno|další den|následující den|druhý den|o několik hodin|po několika hodinách|večer se|stmívá|svítá|slept|sleeps|falls asleep|fell asleep|wakes? up|woke up|next day|next morning|the following day|several hours|a few hours|hours later|night falls|dawn breaks/i;
-    if (timeSkipPattern.test(cleanText)) {
-      lastTagErrors.push("Tvá odpověď popisuje plynutí času (spánek, ráno, další den...), ale chybí tag [TIME:...]. Kdykoli v příběhu uplyne významný čas, MUSÍŠ použít odpovídající [TIME:...] tag. / Your response describes time passing (sleep, morning, next day...) but is missing a [TIME:...] tag. Whenever significant in-game time passes, you MUST emit a matching [TIME:...] tag.");
+  if (!isAiMode) {
+    if (condModCount > 3) {
+      lastTagErrors.push(`Příliš mnoho tagů stavů/úprav (${condModCount}). Maximum pro [COND:...] + [MOD:...] jsou 3 tagy.`);
+    }
+    if (invItemCount > 3) {
+      lastTagErrors.push(`Příliš mnoho tagů inventáře (${invItemCount}). Maximum pro [INV:...] + [ITEM:...] jsou 3 tagy.`);
+    }
+    if (skillLevelCount > 2) {
+      lastTagErrors.push(`Příliš mnoho tagů dovedností/úrovně (${skillLevelCount}). Maximum pro [SKILL:...] + [LEVEL:...] jsou 2 tagy.`);
+    }
+    if (questFactionCount > 2) {
+      lastTagErrors.push(`Příliš mnoho tagů questů/frakcí (${questFactionCount}). Maximum pro [QUEST:...] + [FACTION:...] jsou 2 tagy.`);
+    }
+    if (craftCount > 2) {
+      lastTagErrors.push(`Příliš mnoho tagů craftingu (${craftCount}). Maximum pro [CRAFT:...] + [CRAFTED:...] jsou 2 tagy.`);
     }
   }
 
-  const anyTagCount = condModCount + invItemCount + skillLevelCount + questFactionCount + craftCount +
-    timeMutations.length + (checkSkill ? 1 : 0);
-  if (anyTagCount === 0 && cleanText.length > 2000) {
-    lastTagErrors.push("Dlouhá odpověď bez tagů. Pokud došlo ke změně inventáře, dovedností, questů nebo frakcí, použij odpovídající tagy.");
+  // Detect narrated time skip — the extractor may have missed it. In AI
+  // mode, we log a gentle note (not a scolding) and the clock still
+  // advances via idleDriftMinutes (2-8 min). For explicit time-skip
+  // phrases (sleep, next day), we log a diagnostic so the user can see
+  // the extractor missed a big jump.
+  if (timeMutations.length === 0 && cleanText.length > 300) {
+    const timeSkipPattern = /spal|spala|spíš|usnul|usnula|probouzí|probudil|probudila|ráno|další den|následující den|druhý den|o několik hodin|po několika hodinách|večer se|stmívá|svítá|slept|sleeps|falls asleep|fell asleep|wakes? up|woke up|next day|next morning|the following day|several hours|a few hours|hours later|night falls|dawn breaks/i;
+    if (timeSkipPattern.test(cleanText)) {
+      if (isAiMode) {
+        lastTagErrors.push("Extraktor AI nezaznamenal plynutí času, přestože text popisuje spánek/posun času. Hodiny se posunou jen o pár minut.");
+      } else {
+        lastTagErrors.push("Tvá odpověď popisuje plynutí času (spánek, ráno, další den...), ale chybí tag [TIME:...]. Kdykoli v příběhu uplyne významný čas, MUSÍŠ použít odpovídající [TIME:...] tag. / Your response describes time passing (sleep, morning, next day...) but is missing a [TIME:...] tag. Whenever significant in-game time passes, you MUST emit a matching [TIME:...] tag.");
+      }
+    }
+  }
+
+  // "No tags in long response" — only relevant in regex mode.
+  if (!isAiMode) {
+    const anyTagCount = condModCount + invItemCount + skillLevelCount + questFactionCount + craftCount +
+      timeMutations.length + (checkSkill ? 1 : 0);
+    if (anyTagCount === 0 && cleanText.length > 2000) {
+      lastTagErrors.push("Dlouhá odpověď bez tagů. Pokud došlo ke změně inventáře, dovedností, questů nebo frakcí, použij odpovídající tagy.");
+    }
   }
 
   return { cleanText, changeSummary: serializeChangeSummary(summaryParts) };

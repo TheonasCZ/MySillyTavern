@@ -15,12 +15,20 @@ use crate::providers::{self, ChatMessage, ConnectionDto, StreamEvent};
 pub struct StreamRegistry(Mutex<HashMap<String, CancellationToken>>);
 
 impl StreamRegistry {
-    fn insert(&self, request_id: String, token: CancellationToken) {
-        self.0.lock().unwrap().insert(request_id, token);
+    fn insert(&self, request_id: String, token: CancellationToken) -> Result<(), String> {
+        self.0
+            .lock()
+            .map_err(|e| format!("lock poisoned: {e}"))?
+            .insert(request_id, token);
+        Ok(())
     }
 
-    fn remove(&self, request_id: &str) -> Option<CancellationToken> {
-        self.0.lock().unwrap().remove(request_id)
+    fn remove(&self, request_id: &str) -> Result<Option<CancellationToken>, String> {
+        Ok(self
+            .0
+            .lock()
+            .map_err(|e| format!("lock poisoned: {e}"))?
+            .remove(request_id))
     }
 }
 
@@ -123,7 +131,7 @@ pub async fn chat_stream(
     };
 
     let cancel = CancellationToken::new();
-    registry.insert(request_id.clone(), cancel.clone());
+    registry.insert(request_id.clone(), cancel.clone())?;
 
     let _ = on_event.send(StreamEvent::Start);
 
@@ -154,7 +162,7 @@ pub async fn chat_stream(
     // a synthetic error. Otherwise, if we never saw a terminal event, the
     // stream ended abnormally (bug in a provider adapter) and the frontend
     // would otherwise spin forever waiting for one.
-    let was_aborted = registry.remove(&request_id).is_none();
+    let was_aborted = registry.remove(&request_id)?.is_none();
     if !saw_terminal && !was_aborted {
         let _ = on_event.send(StreamEvent::Error {
             message: "Stream skončil bez odpovědi.".to_string(),
@@ -169,7 +177,7 @@ pub async fn chat_stream(
 /// finished or never existed.
 #[tauri::command]
 pub fn chat_abort(request_id: String, registry: State<'_, StreamRegistry>) -> Result<(), String> {
-    if let Some(token) = registry.remove(&request_id) {
+    if let Some(token) = registry.remove(&request_id)? {
         token.cancel();
     }
     Ok(())

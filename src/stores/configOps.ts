@@ -19,7 +19,7 @@ import { buildDirectorNote, getDirectorSettings } from "../chat/director";
 import { canEmbed, retrieveSemanticContext, type RetrievedMemoryDetail } from "../memory/embeddingsEngine";
 import { findRelevantReplies } from "../prompt/replyExamples";
 import { consumeDriftCorrections } from "../memory/driftDetector";
-import { getLastTagErrors, clearTagErrors } from "../chat/inventoryProcessor";
+import { getLastTagErrors, clearTagErrors, getLastRelevantContext, clearRelevantContext } from "../chat/inventoryProcessor";
 import { buildPrompt, DEFAULT_VERBATIM_WINDOW, type PromptReport } from "../prompt/promptBuilder";
 import { calendarDescription } from "../memory/calendar";
 import { getWeather, toGameTimeSeason } from "../memory/weather";
@@ -39,9 +39,9 @@ import type { Setter } from "./chatStoreTypes";
  *  flow, hence the empty catch (an empty catch is deliberate here, not a
  *  logging gap: a usage_log write failure has nothing useful to report and
  *  an M11-style console.error would spam the console on every message). */
-export function logChatUsage(connectionId: string | null, apiMessages: ChatMessage[], outputText: string) {
+export function logChatUsage(connectionId: string | null, apiMessages: ChatMessage[], outputText: string, chatId?: string | null) {
   const inputTokens = apiMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-  void logUsage("chat", connectionId, inputTokens, estimateTokens(outputText)).catch(() => {});
+  void logUsage("chat", connectionId, inputTokens, estimateTokens(outputText), chatId).catch(() => {});
 }
 
 /** The chat's own persona if it has one selected, otherwise the app-wide
@@ -263,6 +263,12 @@ export async function buildApiMessages(
   const tagCorrections = getLastTagErrors();
   clearTagErrors();
 
+  // Scene-relevance context from the previous turn's AI extraction — tells
+  // the prompt builder which skills/recipes to surface for the current scene.
+  // Loaded and cleared here (same pattern as tagCorrections).
+  const relevantContext = getLastRelevantContext();
+  clearRelevantContext();
+
   const { messages, report } = buildPrompt({
     character: speaker,
     persona,
@@ -287,6 +293,8 @@ export async function buildApiMessages(
     directorNote,
     gameLanguage: chat.gameLanguage ?? "cs",
     voiceExamples: voiceExamples.length > 0 ? voiceExamples : undefined,
+    useTagExtraction: !!chat.tagExtractionConnectionId,
+    relevantContext: relevantContext ?? null,
   });
 
   const presetParams = activePreset ? {

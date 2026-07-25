@@ -1,8 +1,10 @@
 pub mod backup;
+pub mod balance;
 pub mod cards;
 pub mod chat;
 pub mod dice;
 pub mod export_campaign;
+pub mod extract;
 pub mod export_chronicle;
 pub mod files;
 pub mod image_gen;

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ChronicleTheme } from "../../chat/chronicleTypes";
+import { getUsageForChat, type ChatUsageBucket } from "../../db/repositories/usageRepo";
 import { THEMES } from "../../chat/chronicleThemes";
 import { getCalendarSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
@@ -43,6 +44,8 @@ import { countMessages } from "../../db/repositories/messagesRepo";
 
 import { useChatPanels } from "./useChatPanels";
 import { useChatActions } from "./useChatActions";
+import { ReferencePanel } from "./ReferencePanel";
+import { listChatRecipes, type ChatCraftingRecipe } from "../../db/repositories/craftingRepo";
 
 const selectStyle = {
   backgroundColor: "var(--color-surface-2)",
@@ -136,6 +139,42 @@ export function ChatScreen() {
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [weather, setWeather] = useState<string>("jasno");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+
+  // Balance / chat cost state
+  interface BalanceInfo { currency: string; total_balance: string; granted_balance: string; topped_up_balance: string; }
+  interface UserBalance { is_available: boolean; balance_infos: BalanceInfo[]; }
+  const [deepseekBalance, setDeepseekBalance] = useState<UserBalance | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [chatUsage, setChatUsage] = useState<ChatUsageBucket | null>(null);
+
+  // Reference panel → ChatInput insertion
+  const [insertRef, setInsertRef] = useState<{ key: number; text: string } | null>(null);
+  const insertKeyRef = useRef(0);
+  const handleInsertRef = (text: string) => {
+    insertKeyRef.current++;
+    setInsertRef({ key: insertKeyRef.current, text });
+  };
+
+  // ── Crafting recipes (loaded from DB per chat) ─────────────────────
+  const [recipes, setRecipes] = useState<ChatCraftingRecipe[]>([]);
+
+  // Load recipes when chat changes
+  useEffect(() => {
+    if (!id) {
+      setRecipes([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await listChatRecipes(id);
+        if (!cancelled) setRecipes(r);
+      } catch {
+        if (!cancelled) setRecipes([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
 
   // ── Store-driven derived values ────────────────────────────────────
   const connection = chat?.connectionId
@@ -239,6 +278,59 @@ export function ChatScreen() {
     })();
     return () => { cancelled = true; };
   }, [id]);
+
+  // Keep the calendar date in sync after each AI reply — the DB is
+  // updated by `advanceAndPersistCalendar` during tag processing (see
+  // inventoryProcessor.ts), but the UI state was only ever loaded once on
+  // mount and never refreshed, so the displayed time appeared frozen.
+  const prevMsgCountRef = useRef(messages.length);
+  useEffect(() => {
+    if (!id || messages.length <= prevMsgCountRef.current) {
+      prevMsgCountRef.current = messages.length;
+      return;
+    }
+    prevMsgCountRef.current = messages.length;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await getCalendarSetting(id);
+        if (cancelled) return;
+        const loadedDate = raw ? calendarFromJSON(raw) : null;
+        if (loadedDate) setCalendarDate(loadedDate);
+      } catch { /* noop */ }
+      // Weather is stored in localStorage — re-read in case it was
+      // re-rolled by the calendar advance (see weather.ts).
+      try {
+        const storedWeather = localStorage.getItem(`weather_${id}`);
+        if (!cancelled && storedWeather) setWeather(storedWeather);
+      } catch { /* noop */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, messages.length]);
+
+  // Load per-chat token usage
+  useEffect(() => {
+    if (!id) return;
+    void getUsageForChat(id).then(setChatUsage).catch(() => setChatUsage(null));
+  }, [id]);
+
+  // Load DeepSeek balance if the connection is for DeepSeek
+  const loadBalance = useCallback(() => {
+    if (!connection || connection.provider !== "openai" || !connection.baseUrl?.includes("deepseek")) {
+      setDeepseekBalance(null);
+      setBalanceError(null);
+      return;
+    }
+    void invoke<UserBalance>("get_user_balance", {
+      connectionId: connection.id,
+      baseUrl: connection.baseUrl,
+    })
+      .then((b) => { setDeepseekBalance(b); setBalanceError(null); })
+      .catch((e: unknown) => { setBalanceError(String(e)); setDeepseekBalance(null); });
+  }, [connection]);
+
+  useEffect(() => { loadBalance(); }, [loadBalance]);
 
   // One-shot backfill: generate illustrations for inventory items that
   // predate the auto-illustration trigger (e.g. imported/restored chats).
@@ -641,6 +733,28 @@ export function ChatScreen() {
           </>
         )}
 
+        {/* ---- Skills & Recipes Reference ---- */}
+        {panels.referenceOpen && chat && (
+          <>
+            <div
+              className="fixed inset-0 z-40 lg:hidden"
+              style={{ backgroundColor: "var(--color-overlay)" }}
+              onClick={() => panels.setReferenceOpen(false)}
+            />
+            <aside
+              className="fixed inset-y-0 right-0 z-50 w-full max-w-sm border-l lg:static lg:z-auto lg:w-72 lg:max-w-none lg:shrink-0"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <ReferencePanel
+                skills={chat.skills}
+                inventory={chat.inventory}
+                recipes={recipes}
+                onInsert={handleInsertRef}
+              />
+            </aside>
+          </>
+        )}
+
         {/* ---- Chronicle Export Dialog ---- */}
         {panels.exportOpen && (
           <>
@@ -800,6 +914,7 @@ export function ChatScreen() {
               { icon: "🎒", open: panels.inventoryOpen, onToggle: () => panels.setInventoryOpen((v) => !v), title: t("room.inventoryTooltip") },
               { icon: "📜", open: panels.questsOpen, onToggle: () => panels.setQuestsOpen((v) => !v), title: t("room.questsTooltip") },
               { icon: "📅", open: panels.calendarOpen, onToggle: () => panels.setCalendarOpen((v) => !v), title: t("room.calendarTooltip") },
+              { icon: "🔧", open: panels.referenceOpen, onToggle: () => panels.setReferenceOpen((v) => !v), title: t("room.referenceTooltip") },
             ] satisfies { icon: string; open: boolean; onToggle: () => void; title: string }[]
           ).map(({ icon, open, onToggle, title }) => (
             <button
@@ -843,7 +958,48 @@ export function ChatScreen() {
             </button>
           ))}
 
-          <div className="mt-auto flex flex-col items-center pt-2">
+          {/* Balance + chat cost (above connection indicator) */}
+          {connection && (
+            <div
+              className="mt-auto flex w-full flex-col items-center gap-1 px-1 pt-2 text-center"
+              style={{ borderTop: "1px solid var(--color-border)" }}
+            >
+              {(() => {
+                const balance = deepseekBalance?.balance_infos?.[0];
+                const hasBalance = balance && !balanceError;
+                const tokens = chatUsage;
+                // Token → cost estimate: DeepSeek V4-Flash $0.14/$0.28, V4-Pro $0.435/$0.87
+                // Use the cheaper Flash pricing as a conservative floor.
+                const inputCost = tokens ? tokens.inputTokens / 1_000_000 * 0.14 : 0;
+                const outputCost = tokens ? tokens.outputTokens / 1_000_000 * 0.28 : 0;
+                const estCost = inputCost + outputCost;
+                return (
+                  <>
+                    {hasBalance ? (
+                      <div className="w-full text-[10px] leading-tight" title={balanceError ?? undefined}>
+                        <div style={{ color: "var(--color-text-muted)" }}>
+                          {balance.currency === "CNY" ? "¥" : "$"}{balance.total_balance}
+                        </div>
+                        <div className="text-[9px]" style={{ color: "var(--color-text-faint)" }}>
+                          {tokens ? `${tokens.requests}×` : "…"} ~${estCost.toFixed(3)}
+                        </div>
+                      </div>
+                    ) : balanceError ? (
+                      <div className="text-[9px] leading-tight" style={{ color: "var(--color-danger)" }} title={balanceError}>
+                        ⚠
+                      </div>
+                    ) : tokens ? (
+                      <div className="text-[10px] leading-tight" style={{ color: "var(--color-text-muted)" }}>
+                        {tokens.requests}×
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          <div className="flex flex-col items-center pt-2">
             <div
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm"
               style={{
@@ -897,6 +1053,7 @@ export function ChatScreen() {
             if (lastMessage?.role === "assistant") actions.setDismissedSuggestionsMsgId(lastMessage.id);
           }}
           personaSlot={personaSlot}
+          insertRef={insertRef}
         />
       </div>
 

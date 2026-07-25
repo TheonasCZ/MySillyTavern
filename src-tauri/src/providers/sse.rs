@@ -58,6 +58,7 @@ pub enum ParsedEvent {
     /// on the follow-up request or the API rejects it with HTTP 400).
     FunctionCall(String, String, Option<String>),
     Done(String),
+    Error(String),
     None,
 }
 

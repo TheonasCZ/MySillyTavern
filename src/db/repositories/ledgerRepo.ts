@@ -82,6 +82,37 @@ export interface LedgerFactDraft {
   canon?: boolean;
 }
 
+/** Append-only audit row for a ledger_facts content/status change (M-history).
+ * Insert-only, fire-and-forget by design like `logUsage` — callers should
+ * not let a logging failure break the actual mutation. */
+async function logLedgerFactHistory(entry: {
+  factId: string;
+  chatId: string;
+  category: LedgerCategory;
+  subject: string;
+  subKey: string;
+  oldFact: string | null;
+  newFact: string | null;
+  changeType: "create" | "update" | "remove" | "canon_set" | "soft_correction";
+}): Promise<void> {
+  await execute(
+    `INSERT INTO ledger_fact_history (id, fact_id, chat_id, category, subject, sub_key, old_fact, new_fact, change_type, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      newId(),
+      entry.factId,
+      entry.chatId,
+      entry.category,
+      entry.subject,
+      entry.subKey,
+      entry.oldFact,
+      entry.newFact,
+      entry.changeType,
+      nowIso(),
+    ],
+  );
+}
+
 /** Manual create from the memory panel — fails (unique constraint) if a
  * fact with the same (chatId, category, subject) already exists; callers
  * should use `upsertFact` from the extractor merge path instead. */
@@ -110,6 +141,16 @@ export async function createFact(chatId: string, draft: LedgerFactDraft): Promis
     updatedAt: now,
   };
   journalEntityWrite("fact", fact as unknown as Record<string, unknown>);
+  logLedgerFactHistory({
+    factId: id,
+    chatId,
+    category: draft.category,
+    subject: draft.subject,
+    subKey: draft.sub_key ?? '',
+    oldFact: null,
+    newFact: draft.fact,
+    changeType: "create",
+  }).catch(() => {});
   return fact;
 }
 
@@ -166,12 +207,25 @@ export async function setFactLocked(id: string, locked: boolean): Promise<void> 
 /** Sets/clears the soft-canon flag (M25.5). Clearing also resets the
  * stability counter so the fact has to re-earn its promotion. */
 export async function setFactCanon(id: string, canon: boolean): Promise<void> {
+  const existing = await getFact(id);
   await execute(
     canon
       ? "UPDATE ledger_facts SET canon = 1, contradiction_streak = 0, updated_at = $2 WHERE id = $1"
       : "UPDATE ledger_facts SET canon = 0, stability = 0, contradiction_streak = 0, updated_at = $2 WHERE id = $1",
     [id, nowIso()],
   );
+  if (existing) {
+    logLedgerFactHistory({
+      factId: id,
+      chatId: existing.chatId,
+      category: existing.category,
+      subject: existing.subject,
+      subKey: existing.sub_key,
+      oldFact: existing.fact,
+      newFact: existing.fact,
+      changeType: "canon_set",
+    }).catch(() => {});
+  }
 }
 
 /** Bulk stability bump for facts an extraction pass confirmed unchanged;
@@ -197,10 +251,23 @@ export async function incrementContradictionStreak(id: string): Promise<void> {
  * new text, demoted out of canon, counters reset — it must re-earn the
  * promotion through fresh stability. */
 export async function applySoftCanonCorrection(id: string, fact: string): Promise<void> {
+  const existing = await getFact(id);
   await execute(
     `UPDATE ledger_facts SET fact = $2, canon = 0, stability = 0, contradiction_streak = 0, status = 'active', updated_at = $3 WHERE id = $1`,
     [id, fact, nowIso()],
   );
+  if (existing) {
+    logLedgerFactHistory({
+      factId: id,
+      chatId: existing.chatId,
+      category: existing.category,
+      subject: existing.subject,
+      subKey: existing.sub_key,
+      oldFact: existing.fact,
+      newFact: fact,
+      changeType: "soft_correction",
+    }).catch(() => {});
+  }
 }
 
 export async function setFactStatus(id: string, status: "active" | "archived"): Promise<void> {
@@ -257,10 +324,20 @@ export async function applyLedgerUpsert(
       [existing.id, fact, now],
     );
     journalEntityWrite("fact", { id: existing.id, fact, status: "active", updated_at: now });
+    logLedgerFactHistory({
+      factId: existing.id,
+      chatId,
+      category,
+      subject,
+      subKey: sub_key,
+      oldFact: existing.fact,
+      newFact: fact,
+      changeType: "update",
+    }).catch(() => {});
     return;
   }
   await createFact(chatId, { category, subject, sub_key, fact });
-  // createFact already journals
+  // createFact already journals + logs history
 }
 
 export async function applyLedgerRemove(
@@ -273,4 +350,14 @@ export async function applyLedgerRemove(
   if (!existing || existing.locked) return;
   await setFactStatus(existing.id, "archived");
   // setFactStatus already journals
+  logLedgerFactHistory({
+    factId: existing.id,
+    chatId,
+    category,
+    subject,
+    subKey: sub_key,
+    oldFact: existing.fact,
+    newFact: null,
+    changeType: "remove",
+  }).catch(() => {});
 }

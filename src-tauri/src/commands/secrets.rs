@@ -9,9 +9,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 const FILE_NAME: &str = "secrets.json";
+
+/// Cached secrets directory, set once by `init_store` so `get_api_key`
+/// always uses the same path as the Tauri-managed store.
+static SECRETS_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub struct FileStore {
     dir: PathBuf,
@@ -142,9 +146,14 @@ pub fn has_api_key(app: AppHandle, connection_id: String) -> Result<bool, String
 /// Internal helper for other commands (e.g. chat_complete) that need the
 /// actual key value. Never exposed as a Tauri command itself.
 pub fn get_api_key(connection_id: &str) -> Result<Option<String>, String> {
-    // This is called from async contexts without AppHandle — fall back to
-    // direct file read.
-    let dir = dirs_next().ok_or("nepodařilo se najít domovský adresář")?;
+    // Prefer the cached path set by `init_store` (always correct for the
+    // Tauri runtime), falling back to the legacy `dirs_next()` heuristic
+    // only when the store hasn't been initialised yet (shouldn't happen).
+    let dir = SECRETS_DIR
+        .get()
+        .cloned()
+        .or_else(|| dirs_next())
+        .ok_or("nepodařilo se najít domovský adresář")?;
     let store = FileStore::new(dir);
     store.get(connection_id)
 }
@@ -173,6 +182,9 @@ fn dirs_next() -> Option<PathBuf> {
 /// Called from `run()` before any command can access keys.
 pub fn init_store(app: &AppHandle) -> Result<(), String> {
     let dir = app_secrets_dir(app)?;
+    // Cache the directory so `get_api_key` (which doesn't have an
+    // AppHandle) uses the same path as the Tauri-managed store.
+    let _ = SECRETS_DIR.set(dir.clone());
     let store = FileStore::new(dir);
     app.manage(store);
     Ok(())

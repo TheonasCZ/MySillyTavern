@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use futures_util::StreamExt;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -75,7 +77,7 @@ pub fn parse_event(event_type: &str, data: &str) -> ParsedEvent {
                 Err(_) => return ParsedEvent::None,
             };
             let message = v["error"]["message"].as_str().unwrap_or("Claude stream error");
-            ParsedEvent::Done(format!("error: {message}"))
+            ParsedEvent::Error(message.to_string())
         }
         _ => ParsedEvent::None,
     }
@@ -88,7 +90,11 @@ pub async fn stream(
     cancel: CancellationToken,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<(), ProviderError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(ProviderError::Http)?;
     let body = build_body(connection, messages);
 
     let res = client
@@ -134,6 +140,13 @@ pub async fn stream(
                                 }
                                 ParsedEvent::Done(finish_reason) => {
                                     let _ = tx.send(StreamEvent::Done { finish_reason });
+                                    return Ok(());
+                                }
+                                ParsedEvent::Error(message) => {
+                                    let _ = tx.send(StreamEvent::Error {
+                                        message,
+                                        retryable: false,
+                                    });
                                     return Ok(());
                                 }
                                 // Function calling is not wired up for this

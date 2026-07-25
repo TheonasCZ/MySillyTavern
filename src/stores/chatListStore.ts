@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { invoke } from "@tauri-apps/api/core";
 
 import {
   createChat,
@@ -6,9 +7,12 @@ import {
   listChats,
   renameChat,
   setChatConnection,
+  setChatEmbeddingConnection,
+  setChatImageConnection,
   setChatPersona,
   setChatPreset,
   setExtractionConnection,
+  setTagExtractionConnection,
   type Chat,
   type ChatDraft,
 } from "../db/repositories/chatsRepo";
@@ -27,6 +31,9 @@ interface ChatListState {
   setPersona: (id: string, personaId: string | null) => Promise<void>;
   setPreset: (id: string, presetId: string | null) => Promise<void>;
   setExtractionConnection: (id: string, connectionId: string | null) => Promise<void>;
+  setTagExtractionConnection: (id: string, connectionId: string | null) => Promise<void>;
+  setEmbeddingConnection: (id: string, connectionId: string | null) => Promise<void>;
+  setImageConnection: (id: string, connectionId: string | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
 }
 
@@ -85,8 +92,32 @@ export const useChatListStore = create<ChatListState>((set, get) => ({
     });
   },
 
+  setTagExtractionConnection: async (id, connectionId) => {
+    await setTagExtractionConnection(id, connectionId);
+    set({
+      chats: get().chats.map((c) => (c.id === id ? { ...c, tagExtractionConnectionId: connectionId } : c)),
+    });
+  },
+
+  setEmbeddingConnection: async (id, connectionId) => {
+    await setChatEmbeddingConnection(id, connectionId);
+    set({
+      chats: get().chats.map((c) => (c.id === id ? { ...c, embeddingConnectionId: connectionId } : c)),
+    });
+  },
+
+  setImageConnection: async (id, connectionId) => {
+    await setChatImageConnection(id, connectionId);
+    set({
+      chats: get().chats.map((c) => (c.id === id ? { ...c, imageConnectionId: connectionId } : c)),
+    });
+  },
+
   remove: async (id) => {
     await deleteChat(id);
+    // Fire-and-forget: also delete the per-chat log file so it doesn't
+    // accumulate orphaned logs from deleted/test chats.
+    void invoke("delete_chat_log", { chatId: id }).catch(() => {});
     set({ chats: get().chats.filter((c) => c.id !== id) });
   },
 }));

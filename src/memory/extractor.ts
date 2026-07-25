@@ -357,7 +357,7 @@ export async function runExtraction(
     const zeroTempConnection: ConnectionConfig = { ...connection, temperature: 0 };
     const raw = await chatComplete(zeroTempConnection, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    void logUsage("memory", connection.id, inputTokens, estimateTokens(raw)).catch(() => {});
+    void logUsage("memory", connection.id, inputTokens, estimateTokens(raw), chatId).catch(() => {});
     const extracted = parseExtractorOutput(raw);
 
     const ops = mergeExtractedFacts(snapshot, extracted);

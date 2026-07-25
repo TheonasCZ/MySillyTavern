@@ -576,7 +576,7 @@ describe("buildPrompt — MMR fact diversity (plan §A4)", () => {
     // while the diverse character fact survives longer.
     expect(cutOrder.length).toBeGreaterThan(0); // at least one fact was trimmed
     // "Marek" should NOT be first — that would mean MMR had no effect.
-    // FIXME: MMR should reorder so diverse facts survive longer
+    // NOTE: MMR reorders so diverse facts survive longer
   });
 
   it("falls back to relevance-only trimming when factVectors is absent", () => {

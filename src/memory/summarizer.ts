@@ -66,7 +66,7 @@ export async function runSummarization(
     const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold, scores, lang);
     const text = await chatComplete(connection, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    void logUsage("memory", connection.id, inputTokens, estimateTokens(text)).catch(() => {});
+    void logUsage("memory", connection.id, inputTokens, estimateTokens(text), chatId).catch(() => {});
     const trimmed = text.trim();
     if (!trimmed) return;
     const upToMessageId = messagesToFold[messagesToFold.length - 1].id;

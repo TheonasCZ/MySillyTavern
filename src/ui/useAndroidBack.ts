@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Android back button handler for Tauri 2 mobile.
@@ -25,9 +25,16 @@ export function useAndroidBack(
   state: BackButtonState,
   onBack: () => void,
 ) {
+  // Track previous hasOpenPanel so we only pushState once on the
+  // false→true transition, not on every re-render while the panel is open.
+  const prevOpenRef = useRef(state.hasOpenPanel);
+
   useEffect(() => {
     // Only active on Android WebView
     if (typeof window === "undefined") return;
+
+    const prevOpen = prevOpenRef.current;
+    prevOpenRef.current = state.hasOpenPanel;
 
     // Tauri 2 mobile fires a custom event when the back button is pressed.
     // The exact event name depends on the Tauri version; we listen for both
@@ -44,8 +51,9 @@ export function useAndroidBack(
 
     // Also intercept the hardware back button via the History API —
     // when a panel is open, pushing a dummy state lets us catch
-    // the back navigation before it leaves the app.
-    if (state.hasOpenPanel) {
+    // the back navigation before it leaves the app. Only push once
+    // on the false→true transition to avoid an infinite pushState loop.
+    if (!prevOpen && state.hasOpenPanel) {
       window.history.pushState({ panel: true }, "");
     }
 

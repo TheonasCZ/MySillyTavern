@@ -49,6 +49,10 @@ interface Props {
    *  visually clear who is writing. Owned by the caller (ChatScreen) since
    *  it needs the personas list + setPersona, not ChatInput's concern. */
   personaSlot?: React.ReactNode;
+  /** When `key` increments, `text` is appended to the current input value
+   *  (with a leading space if the input is non-empty). Used by the reference
+   *  panel to insert @skill / @recipe references. Null = no pending insert. */
+  insertRef?: { key: number; text: string } | null;
 }
 
 export function ChatInput({
@@ -67,6 +71,7 @@ export function ChatInput({
   onSuggest,
   onClearSuggestions,
   personaSlot,
+  insertRef,
 }: Props) {
   const { t } = useTranslation("chat");
   const [value, setValue] = useState("");
@@ -208,6 +213,20 @@ export function ChatInput({
     setPendingRoll(null);
   }, [draftKey]);
 
+  // Insert a reference (@skill, @recipe) from the reference panel.
+  // `insertRef.key` is incremented by the caller on each insertion request
+  // so the effect re-fires even for the same text string.
+  const lastInsertKeyRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!insertRef) return;
+    // Guard against re-consuming the same key (e.g. when the parent re-renders
+    // without incrementing, or StrictMode double-fires the effect).
+    if (insertRef.key === lastInsertKeyRef.current) return;
+    lastInsertKeyRef.current = insertRef.key;
+    setValue((prev) => (prev ? `${prev} ${insertRef.text}` : insertRef.text));
+    textareaRef.current?.focus();
+  }, [insertRef]);
+
   const handleChange = (val: string) => {
     setValue(val);
     localStorage.setItem(draftKey, val);
@@ -216,12 +235,18 @@ export function ChatInput({
 
   // Expose insertText via a global callback — InventoryPanel calls this
   // to insert item names into the input without a complex prop chain.
-  if (typeof window !== "undefined") {
+  // Registered in a mount-only effect so it doesn't double-fire in
+  // StrictMode or re-register on every render.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     (window as unknown as Record<string, unknown>).__mstInsertPrompt = (text: string) => {
       setValue((prev) => (prev ? `${prev} ${text}` : text));
       textareaRef.current?.focus();
     };
-  }
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__mstInsertPrompt;
+    };
+  }, []);
 
   const submit = useCallback(() => {
     const trimmed = value.trim();

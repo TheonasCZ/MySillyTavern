@@ -10,7 +10,8 @@ export type PanelType =
   | "character"
   | "group"
   | "export"
-  | "calendar";
+  | "calendar"
+  | "reference";
 
 /**
  * Manages the mutually-exclusive header panel state (memory, inventory,
@@ -39,6 +40,7 @@ export function useChatPanels() {
   const groupOpen = activePanel === "group";
   const exportOpen = activePanel === "export";
   const calendarOpen = activePanel === "calendar";
+  const referenceOpen = activePanel === "reference";
   const hasOpenPanel = activePanel !== null;
 
   // Per-panel setters that accept boolean | toggle callback (preserves the
@@ -83,6 +85,11 @@ export function useChatPanels() {
       setActivePanel((p) => ((typeof v === "function" ? v(p === "calendar") : v) ? "calendar" : null)),
     [],
   );
+  const setReferenceOpen = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) =>
+      setActivePanel((p) => ((typeof v === "function" ? v(p === "reference") : v) ? "reference" : null)),
+    [],
+  );
 
   // Android back button: close panels first, then navigate back
   useAndroidBack({ hasOpenPanel }, () => {
@@ -93,6 +100,8 @@ export function useChatPanels() {
     else if (characterOpen) setActivePanel(null);
     else if (directorOpen) setActivePanel(null);
     else if (groupOpen) setActivePanel(null);
+    else if (calendarOpen) setActivePanel(null);
+    else if (referenceOpen) setActivePanel(null);
     else navigate(-1);
   });
 
@@ -110,6 +119,7 @@ export function useChatPanels() {
     groupOpen,
     exportOpen,
     calendarOpen,
+    referenceOpen,
     hasOpenPanel,
     // Legacy per-panel setters for direct boolean/toggle control
     setMemoryOpen,
@@ -120,5 +130,6 @@ export function useChatPanels() {
     setGroupOpen,
     setExportOpen,
     setCalendarOpen,
+    setReferenceOpen,
   };
 }

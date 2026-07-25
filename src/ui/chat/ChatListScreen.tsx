@@ -49,6 +49,9 @@ export function ChatListScreen() {
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newConnectionId, setNewConnectionId] = useState<string>("");
+  const [newEmbeddingConnectionId, setNewEmbeddingConnectionId] = useState<string>("");
+  const [newImageConnectionId, setNewImageConnectionId] = useState<string>("");
+  const [newTagExtractionConnectionId, setNewTagExtractionConnectionId] = useState<string>("");
   /** Order of selection = roster position, first checked = primary member
    * (plan §7 M10 group create form). */
   const [newCharacterIds, setNewCharacterIds] = useState<string[]>([]);
@@ -109,9 +112,25 @@ export function ChatListScreen() {
     if (!charactersLoaded) void loadCharacters();
   }, [charactersLoaded, loadCharacters]);
 
+  // Auto-select the first character when creating a new chat
+  useEffect(() => {
+    if (!charactersLoaded || characters.length === 0) return;
+    if (newCharacterIds.length === 0) {
+      setNewCharacterIds([characters[0].id]);
+      setStarterCharacterId(characters[0].id);
+    }
+  }, [charactersLoaded, characters]);
+
   useEffect(() => {
     if (!personasLoaded) void loadPersonas();
   }, [personasLoaded, loadPersonas]);
+
+  // Auto-select the default persona (or first available) when creating a new chat
+  useEffect(() => {
+    if (!personasLoaded || personas.length === 0) return;
+    const defaultPersona = personas.find((p) => p.isDefault);
+    setNewPersonaId(defaultPersona?.id ?? personas[0].id);
+  }, [personasLoaded, personas]);
 
   useEffect(() => {
     if (!presetsLoaded) void loadPresets();
@@ -179,6 +198,9 @@ export function ChatListScreen() {
       title,
       characterIds: orderedIds,
       connectionId: newConnectionId || null,
+      embeddingConnectionId: newEmbeddingConnectionId || null,
+      imageConnectionId: newImageConnectionId || null,
+      tagExtractionConnectionId: newTagExtractionConnectionId || null,
       personaId: newPersonaId || null,
       gameLanguage: newGameLanguage,
       hardcoreMode: newHardcoreMode,
@@ -262,6 +284,60 @@ export function ChatListScreen() {
               {t("newChat.noConnectionsHint")}
             </p>
           )}
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span>{t("newChat.embeddingConnectionLabel")}</span>
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newEmbeddingConnectionId}
+              onChange={(e) => setNewEmbeddingConnectionId(e.target.value)}
+            >
+              <option value="">{t("list.noConnection", { ns: "chat" })}</option>
+              {connections.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+              {t("newChat.embeddingConnectionHelp")}
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span>{t("newChat.imageConnectionLabel")}</span>
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newImageConnectionId}
+              onChange={(e) => setNewImageConnectionId(e.target.value)}
+            >
+              <option value="">{t("list.noConnection", { ns: "chat" })}</option>
+              {connections.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+              {t("newChat.imageConnectionHelp")}
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span>{t("newChat.tagExtractionConnectionLabel")}</span>
+            <select
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={newTagExtractionConnectionId}
+              onChange={(e) => setNewTagExtractionConnectionId(e.target.value)}
+            >
+              <option value="">{t("list.noConnection", { ns: "chat" })}</option>
+              {connections.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <span className="text-xs" style={{ color: "var(--color-text-faint)" }}>
+              {t("newChat.tagExtractionConnectionHelp")}
+            </span>
+          </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span>{t("newChat.gameLanguage")}</span>

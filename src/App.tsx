@@ -10,6 +10,7 @@ import { ChatListScreen } from "./ui/chat/ChatListScreen";
 import { ChatScreen } from "./ui/chat/ChatScreen";
 import { SamplerToast } from "./ui/common/SamplerToast";
 import { UndoToast } from "./ui/common/UndoToast";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { AppShell } from "./ui/layout/AppShell";
 import { LorebookEditor } from "./ui/lorebooks/LorebookEditor";
 import { LorebooksListScreen } from "./ui/lorebooks/LorebooksListScreen";
@@ -56,25 +57,27 @@ function App() {
   }
 
   return (
-    <HashRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<ChatListScreen />} />
-          <Route path="/chat/:id" element={<ChatScreen />} />
-          <Route path="/characters" element={<GalleryScreen />} />
-          <Route path="/characters/:id" element={<CardEditor />} />
-          <Route path="/personas" element={<PersonasScreen />} />
-          <Route path="/lorebooks" element={<LorebooksListScreen />} />
-          <Route path="/lorebooks/:id" element={<LorebookEditor />} />
-          <Route path="/settings" element={<SettingsScreen />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        <KeyboardShortcutListener />
-        <UpdateBanner />
-        <SamplerToast />
-        <UndoToast />
-      </AppShell>
-    </HashRouter>
+    <ErrorBoundary>
+      <HashRouter>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<ChatListScreen />} />
+            <Route path="/chat/:id" element={<ChatScreen />} />
+            <Route path="/characters" element={<GalleryScreen />} />
+            <Route path="/characters/:id" element={<CardEditor />} />
+            <Route path="/personas" element={<PersonasScreen />} />
+            <Route path="/lorebooks" element={<LorebooksListScreen />} />
+            <Route path="/lorebooks/:id" element={<LorebookEditor />} />
+            <Route path="/settings" element={<SettingsScreen />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+          <KeyboardShortcutListener />
+          <UpdateBanner />
+          <SamplerToast />
+          <UndoToast />
+        </AppShell>
+      </HashRouter>
+    </ErrorBoundary>
   );
 }
 

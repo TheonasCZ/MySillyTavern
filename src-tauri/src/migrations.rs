@@ -197,6 +197,30 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_032,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 33,
+            description: "usage_log: add chat_id for per-chat cost tracking",
+            sql: MIGRATION_033,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 34,
+            description: "chats: add tag_extraction_connection_id for tag-extraction-specific connections",
+            sql: MIGRATION_034,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 35,
+            description: "crafting: per-chat crafting_recipes table (chat-owned, persona is just a template)",
+            sql: MIGRATION_035,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 36,
+            description: "ledger_fact_history: append-only audit log for ledger_facts content/status changes",
+            sql: MIGRATION_036,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -608,4 +632,50 @@ ALTER TABLE chats ADD COLUMN image_connection_id TEXT;
 -- Seed a default Gemini embedding connection (no API key — user fills it in).
 INSERT OR IGNORE INTO connections (id, name, provider, purpose, model, temperature, top_p, max_tokens, context_budget, created_at, updated_at)
 VALUES ('00000000-0000-0000-0000-000000000001', 'Gemini Embedding', 'gemini', 'embedding', 'gemini-embedding-2', 0.8, 0.95, 1024, 8000, datetime('now'), datetime('now'));
+"#;
+
+/// Per-chat usage tracking: lets the UI show how much a single chat has
+/// cost, beyond the existing aggregate daily/weekly/monthly stats.
+const MIGRATION_033: &str = r#"
+ALTER TABLE usage_log ADD COLUMN chat_id TEXT;
+CREATE INDEX idx_usage_log_chat ON usage_log(chat_id, created_at);
+"#;
+
+const MIGRATION_034: &str = r#"
+ALTER TABLE chats ADD COLUMN tag_extraction_connection_id TEXT REFERENCES connections(id);
+"#;
+
+const MIGRATION_035: &str = r#"
+CREATE TABLE chat_crafting_recipes (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  result_item TEXT NOT NULL,
+  ingredients TEXT NOT NULL DEFAULT '[]',
+  skill_name TEXT,
+  tier INTEGER NOT NULL DEFAULT 0,
+  perks TEXT NOT NULL DEFAULT '[]',
+  description TEXT,
+  crafted_at TEXT
+);
+"#;
+
+/// Append-only audit log for ledger_facts content/status changes — lets
+/// drift debugging answer "what did the ledger say N messages ago and when
+/// did it change". No FK on fact_id (survives the fact row's later
+/// deletion), same reasoning as usage_log.connection_id.
+const MIGRATION_036: &str = r#"
+CREATE TABLE ledger_fact_history (
+  id TEXT PRIMARY KEY,
+  fact_id TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  sub_key TEXT NOT NULL DEFAULT '',
+  old_fact TEXT,
+  new_fact TEXT,
+  change_type TEXT NOT NULL CHECK (change_type IN ('create','update','remove','canon_set','soft_correction')),
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_ledger_fact_history_chat ON ledger_fact_history(chat_id, created_at);
+CREATE INDEX idx_ledger_fact_history_fact ON ledger_fact_history(fact_id, created_at);
 "#;

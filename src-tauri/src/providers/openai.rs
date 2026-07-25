@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use futures_util::StreamExt;
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -68,7 +70,11 @@ pub async fn stream(
     cancel: CancellationToken,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<(), ProviderError> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(30))
+        .build()
+        .map_err(ProviderError::Http)?;
 
     let base_url = connection
         .base_url
@@ -116,6 +122,13 @@ pub async fn stream(
                                 }
                                 ParsedEvent::Done(finish_reason) => {
                                     let _ = tx.send(StreamEvent::Done { finish_reason });
+                                    return Ok(());
+                                }
+                                ParsedEvent::Error(message) => {
+                                    let _ = tx.send(StreamEvent::Error {
+                                        message,
+                                        retryable: false,
+                                    });
                                     return Ok(());
                                 }
                                 // Function calling is not wired up for this

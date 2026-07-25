@@ -27,6 +27,18 @@ import {
 } from "./promptTexts";
 
 import type { PersonaLike } from "./promptBuilder";
+import type { RelevantContext } from "../chat/inventoryProcessor";
+
+/** Max crafting recipes shown in the prompt — prevents recipe bloat after
+ *  long campaigns. Filtered by relevance keywords when available, then
+ *  capped here regardless. */
+const MAX_RECIPES_IN_PROMPT = 10;
+
+/** Case-insensitive match: does any keyword appear in `text`? */
+function matchesAny(text: string, keywords: string[]): boolean {
+  const lower = text.toLowerCase();
+  return keywords.some((kw) => lower.includes(kw.toLowerCase()));
+}
 
 // ---- Helpers (moved from promptBuilder.ts) -------------------------------
 
@@ -74,6 +86,8 @@ function formatCappedList<T>(
 function buildGameTagsSection(
   persona: PersonaLike | null,
   stateListCap: number,
+  stateOnly: boolean,
+  relevance: RelevantContext | null,
 ): string {
   const progression = persona?.progression ?? "skill";
   const hasInv = !!persona?.inventory?.length;
@@ -89,27 +103,60 @@ function buildGameTagsSection(
     return "";
   }
 
+  // Filter skills by scene relevance when keywords are available.
+  // When no relevance data exists (regex mode or first turn), show all.
+  const relevantSkills = (sk: Array<{ name: string; level: number; lastTouched?: string }>) =>
+    relevance && relevance.skills.length > 0
+      ? sk.filter((s) => matchesAny(s.name, relevance.skills))
+      : sk;
+
+  // State-only mode (AI tag extraction): render current state as clean
+  // descriptive text the storyteller can use for narrative consistency.
+  // No tag instructions — the separate extraction model handles mechanics.
+  if (stateOnly) {
+    const parts: string[] = [];
+    if (hasInv && persona) {
+      const inv = sortByLastTouched(persona.inventory ?? []);
+      const list = formatCappedList(inv, (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""), (i) => i.item, stateListCap);
+      parts.push(`${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${list}.`);
+    }
+    if (progression === "skill" && hasSkills && persona) {
+      const sk = sortByLastTouched(relevantSkills(persona.skills ?? []));
+      if (sk.length > 0) {
+        const list = formatCappedList(sk, (s) => `${s.name} ${s.level}`, (s) => s.name, Math.min(stateListCap, sk.length));
+        parts.push(`${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${list}.`);
+      }
+    }
+    if (progression === "level") {
+      const xp = persona?.xp ?? 0;
+      const lvl = persona?.level ?? 1;
+      parts.push(TAG_INSTRUCTIONS_LEVEL_CURRENT(lvl, xp));
+    }
+    if (hasCond && persona) {
+      const cond = sortByLastTouched(persona.conditions ?? []);
+      const list = formatCappedList(cond, (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""), (c) => c.name, stateListCap);
+      parts.push(`${TAG_INSTRUCTIONS_CURRENT_CONDITIONS} ${list}.`);
+    }
+    if (hasMod && persona) {
+      const mods = sortByLastTouched(persona.modifications ?? []);
+      const list = formatCappedList(mods, (m) => m.name, (m) => m.name, stateListCap);
+      parts.push(`${TAG_INSTRUCTIONS_CURRENT_MODIFICATIONS} ${list}.`);
+    }
+    if (parts.length === 0) return "";
+    return `${SECTION_GAME_TAGS}\n${parts.join("\n")}`;
+  }
+
+  // Full mode (regex tags): include change instructions for every category.
   let tagInstructions = `${SECTION_GAME_TAGS}\n`;
-  // Inventory tags always emitted when inventory exists (regardless of progression)
   if (hasInv && persona) {
     const inv = sortByLastTouched(persona.inventory ?? []);
-    const list = formatCappedList(
-      inv,
-      (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""),
-      (i) => i.item,
-      stateListCap,
-    );
+    const list = formatCappedList(inv, (i) => i.item + (i.qty > 1 ? ` x${i.qty}` : ""), (i) => i.item, stateListCap);
     tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_INVENTORY} ${list}.\n`;
     tagInstructions += `${TAG_INSTRUCTIONS_INVENTORY_CHANGES}\n`;
   }
   if (progression === "skill" && hasSkills && persona) {
     const sk = sortByLastTouched(persona.skills ?? []);
-    const list = formatCappedList(
-      sk,
-      (s) => `${s.name} ${s.level}`,
-      (s) => s.name,
-      stateListCap,
-    );
+    const list = formatCappedList(sk, (s) => `${s.name} ${s.level}`, (s) => s.name, stateListCap);
     tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_SKILLS} ${list}.\n`;
     tagInstructions += `${TAG_INSTRUCTIONS_SKILL_CHANGES}\n`;
   }
@@ -121,12 +168,7 @@ function buildGameTagsSection(
   }
   if (hasCond && persona) {
     const cond = sortByLastTouched(persona.conditions ?? []);
-    const list = formatCappedList(
-      cond,
-      (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""),
-      (c) => c.name,
-      stateListCap,
-    );
+    const list = formatCappedList(cond, (c) => c.name + (c.expiresAt ? ` (${c.expiresAt})` : ""), (c) => c.name, stateListCap);
     tagInstructions += `${TAG_INSTRUCTIONS_CURRENT_CONDITIONS} ${list}.\n`;
     tagInstructions += `${TAG_INSTRUCTIONS_CONDITION_CHANGES}\n`;
   }
@@ -140,30 +182,49 @@ function buildGameTagsSection(
   return tagInstructions;
 }
 
-function buildFactionSection(persona: PersonaLike | null): string {
+function buildFactionSection(persona: PersonaLike | null, stateOnly: boolean): string {
   if (!persona?.factions?.length) return "";
   let factionInstructions = `${SECTION_FACTIONS}\n`;
   factionInstructions += `${FACTION_INSTRUCTIONS_REACTIONS}\n`;
-  factionInstructions += `${FACTION_INSTRUCTIONS_CHANGES}\n`;
-  factionInstructions += FACTION_TAG_HINT;
+  // Only include tag-writing instructions in full mode
+  if (!stateOnly) {
+    factionInstructions += `${FACTION_INSTRUCTIONS_CHANGES}\n`;
+    factionInstructions += FACTION_TAG_HINT;
+  }
   return factionInstructions;
 }
 
-function buildCraftingSection(persona: PersonaLike | null): string {
+function buildCraftingSection(persona: PersonaLike | null, stateOnly: boolean, relevance: RelevantContext | null): string {
   const hasRecipes = !!persona?.craftingRecipes?.length;
   const hasInv = !!persona?.inventory?.length;
   if (!hasRecipes && !hasInv) return "";
 
-  let craftInstructions = `${SECTION_CRAFTING}\n`;
-  craftInstructions += CRAFTING_INSTRUCTIONS_BASE;
+  // Filter recipes by scene-relevant keywords when available.
+  let recipes = persona?.craftingRecipes ?? [];
+  if (relevance && relevance.recipeKeywords.length > 0) {
+    recipes = recipes.filter((r) =>
+      matchesAny(r.resultItem, relevance.recipeKeywords) ||
+      r.ingredients.some((ing) => matchesAny(ing, relevance.recipeKeywords))
+    );
+  }
+  // Cap to prevent recipe bloat after long campaigns.
+  const capped = recipes.slice(0, MAX_RECIPES_IN_PROMPT);
 
-  if (hasRecipes && persona) {
-    craftInstructions += `\n\n${CRAFTING_KNOWN_RECIPES}\n`;
-    for (const r of persona.craftingRecipes ?? []) {
+  let craftInstructions = `${SECTION_CRAFTING}\n`;
+  if (!stateOnly) {
+    craftInstructions += CRAFTING_INSTRUCTIONS_BASE;
+  }
+
+  if (capped.length > 0) {
+    craftInstructions += stateOnly ? `${CRAFTING_KNOWN_RECIPES}\n` : `\n\n${CRAFTING_KNOWN_RECIPES}\n`;
+    for (const r of capped) {
       const crafted = r.craftedAt ? "✓" : "✗";
       const skillHint = r.skillName ? ` (skill: ${r.skillName})` : "";
       const perksStr = r.perks.length > 0 ? ` [perky: ${r.perks.join(", ")}]` : "";
       craftInstructions += `- ${crafted} ${r.resultItem} ← ${r.ingredients.join(" + ")}${skillHint}${perksStr}\n`;
+    }
+    if (recipes.length > MAX_RECIPES_IN_PROMPT) {
+      craftInstructions += `… a dalších ${recipes.length - MAX_RECIPES_IN_PROMPT} receptů.\n`;
     }
   }
 
@@ -174,17 +235,24 @@ function buildCraftingSection(persona: PersonaLike | null): string {
 
 /** Renders the game-tags, faction, and crafting blocks as a single newline-
  * separated string (ready to be appended to the trailing system message phi).
- * Returns "" when there is nothing to render. */
+ * Returns "" when there is nothing to render.
+ *
+ * @param stateOnly — when true (AI tag extraction mode), renders only the
+ *   current state as descriptive prose the storyteller can use for narrative
+ *   consistency. Omits all tag-writing instructions (the extraction model
+ *   handles those). When false (regex mode), includes full tag instructions. */
 export function renderGameTags(
   persona: PersonaLike | null,
   stateListCap: number,
+  stateOnly = false,
+  relevance: RelevantContext | null = null,
 ): string {
   const sections: string[] = [];
-  const tags = buildGameTagsSection(persona, stateListCap);
+  const tags = buildGameTagsSection(persona, stateListCap, stateOnly, relevance);
   if (tags) sections.push(tags);
-  const factions = buildFactionSection(persona);
+  const factions = buildFactionSection(persona, stateOnly);
   if (factions) sections.push(factions);
-  const crafting = buildCraftingSection(persona);
+  const crafting = buildCraftingSection(persona, stateOnly, relevance);
   if (crafting) sections.push(crafting);
   return sections.join("\n\n");
 }

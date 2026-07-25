@@ -112,17 +112,18 @@ pub async fn start_export(
             include_illustrations, &resolved_output_dir, cancel_clone, &reg,
         ).await;
 
-        let mut map = reg.lock().unwrap();
-        if let Some(job) = map.get_mut(&jid) {
-            match result {
-                Ok(path) => {
-                    job.status = "completed".to_string();
-                    job.progress = 100;
-                    job.output_path = Some(path);
-                }
-                Err(err) => {
-                    job.status = "failed".to_string();
-                    job.output_path = Some(err);
+        if let Ok(mut map) = reg.lock() {
+            if let Some(job) = map.get_mut(&jid) {
+                match result {
+                    Ok(path) => {
+                        job.status = "completed".to_string();
+                        job.progress = 100;
+                        job.output_path = Some(path);
+                    }
+                    Err(err) => {
+                        job.status = "failed".to_string();
+                        job.output_path = Some(err);
+                    }
                 }
             }
         }
@@ -197,17 +198,18 @@ pub async fn resume_export(
         )
         .await;
 
-        let mut map = reg.lock().unwrap();
-        if let Some(job) = map.get_mut(&jid) {
-            match result {
-                Ok(path) => {
-                    job.status = "completed".to_string();
-                    job.progress = 100;
-                    job.output_path = Some(path);
-                }
-                Err(err) => {
-                    job.status = "failed".to_string();
-                    job.output_path = Some(err);
+        if let Ok(mut map) = reg.lock() {
+            if let Some(job) = map.get_mut(&jid) {
+                match result {
+                    Ok(path) => {
+                        job.status = "completed".to_string();
+                        job.progress = 100;
+                        job.output_path = Some(path);
+                    }
+                    Err(err) => {
+                        job.status = "failed".to_string();
+                        job.output_path = Some(err);
+                    }
                 }
             }
         }

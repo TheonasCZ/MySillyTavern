@@ -72,6 +72,34 @@ import {
 export { parseSuggestions };
 export type { ChatState };
 
+/** M28c fast rule-based drift check, shared by `sendMessage`/`regenerate`/
+ * `continueMessage`'s `finalize` closures — runs before a response is
+ * persisted, against active world/player facts. On a severe (>= 0.7) hit,
+ * queues a correction (picked up by the next `buildApiMessages` call via
+ * `consumeDriftCorrections`) and returns `true` so the caller discards the
+ * response and retries. Degrades gracefully (`false`) on any failure — a
+ * broken check must never block saving a reply. */
+async function runPrePersistCheck(chatId: string, finalText: string): Promise<boolean> {
+  try {
+    const activeFacts = (await listAllFacts(chatId))
+      .filter((f) => f.status === "active" && (f.category === "world" || f.category === "player"));
+    const detectionFacts: FactForDetection[] = activeFacts.map(prepareFactForDetection);
+    const violations = detectFactViolations(finalText, detectionFacts);
+    const severe = violations.filter((v) => v.severity >= 0.7);
+    if (severe.length === 0) return false;
+    const correctionLines = severe.map(violationCorrectionText);
+    const { mergeCorrections, getDriftState } = await import("../memory/driftDetector");
+    const { setSetting } = await import("../db/repositories/settingsRepo");
+    const driftKey = `drift_state_${chatId}`;
+    const state = await getDriftState(chatId);
+    state.corrections = mergeCorrections(state.corrections, correctionLines);
+    await setSetting(driftKey, JSON.stringify(state));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   chatId: null,
   chat: null,
@@ -274,30 +302,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // discard the response and auto-retry with a correction injected
       // into the next prompt (max 2 auto-retries to prevent loops).
       if (finalText && !interrupted && autoRetryCount < MAX_AUTO_RETRIES) {
-        try {
-          const activeFacts = (await listAllFacts(chatId))
-            .filter((f) => f.status === "active" && (f.category === "world" || f.category === "player"));
-          const detectionFacts: FactForDetection[] = activeFacts.map(prepareFactForDetection);
-          const violations = detectFactViolations(finalText, detectionFacts);
-          const severe = violations.filter((v) => v.severity >= 0.7);
-          if (severe.length > 0) {
-            autoRetryCount++;
-            const correctionLines = severe.map(violationCorrectionText);
-            // Queue corrections into the drift state so the retry picks them up
-            // via consumeDriftCorrections in the next buildApiMessages call.
-            const { mergeCorrections, getDriftState } = await import("../memory/driftDetector");
-            const { setSetting } = await import("../db/repositories/settingsRepo");
-            const driftKey = `drift_state_${chatId}`;
-            const state = await getDriftState(chatId);
-            state.corrections = mergeCorrections(state.corrections, correctionLines);
-            await setSetting(driftKey, JSON.stringify(state));
-            // Clear streaming state and trigger retry — the response is discarded.
-            set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
-            retry();
-            return;
-          }
-        } catch (err) {
-          // Degrade gracefully — save the message anyway.
+        const violated = await runPrePersistCheck(chatId, finalText);
+        if (violated) {
+          autoRetryCount++;
+          // Clear streaming state and trigger retry — the response is discarded.
+          set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
+          retry();
+          return;
         }
       }
 
@@ -463,9 +474,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ lastPromptReport: report, streamingMessageId: messageId, streamingSpeakerId: speaker.id });
     clearInterrupted(set, messageId);
 
+    // Auto-retry guard, same reasoning as sendMessage's (M28c gap fix).
+    let autoRetryCount = 0;
+    const MAX_AUTO_RETRIES = 2;
+
     const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let finalText = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       finalText = applyRegexRules(finalText, regexRules ?? "");
+
+      if (finalText && !interrupted && autoRetryCount < MAX_AUTO_RETRIES) {
+        const violated = await runPrePersistCheck(chatId, finalText);
+        if (violated) {
+          autoRetryCount++;
+          set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
+          retry();
+          return;
+        }
+      }
+
       if (finalText) {
         const updated = await appendSwipe(target, finalText, changeSummary);
         // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale;
@@ -529,10 +555,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set({ streamingMessageId: messageId, streamingText: "", streamingSpeakerId: speaker.id });
 
+    // Auto-retry guard, same reasoning as sendMessage's (M28c gap fix).
+    let autoRetryCount = 0;
+    const MAX_AUTO_RETRIES = 2;
+
     const finalize = async (text: string, interrupted: boolean, changeSummary: string | null = null) => {
       let addition = stripSpeakerPrefix(text.trim(), speaker.name).trim();
       addition = applyRegexRules(addition, regexRules ?? "");
       const combined = addition ? `${target.content}${/\s$/.test(target.content) ? "" : " "}${addition}` : target.content;
+
+      if (addition && !interrupted && autoRetryCount < MAX_AUTO_RETRIES) {
+        const violated = await runPrePersistCheck(chatId, combined);
+        if (violated) {
+          autoRetryCount++;
+          set({ streaming: false, streamingText: "", streamingMessageId: null, streamingSpeakerId: null });
+          retry();
+          return;
+        }
+      }
+
       // Guard (M11 bug sweep) — see sendMessage's `finalize` for rationale.
       const stillCurrentChat = get().chatId === chatId;
       if (addition) {
@@ -649,7 +690,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ];
       const reply = await chatComplete(effectiveConnection, apiMessages);
       const inputTokens = apiMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-      void logUsage("suggest", connection.id, inputTokens, estimateTokens(reply)).catch(() => {});
+      void logUsage("suggest", connection.id, inputTokens, estimateTokens(reply), chatId).catch(() => {});
       const suggestions = parseSuggestions(reply);
       // Guard (M11 bug sweep): this is a long-running network call — if the
       // user switched to a different chat while it was in flight, don't

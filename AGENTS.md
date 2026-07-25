@@ -27,3 +27,11 @@ nepotvrdí.
 
 U nových milníků drž číslování z `ROADMAP.md`; commity znač `M<n>` jen
 podle téhle roadmapy, ne podle vlastního schématu.
+
+## Dual-AI architektura
+
+Aplikace používá dva oddělené AI modely: **vypravěč** (storyteller) píše
+plynulý narativní text, zatímco **extrakční model** (extractor) z něj
+strukturovaně vytahuje herní mechaniky (stavy, předměty, vztahy).
+Toto oddělení umožňuje každému modelu specializovat se na svou úlohu
+a používat jinou promptovací strategii či providera.

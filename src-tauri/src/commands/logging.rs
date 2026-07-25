@@ -19,7 +19,30 @@ const LOG_FILE_NAME: &str = "app.log";
 const ROTATE_AT_BYTES: u64 = 2 * 1024 * 1024; // 2 MB
 const MAX_LINE_CHARS: usize = 4000;
 
-fn logs_dir(app: &AppHandle) -> Result<PathBuf, String> {
+// Chat log — per-chat files (`chat-{chat_id}.log`) in the same `logs/`
+// directory. Each file records every prompt sent to the AI and every
+// response received for that specific chat, so the user can inspect what
+// the model actually saw vs what it returned. When a chat is deleted, its
+// log file is deleted too.
+const CHAT_LOG_PREFIX: &str = "chat-";
+const CHAT_LOG_SUFFIX: &str = ".log";
+const CHAT_LOG_ROTATE_AT: u64 = 5 * 1024 * 1024; // 5 MB
+const CHAT_LOG_MAX_LINE_CHARS: usize = 32_768; // 32 KB per entry
+
+fn chat_log_name(chat_id: &str) -> String {
+    format!("{CHAT_LOG_PREFIX}{chat_id}{CHAT_LOG_SUFFIX}")
+}
+
+/// Sanity-check that `chat_id` looks like a UUID/slug so nobody can
+/// path-traverse out of the logs directory via a malicious `chat_id`.
+fn valid_chat_id(id: &str) -> bool {
+    id.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && id.len() >= 1
+        && id.len() <= 128
+}
+
+pub fn logs_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -32,7 +55,7 @@ fn logs_dir(app: &AppHandle) -> Result<PathBuf, String> {
 /// Rotates `log_path` to `log_path.1` (overwriting any previous `.1`) if it
 /// currently exceeds `max_bytes`. Pure over `Path` so it's testable without
 /// an `AppHandle`/temp app data dir.
-fn rotate_if_needed(log_path: &Path, max_bytes: u64) -> std::io::Result<()> {
+pub fn rotate_if_needed(log_path: &Path, max_bytes: u64) -> std::io::Result<()> {
     let size = match fs::metadata(log_path) {
         Ok(meta) => meta.len(),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -174,6 +197,188 @@ fn days_to_ymd(days: i64) -> (i64, u32, u32) {
 pub fn get_log_path(app: AppHandle) -> Result<String, String> {
     let path = logs_dir(&app)?.join(LOG_FILE_NAME);
     Ok(path.to_string_lossy().to_string())
+}
+
+// ── chat log (per-chat files) ─────────────────────────────────────────
+
+/// Appends one pre-formatted line to `chat-{chat_id}.log`, rotating first
+/// if the file exceeds 5 MB. Lines are truncated to 32 KB per entry.
+/// `chat_id` is validated to prevent path traversal.
+#[tauri::command]
+pub fn append_chat_log(app: AppHandle, chat_id: String, line: String) -> Result<(), String> {
+    if !valid_chat_id(&chat_id) {
+        return Err("neplatné chat_id".into());
+    }
+    let dir = logs_dir(&app)?;
+    let path = dir.join(chat_log_name(&chat_id));
+
+    rotate_if_needed(&path, CHAT_LOG_ROTATE_AT)
+        .map_err(|e| format!("nepodařilo se rotovat chat log: {e}"))?;
+
+    let truncated: String = if line.chars().count() > CHAT_LOG_MAX_LINE_CHARS {
+        line.chars()
+            .take(CHAT_LOG_MAX_LINE_CHARS)
+            .collect::<String>()
+            + "…"
+    } else {
+        line
+    };
+
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("nepodařilo se otevřít chat log: {e}"))?;
+    writeln!(file, "{truncated}").map_err(|e| format!("nepodařilo se zapsat do chat logu: {e}"))?;
+    Ok(())
+}
+
+/// Reads the last `max_bytes` bytes from `chat-{chat_id}.log` (or the
+/// whole file if it's smaller). Returns an empty string if the file
+/// doesn't exist yet.
+#[tauri::command]
+pub fn read_chat_log(app: AppHandle, chat_id: String, max_bytes: usize) -> Result<String, String> {
+    if !valid_chat_id(&chat_id) {
+        return Err("neplatné chat_id".into());
+    }
+    let path = logs_dir(&app)?.join(chat_log_name(&chat_id));
+    let contents = match fs::read(&path) {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("nepodařilo se přečíst chat log: {e}")),
+    };
+    let cap = max_bytes.min(contents.len());
+    let tail = &contents[contents.len() - cap..];
+    let start = if let Some(pos) = tail.iter().position(|&b| b == b'\n') {
+        pos + 1
+    } else {
+        0
+    };
+    String::from_utf8(tail[start..].to_vec()).map_err(|e| format!("chat log není platné UTF-8: {e}"))
+}
+
+/// Returns the absolute path to `chat-{chat_id}.log`.
+#[tauri::command]
+pub fn get_chat_log_path(app: AppHandle, chat_id: String) -> Result<String, String> {
+    if !valid_chat_id(&chat_id) {
+        return Err("neplatné chat_id".into());
+    }
+    let path = logs_dir(&app)?.join(chat_log_name(&chat_id));
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Deletes `chat-{chat_id}.log` and any rotated backup
+/// (`chat-{chat_id}.log.1`). No-op if the files don't exist.
+#[tauri::command]
+pub fn delete_chat_log(app: AppHandle, chat_id: String) -> Result<(), String> {
+    if !valid_chat_id(&chat_id) {
+        return Err("neplatné chat_id".into());
+    }
+    let dir = logs_dir(&app)?;
+    let path = dir.join(chat_log_name(&chat_id));
+    let rotated = path.with_extension("log.1");
+
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| format!("nepodařilo se smazat chat log: {e}"))?;
+    }
+    if rotated.exists() {
+        let _ = fs::remove_file(&rotated);
+    }
+    Ok(())
+}
+
+/// Lists all chat IDs that have a log file in the logs directory.
+/// Returns an array of `{ chat_id, size_bytes }` objects.
+#[tauri::command]
+pub fn list_chat_logs(app: AppHandle) -> Result<Vec<serde_json::Value>, String> {
+    let dir = logs_dir(&app)?;
+    let mut entries = Vec::new();
+    let read_dir = fs::read_dir(&dir).map_err(|e| format!("nepodařilo se přečíst adresář logů: {e}"))?;
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Match `chat-{id}.log` but not rotated `.log.1` files.
+        if !name.starts_with(CHAT_LOG_PREFIX) || !name.ends_with(CHAT_LOG_SUFFIX) {
+            continue;
+        }
+        // Skip rotated backups (they end with `.log.1`, not `.log`).
+        if name.ends_with(".log.1") {
+            continue;
+        }
+        let chat_id = &name[CHAT_LOG_PREFIX.len()..name.len() - CHAT_LOG_SUFFIX.len()];
+        if !valid_chat_id(chat_id) {
+            continue;
+        }
+        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        entries.push(serde_json::json!({
+            "chat_id": chat_id,
+            "size_bytes": size,
+        }));
+    }
+    // Sort by chat_id for stable UI ordering.
+    entries.sort_by(|a, b| a["chat_id"].as_str().cmp(&b["chat_id"].as_str()));
+    Ok(entries)
+}
+
+// ── extractor debug log ──────────────────────────────────────────────
+
+const EXTRACTOR_LOG_FILE_NAME: &str = "extractor.log";
+
+/// Returns the absolute path to `extractor.log`.
+#[tauri::command]
+pub fn get_extractor_log_path(app: AppHandle) -> Result<String, String> {
+    let path = logs_dir(&app)?.join(EXTRACTOR_LOG_FILE_NAME);
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Reads the last `max_bytes` bytes from `extractor.log`.
+#[tauri::command]
+pub fn read_extractor_log(app: AppHandle, max_bytes: usize) -> Result<String, String> {
+    let path = logs_dir(&app)?.join(EXTRACTOR_LOG_FILE_NAME);
+    let contents = match fs::read(&path) {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("nepodařilo se přečíst extraktor log: {e}")),
+    };
+    let cap = max_bytes.min(contents.len());
+    let tail = &contents[contents.len() - cap..];
+    let start = if let Some(pos) = tail.iter().position(|&b| b == b'\n') {
+        pos + 1
+    } else {
+        0
+    };
+    String::from_utf8(tail[start..].to_vec()).map_err(|e| format!("extraktor log není platné UTF-8: {e}"))
+}
+
+/// Opens a system terminal window with `tail -f` on the extractor log.
+#[tauri::command]
+pub fn tail_extractor_log(app: AppHandle) -> Result<(), String> {
+    let path = logs_dir(&app)?.join(EXTRACTOR_LOG_FILE_NAME);
+    let path_str = path.to_string_lossy().to_string();
+    let _ = fs::OpenOptions::new().create(true).append(true).open(&path);
+    let terminals: &[(&str, &str)] = &[
+        ("x-terminal-emulator", "-e"),
+        ("gnome-terminal", "--"),
+        ("konsole", "-e"),
+        ("xfce4-terminal", "-e"),
+        ("xterm", "-e"),
+    ];
+    for (bin, flag) in terminals {
+        let mut cmd = std::process::Command::new(*bin);
+        cmd.arg(*flag).arg("tail").arg("-f").arg(&path_str)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .stdin(std::process::Stdio::null());
+        if cmd.spawn().is_ok() {
+            return Ok(());
+        }
+    }
+    Err(format!("Nepodařilo se otevřít terminál. Zkus ručně: tail -f {path_str}"))
 }
 
 #[cfg(test)]

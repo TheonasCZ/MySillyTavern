@@ -266,6 +266,17 @@ export interface PromptBuilderInput {
    * character, found via embedding similarity. Placed near the end of the
    * prompt for maximum recency weight. Empty/absent = no examples yet. */
   voiceExamples?: string[];
+  /** When true, the storyteller model uses a separate AI tag-extraction model
+   * (Gemini Flash etc.) to pull structured game-state changes from prose.
+   * The GAME TAGS, FACTION REPUTATION, and CRAFTING sections are omitted from
+   * this prompt — the storyteller writes clean prose without tag instructions,
+   * and the extraction model handles the mechanics. */
+  useTagExtraction?: boolean;
+  /** Scene-relevance context from the AI tag extraction model — used to
+   *  filter which skills and crafting recipes are surfaced to the
+   *  storyteller in the current prompt. Null when not available (first
+   *  turn, regex mode, or extraction failure). */
+  relevantContext?: import("../chat/inventoryProcessor").RelevantContext | null;
 }
 
 export interface PromptReport {
@@ -743,8 +754,11 @@ export function buildPrompt(input: PromptBuilderInput): PromptBuildResult {
     if (gameTimeDesc) {
       phi = phi ? `${phi}\n\n${SECTION_RIGHT_NOW}\n${gameTimeDesc}` : `${SECTION_RIGHT_NOW}\n${gameTimeDesc}`;
     }
-    // Game tags, faction reputation, and crafting — extracted to gameTags.ts
-    const gameTagsBlock = renderGameTags(persona, stateListCap);
+    // Game tags, faction reputation, and crafting — extracted to gameTags.ts.
+    // When a separate AI extraction model is used, render in state-only mode:
+    // the storyteller gets current inventory/skills/conditions as narrative
+    // context (no tag instructions), and the extraction model handles mechanics.
+    const gameTagsBlock = renderGameTags(persona, stateListCap, !!input.useTagExtraction, input.relevantContext ?? null);
     if (gameTagsBlock) {
       phi = phi ? `${phi}\n\n${gameTagsBlock}` : gameTagsBlock;
     }

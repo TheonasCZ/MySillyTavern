@@ -10,11 +10,12 @@ export async function logUsage(
   connectionId: string | null,
   inputTokensEst: number,
   outputTokensEst: number,
+  chatId?: string | null,
 ): Promise<void> {
   await execute(
-    `INSERT INTO usage_log (id, created_at, kind, connection_id, input_tokens_est, output_tokens_est)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [newId(), nowIso(), kind, connectionId, Math.round(inputTokensEst), Math.round(outputTokensEst)],
+    `INSERT INTO usage_log (id, created_at, kind, connection_id, input_tokens_est, output_tokens_est, chat_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [newId(), nowIso(), kind, connectionId, Math.round(inputTokensEst), Math.round(outputTokensEst), chatId ?? null],
   );
 }
 
@@ -72,5 +73,29 @@ export async function getUsageStats(): Promise<UsageStats> {
     today: toBucket(todayRows[0]),
     week: toBucket(weekRows[0]),
     month: toBucket(monthRows[0]),
+  };
+}
+
+export interface ChatUsageBucket {
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Returns aggregate usage for a single chat (all time). Used by the chat
+ * screen to show "this chat has cost X tokens so far". */
+export async function getUsageForChat(chatId: string): Promise<ChatUsageBucket> {
+  const rows = await query<BucketRow>(
+    `SELECT COUNT(*) AS requests,
+            COALESCE(SUM(input_tokens_est), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens_est), 0) AS output_tokens
+     FROM usage_log WHERE chat_id = $1`,
+    [chatId],
+  );
+  const row = rows[0];
+  return {
+    requests: row?.requests ?? 0,
+    inputTokens: row?.input_tokens ?? 0,
+    outputTokens: row?.output_tokens ?? 0,
   };
 }

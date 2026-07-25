@@ -7,18 +7,23 @@ use commands::backup::{
     apply_pending_import, cancel_pending_import, export_backup, has_pending_import,
     list_backups, request_import_backup, run_auto_backup,
 };
+use commands::balance::get_user_balance;
 use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
 use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
 use commands::dice::eval_dice;
 use commands::export_campaign::export_campaign_zip;
+use commands::extract::extract_game_tags;
 use commands::export_chronicle::{
     cancel_export, get_export_status, resume_export, start_export, ExportRegistry,
 };
 use commands::files::{read_text_file, write_text_file};
 use commands::image_gen::generate_illustration;
-use commands::logging::{append_log, get_log_path};
+use commands::logging::{
+    append_chat_log, append_log, delete_chat_log, get_chat_log_path, get_extractor_log_path,
+    get_log_path, list_chat_logs, read_chat_log, read_extractor_log, tail_extractor_log,
+};
 use commands::secrets::{delete_api_key, has_api_key, init_store, set_api_key};
 use commands::sync_journal::{
     append_journal_line, delete_sync_file, list_sync_entries, read_journal_chunk,
@@ -54,6 +59,7 @@ pub fn run() {
             set_api_key,
             delete_api_key,
             has_api_key,
+            get_user_balance,
             chat_complete,
             chat_stream,
             chat_abort,
@@ -73,6 +79,15 @@ pub fn run() {
             list_backups,
             append_log,
             get_log_path,
+            append_chat_log,
+            read_chat_log,
+            get_chat_log_path,
+            delete_chat_log,
+            list_chat_logs,
+            get_extractor_log_path,
+            read_extractor_log,
+            tail_extractor_log,
+            extract_game_tags,
             eval_dice,
             generate_illustration,
             export_campaign_zip,

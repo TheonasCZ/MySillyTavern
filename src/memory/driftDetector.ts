@@ -341,7 +341,7 @@ export async function runDriftCheck(
     const zeroTemp: ConnectionConfig = { ...connection, temperature: 0 };
     const raw = await chatComplete(zeroTemp, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    void logUsage("memory", connection.id, inputTokens, estimateTokens(raw)).catch(() => {});
+    void logUsage("memory", connection.id, inputTokens, estimateTokens(raw), chatId).catch(() => {});
 
     const findings = parseDriftOutput(raw);
     const state = await getDriftState(chatId);

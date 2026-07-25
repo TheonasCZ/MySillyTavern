@@ -1,8 +1,19 @@
 import type { ChatMessage, ConnectionConfig } from "../providers/types";
 import { chatStream, type ChatStreamHandle } from "../providers/chatStream";
 import { lookupItemDetailForChat } from "../chat/toolCalling";
-import { processGameResponse } from "../chat/inventoryProcessor";
+import { processGameResponse, extractTagsWithAI } from "../chat/inventoryProcessor";
+import { parseGameTags } from "../chat/inventoryTags";
 import { logChatUsage, resolveChatPersona, MAX_FUNCTION_CALL_ROUND_TRIPS } from "./configOps";
+import { logChatExchange } from "../chat/chatLogger";
+import { useConnectionsStore } from "./connectionsStore";
+import { toConnectionDto } from "../providers/dto";
+import { updateMessageContent } from "../db/repositories/messagesRepo";
+import { listFactions } from "../db/repositories/factionsRepo";
+import { listChatRecipes } from "../db/repositories/craftingRepo";
+import { getCalendarSetting } from "../db/repositories/settingsRepo";
+import { listQuests } from "../db/repositories/questsRepo";
+import { calendarDescription, calendarFromJSON } from "../memory/calendar";
+import { useSettingsStore } from "./settingsStore";
 import type { Setter, Getter } from "./chatStoreTypes";
 
 export function startStream(
@@ -47,18 +58,80 @@ export function startStream(
       onDone: () => {
         const text = get().streamingText;
         set({ handle: null, pendingFinalize: null });
-        logChatUsage(connection.id, apiMessages, text);
-        // Process inventory tags — resolve persona and clean text
+        logChatUsage(connection.id, apiMessages, text, get().chatId);
+        // Write the full exchange (prompt + response) to `chat.log` so
+        // the user can inspect what the model actually saw vs returned.
+        logChatExchange(connection.name, connection.model, get().chatId, apiMessages, text);
+
+        // Show the message immediately — strip any inline tags the
+        // storyteller may have written (habit), then persist. The AI
+        // extraction + state mutations run in background so the player
+        // never waits for the extractor.
+        const displayText = parseGameTags(text).cleanText;
+        void finalize(displayText, false, null);
+
+        // Process game state async — AI extraction (Gemini Flash) or
+        // regex tag parsing, then apply inventory/skill/time mutations.
         const chat = get().chat;
         void (async () => {
           const persona = chat ? await resolveChatPersona(chat) : null;
-          const { cleanText, changeSummary } = await processGameResponse(persona, text, chat?.id);
-          // processGameResponse may have mutated the chat's inventory/skills/
-          // conditions/xp/level in the DB directly (bypassing this store) —
-          // refresh so InventoryPanel and any other live-state UI re-render
-          // instead of showing a stale snapshot.
+          let aiTags = null;
+          if (chat?.tagExtractionConnectionId) {
+            const conn = useConnectionsStore
+              .getState()
+              .connections.find((c) => c.id === chat.tagExtractionConnectionId);
+            if (conn && chat) {
+              // Load additional world state for the extractor context.
+              // Fire-and-forget best-effort — DB failures just mean the
+              // extractor works with less context, same as before.
+              const [factions, recipes, quests, calRaw] = await Promise.all([
+                persona ? listFactions(persona.id).catch(() => []) : Promise.resolve([]),
+                listChatRecipes(chat.id).catch(() => []),
+                listQuests(chat.id).catch(() => []),
+                getCalendarSetting(chat.id).catch(() => null),
+              ]);
+              let calDesc: string | undefined;
+              if (calRaw) {
+                const cal = calendarFromJSON(calRaw);
+                calDesc = calendarDescription(cal, useSettingsStore.getState().calendarMode);
+              }
+              const lastUserMsg = apiMessages.filter((m) => m.role === "user").pop();
+
+              aiTags = await extractTagsWithAI(toConnectionDto(conn), text, {
+                skills: chat.skills,
+                inventory: chat.inventory,
+                conditions: chat.conditions,
+                modifications: chat.modifications,
+                xp: chat.xp,
+                level: chat.level,
+                progression: persona?.progression ?? "skill",
+                hardcoreMode: chat.hardcoreMode,
+                factions: factions.map((f) => ({ name: f.factionName, reputation: f.reputation })),
+                recipes: recipes.map((r) => ({ resultItem: r.resultItem, ingredients: r.ingredients })),
+                quests: quests.filter(q => q.status === "active").map((q) => ({ name: q.name, status: q.status })),
+                calendarDescription: calDesc,
+                playerMessage: lastUserMsg?.content?.slice(0, 300),
+              });
+            }
+          }
+          const { changeSummary } = await processGameResponse(persona, text, chat?.id, aiTags);
           if (chat?.id) void refreshChatState(chat.id);
-          void finalize(cleanText, false, changeSummary);
+
+          // Update the changeSummary on the already-displayed message.
+          // The message was persisted with null; now we fill it in.
+          if (changeSummary) {
+            // Guard: if the user switched chats while extraction was running,
+            // the messages array no longer belongs to this chat — bail out.
+            if (get().chatId !== chat?.id) return;
+            const messages = get().messages;
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.role === "assistant") {
+              const updated = await updateMessageContent(lastMsg, lastMsg.content, changeSummary);
+              set((s) => ({
+                messages: s.messages.map((m) => (m.id === updated.id ? updated : m)),
+              }));
+            }
+          }
         })();
       },
       onError: (err) => {
@@ -74,7 +147,8 @@ export function startStream(
         // A stream that errored out mid-response still leaves useful partial
         // text — persist it (flagged as interrupted) instead of discarding it,
         // so the user can pick it up with "continue"/"regenerate" (plan §9).
-        logChatUsage(connection.id, apiMessages, text);
+        logChatUsage(connection.id, apiMessages, text, get().chatId);
+        logChatExchange(connection.name, connection.model, get().chatId, apiMessages, text);
         void finalize(text, true);
       },
       // EXPERIMENTAL (function-calling prototype): the model paused to call
