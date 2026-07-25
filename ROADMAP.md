@@ -1,6 +1,6 @@
 # MySillyTavern — roadmapa
 
-Stav k 2026-07-18. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odložené featury.
+Stav k 2026-07-25. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odložené featury.
 
 ---
 
@@ -27,6 +27,7 @@ Stav k 2026-07-18. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odlo�
 | Položka | Stav |
 |---|---|
 | **M33 — Repo housekeeping** | ⬜ LICENSE, README aktualizace, `.codewhale/` do `.gitignore`, CI badge, metadata |
+| **ChatListItem redesign** | ⬜ zadáno 2026-07-25 — 3 selecty (připojení/persona/preset) v řádku chatu jsou nepřehledné, uživatel chce celý list item předělat. S 1 postavou/1 personou/0 presety v DB se navíc těžko posuzuje, co je "prázdné správně" vs. bug — otestovat s víc daty jako první krok. |
 | **M14 konfliktní UI** | ⬜ odloženo — banner pro ruční merge konfliktů |
 | **M28 fáze B — EN pivot paměti** | ⬜ odloženo — teď zahrnuje i `memory/calendar.ts` (`calendarDescription`, `SEASON_EFFECTS`) a `memory/gameTime.ts` (`weatherDescription`, `timeOfDay`, `Season`/`Weather` labely): veškerý text natvrdo česky, žádný `{lang}` parametr jako zbytek promptu. Při `gameLanguage: "en"` se do jinak anglického promptu vmíchá český blok o datu/počasí. Zjištěno 2026-07-18 při zapojování `gameTime.ts`. |
 | **M31 fáze B — Offline TTS** | ⬜ odloženo (průzkum Sherpa-ONNX) |
@@ -34,6 +35,54 @@ Stav k 2026-07-18. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odlo�
 | **Gemma fallback** (system prompt do user msg) | ⬜ výhledově |
 | **M34 — Lokální AI, duálně přepínatelná (fáze A: desktop)** | ⬜ zadáno 2026-07-19, nezačato |
 | **M34 fáze B — Mobil** | ⬜ podmíněno úspěchem fáze A |
+
+---
+
+## Refaktoring, drift-historie + startup freeze fix (2026-07-25, Claude)
+
+**Ledger fact history + M28c gap fix:**
+- ✅ **`ledger_fact_history`** (MIGRATION_036) — append-only audit log pro `ledger_facts`
+  content/status změny (`create`/`update`/`remove`/`canon_set`/`soft_correction`).
+  Zodpovídá "co ledger říkal před N zprávami a proč se to změnilo" — nešlo předtím
+  vůbec zjistit, jen aktuální stav. Vědomě NElogováno: `stability`/`contradiction_streak`
+  bumpy (čítače, ne obsahová změna — zaplavilo by to tabulku šumem).
+- ✅ **M28c pre-persist check byl jen v `sendMessage`** — `regenerate`/`continueMessage`
+  mohly uložit zprávu porušující kánon bez jakékoli kontroly. Sdílená
+  `runPrePersistCheck` vytažena a zapojena do všech tří.
+
+**Refactoring (dekompozice "god" souborů) — čistá extrakce, ověřeno tsc+vitest po každém souboru:**
+- ✅ `chatStore.ts` 780→260 ř. (`chatLifecycleOps.ts`, `messageOps.ts` pohltil sendMessage/
+  triggerSpeaker/regenerate/continueMessage + sdílený `checkPrePersistAndMaybeRetry`)
+- ✅ `MemoryPanel.tsx` 859→87 ř. (rozpad podle tabů: FactRow/FactsTab/SummaryTab/SearchTab/
+  ChronicleTab/PromptTab/ExtractionConnectionPicker)
+- ✅ `LorebookEditor.tsx` 775→280 ř. (EntryRow/LorebookLinksSection/LorebookMetaForm/
+  LorebookImportExportBar — handlery zůstaly centralizované v orchestrátoru)
+- ✅ `ChatScreen.tsx` 1122→494 ř. (hooky useChatCalendar/useDeepseekBalance/useChatRecipes;
+  komponenty PersonaSwitcher/ChatHeader/ChatErrorBanner/ChronicleExportDialog/
+  ChatToolsSidebar/GroupMembersBar)
+- ✅ `ChatListScreen.tsx` 704→184 ř. (hooky useNewChatForm/useChatSearch/useChatListData;
+  komponenty NewChatForm/ChatSearchResults/ChatListItem)
+- ✅ Sdílený `inputStyle` objekt (byl duplikovaný v ~10 souborech) → `src/ui/common/inputStyle.ts`
+- `promptBuilder.ts` (990 ř.) vědomě nechán netknutý — jeden koherentní algoritmus,
+  ne "god file" dělající nesouvisející věci.
+
+**Git úklid:** 46 → 1 lokální větev, ~30 mrtvých worktree smazáno (`.codewhale-worktrees/`,
+`.claude/worktrees/`). Necommitnutá práce (nativní Rust DeepSeek extraktor/balance,
+4 dny stará) uložena jako checkpoint commit, ne zahozena.
+
+**Bugfixy nalezené při live testování (dev app spuštěná a odzkoušená přímo):**
+- ✅ **Startup freeze** — `run_auto_backup` byl synchronní Tauri příkaz dělající zip
+  přímo na vlákně okna → okno nešlo ani resizovat, dokud záloha na startu neskončila.
+  Přesunuto do `tauri::async_runtime::spawn_blocking`.
+- ✅ **Loading screen** — `App.tsx` dřív renderoval `return null` během hydratace/zálohy/
+  syncu (vypadalo to jako zamrznutí). Teď spinner + `t("state.loading")`, gate na
+  `hydrated && backupDone && syncDone`.
+- ✅ **`quests.chat_id` bez `ON DELETE CASCADE`** (MIGRATION_037, chyba z migrace 012) —
+  smazání chatu s alespoň jedním questem selhávalo na FK constraint, potichu (dialog
+  potvrzení se ukázal, ale chat nezmizel, žádná chyba v UI). Zjištěno přes `app.log`
+  (`error returned from database: (code: 787) FOREIGN KEY constraint failed`).
+
+**Verze:** 0.1.4 → 0.1.5, commitnuto a pushnuto (`9b70328`).
 
 ---
 

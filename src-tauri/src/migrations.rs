@@ -221,6 +221,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_036,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 37,
+            description: "quests: add missing ON DELETE CASCADE on chat_id (deleting a chat with quests failed with a FK constraint error)",
+            sql: MIGRATION_037,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -678,4 +684,25 @@ CREATE TABLE ledger_fact_history (
 );
 CREATE INDEX idx_ledger_fact_history_chat ON ledger_fact_history(chat_id, created_at);
 CREATE INDEX idx_ledger_fact_history_fact ON ledger_fact_history(fact_id, created_at);
+"#;
+
+/// `quests.chat_id` was missing `ON DELETE CASCADE` (migration 012, unlike
+/// every other chat-scoped table) — deleting a chat that had any quests
+/// failed with a FOREIGN KEY constraint error, silently (the frontend's
+/// delete confirmation showed, but the chat never actually disappeared).
+/// SQLite has no `ALTER ... ADD CONSTRAINT`, so the table is recreated.
+const MIGRATION_037: &str = r#"
+CREATE TABLE quests_new (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO quests_new SELECT * FROM quests;
+DROP TABLE quests;
+ALTER TABLE quests_new RENAME TO quests;
+CREATE INDEX idx_quests_chat ON quests(chat_id, status);
 "#;
