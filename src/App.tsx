@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { getAutoBackupEnabled, getAutoBackupMaxCount, runAutoBackup } from "./db/backup";
@@ -20,7 +21,15 @@ import { UpdateBanner } from "./ui/UpdateBanner";
 import { KeyboardShortcutListener } from "./ui/useKeyboardShortcuts";
 
 function App() {
+  const { t } = useTranslation("common");
   const { hydrated, hydrate } = useSettingsStore();
+  // Startup auto-backup and sync both run once, independently of each
+  // other, alongside settings hydration — the loading screen stays up
+  // until all three are done, not just `hydrated`, so the app is never
+  // shown mid-backup/mid-sync (plan follow-up after the M14.1 auto-backup
+  // command was found to briefly block the window — see backup.rs).
+  const [backupDone, setBackupDone] = useState(false);
+  const [syncDone, setSyncDone] = useState(false);
 
   useEffect(() => {
     void hydrate();
@@ -36,6 +45,8 @@ function App() {
         }
       } catch (err) {
         console.warn("startup auto-backup failed:", err);
+      } finally {
+        setBackupDone(true);
       }
     })();
   }, []);
@@ -48,12 +59,31 @@ function App() {
         await runSyncOnStartup();
       } catch (err) {
         console.warn("[sync] startup sync failed:", err);
+      } finally {
+        setSyncDone(true);
       }
     })();
   }, [hydrated]);
 
-  if (!hydrated) {
-    return null;
+  const ready = hydrated && backupDone && syncDone;
+
+  if (!ready) {
+    // Hardcoded colors, not CSS vars — the theme class (which defines
+    // --color-bg/--color-text etc.) is only applied once `hydrate()`
+    // resolves, so vars aren't available yet during this exact window.
+    // Dark values match the app's dark-first default theme.
+    return (
+      <div
+        className="flex h-screen w-screen flex-col items-center justify-center gap-3"
+        style={{ backgroundColor: "#14110f", color: "#e8dfd2" }}
+      >
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+          style={{ borderColor: "#d97742", borderTopColor: "transparent" }}
+        />
+        <span className="text-sm tracking-wide opacity-70">{t("state.loading")}</span>
+      </div>
+    );
   }
 
   return (

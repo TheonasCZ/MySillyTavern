@@ -6,12 +6,7 @@ import type { TtsVoice } from "../../chat/ttsBackend";
 import { WebSpeechTts } from "../../chat/webSpeechTts";
 import { EdgeTts } from "../../chat/edgeTts";
 import { TtsManager } from "../../chat/ttsManager";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
+import { inputStyle } from "../common/inputStyle";
 
 // ---------------------------------------------------------------------------
 // Singleton TTS manager — mirrors useTts.ts

@@ -3,12 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { useLorebooksStore } from "../../stores/lorebooksStore";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
+import { inputStyle } from "../common/inputStyle";
 
 export function LorebooksListScreen() {
   const { t } = useTranslation(["lorebooks", "common"]);

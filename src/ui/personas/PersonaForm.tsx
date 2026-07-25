@@ -11,12 +11,7 @@ import { useConnectionsStore } from "../../stores/connectionsStore";
 import { getSetting } from "../../db/repositories/settingsRepo";
 import { avatarSrc } from "../characters/avatarSrc";
 import { toConnectionDto } from "../../providers/dto";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
+import { inputStyle } from "../common/inputStyle";
 
 interface Props {
   initial: Persona | null;

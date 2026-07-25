@@ -11,12 +11,7 @@ import { DEFAULT_EXTRACTION_INTERVAL } from "../../memory/memoryEngine";
 import { DEFAULT_VERBATIM_WINDOW } from "../../prompt/promptBuilder";
 import { useConnectionsStore } from "../../stores/connectionsStore";
 import { FieldHelp } from "../common/FieldHelp";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
+import { inputStyle } from "../common/inputStyle";
 
 /** Global defaults for the memory engine (plan §7 M5): how often ledger
  * extraction runs, and how many recent messages stay verbatim in the

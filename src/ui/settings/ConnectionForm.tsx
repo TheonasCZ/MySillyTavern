@@ -8,6 +8,7 @@ import { deleteApiKey, hasApiKey, saveApiKey } from "../../providers/keyring";
 import { listModels } from "../../providers/models";
 import type { ConnectionConfig, ConnectionDraft, ConnectionPurpose, Provider } from "../../providers/types";
 import { FieldHelp } from "../common/FieldHelp";
+import { inputStyle } from "../common/inputStyle";
 
 const PROVIDERS: Provider[] = ["gemini", "openai", "claude"];
 
@@ -72,12 +73,6 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [manualModel, setManualModel] = useState(false);
-
-  const inputStyle = {
-    backgroundColor: "var(--color-surface-2)",
-    borderColor: "var(--color-border-strong)",
-    color: "var(--color-text)",
-  } as const;
 
   const refreshKeyStatus = async (connectionId: string) => {
     const has = await hasApiKey(connectionId);

@@ -6,12 +6,7 @@ import { applyRegexRules } from "../../chat/regexTransform";
 import { usePresetsStore } from "../../stores/presetsStore";
 import { useUndoToast } from "../useUndoToast";
 import type { Preset, PresetDraft, PresetUpdate } from "../../db/repositories/presetsRepo";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
+import { inputStyle } from "../common/inputStyle";
 
 function PresetEditor({
   preset,

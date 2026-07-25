@@ -12,17 +12,12 @@ import {
 } from "../../db/repositories/charactersRepo";
 import { useCharactersStore } from "../../stores/charactersStore";
 import { FieldHelp } from "../common/FieldHelp";
+import { inputStyle } from "../common/inputStyle";
 import { avatarSrc } from "./avatarSrc";
 import type { TtsVoice } from "../../chat/ttsBackend";
 import { WebSpeechTts } from "../../chat/webSpeechTts";
 import { EdgeTts } from "../../chat/edgeTts";
 import { TtsManager } from "../../chat/ttsManager";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
 
 // Singleton manager for voice listing (lightweight — just for getVoices)
 let voiceManagerInstance: TtsManager | null = null;

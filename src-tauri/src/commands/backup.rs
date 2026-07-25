@@ -324,20 +324,29 @@ pub struct BackupEntry {
 /// Creates a timestamped backup zip in `$APPDATA/backups/`, then rotates
 /// old backups so at most `max_count` remain. Invoked by the frontend at
 /// startup (App.tsx, honoring the auto-backup settings) and on-demand.
+///
+/// Runs the actual zip/file I/O on a blocking-safe worker thread via
+/// `spawn_blocking` — this used to be a synchronous command, which tied up
+/// the main/window thread for the whole zip (DB + avatars), making the
+/// window unresponsive (couldn't even be resized) for the duration.
 #[tauri::command]
-pub fn run_auto_backup(app: AppHandle, max_count: Option<usize>) -> Result<String, String> {
-    let max_count = max_count.unwrap_or(DEFAULT_MAX_BACKUPS);
-    let dir = backups_dir(&app)?;
-    //  Build a filename like `mysillytavern-backup-2025-07-14T183045.zip`
-    let ts = format_timestamp(SystemTime::now());
-    let name = format!("mysillytavern-backup-{ts}.zip");
-    let out_path = dir.join(&name);
-    let out_str = out_path.to_string_lossy().to_string();
+pub async fn run_auto_backup(app: AppHandle, max_count: Option<usize>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let max_count = max_count.unwrap_or(DEFAULT_MAX_BACKUPS);
+        let dir = backups_dir(&app)?;
+        //  Build a filename like `mysillytavern-backup-2025-07-14T183045.zip`
+        let ts = format_timestamp(SystemTime::now());
+        let name = format!("mysillytavern-backup-{ts}.zip");
+        let out_path = dir.join(&name);
+        let out_str = out_path.to_string_lossy().to_string();
 
-    // Reuse the existing export logic
-    export_backup_inner(&app, &out_str)?;
-    cleanup_old_backups(&app, max_count);
-    Ok(out_str)
+        // Reuse the existing export logic
+        export_backup_inner(&app, &out_str)?;
+        cleanup_old_backups(&app, max_count);
+        Ok(out_str)
+    })
+    .await
+    .map_err(|e| format!("záloha selhala (worker thread panic): {e}"))?
 }
 
 /// Internal helper: same logic as the `export_backup` command but takes an

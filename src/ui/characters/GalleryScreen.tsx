@@ -6,13 +6,8 @@ import { blankNormalizedCard } from "../../cards/cardTypes";
 import { pickAndImportJsonCard, pickAndImportPngCard } from "../../cards/cardImport";
 import { createCharacter } from "../../db/repositories/charactersRepo";
 import { useCharactersStore } from "../../stores/charactersStore";
+import { inputStyle } from "../common/inputStyle";
 import { avatarSrc } from "./avatarSrc";
-
-const inputStyle = {
-  backgroundColor: "var(--color-surface-2)",
-  borderColor: "var(--color-border-strong)",
-  color: "var(--color-text)",
-} as const;
 
 export function GalleryScreen() {
   const { t } = useTranslation(["characters", "common"]);
