@@ -50,6 +50,12 @@ export function startStream(
   // EXPERIMENTAL: number of `get_item_detail` round trips already spent on
   // this reply — see `MAX_FUNCTION_CALL_ROUND_TRIPS`.
   functionCallDepth = 0,
+  // Number of times this reply has already been silently re-issued after
+  // the model returned an empty completion (0 chars, no error) — some
+  // reasoning models occasionally burn their whole token budget on
+  // reasoning and return nothing. One automatic retry; a second empty
+  // response in a row surfaces as a real error instead of looping forever.
+  emptyRetryCount = 0,
 ) {
   set({
     streaming: true,
@@ -80,6 +86,23 @@ export function startStream(
       },
       onDone: () => {
         const text = get().streamingText;
+        if (text.trim().length === 0) {
+          set({ handle: null, pendingFinalize: null });
+          if (emptyRetryCount < 1) {
+            startStream(connection, apiMessages, set, get, finalize, retry, refreshChatState, functionCallDepth, emptyRetryCount + 1);
+          } else {
+            set({
+              streaming: false,
+              streamingText: "",
+              streamingMessageId: null,
+              streamingSpeakerId: null,
+              error: "empty-response",
+              errorRetryable: true,
+              retry,
+            });
+          }
+          return;
+        }
         set({ handle: null, pendingFinalize: null });
         logChatUsage(connection.id, apiMessages, text, get().chatId);
         // Write the full exchange (prompt + response) to `chat.log` so

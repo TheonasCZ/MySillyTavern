@@ -104,6 +104,7 @@
       "errors": {
         "noConnection": "This chat has no connection selected. Set one from the chat list.",
         "offline": "You're offline. Check your internet connection and try again.",
+        "emptyResponse": "The model returned an empty response twice in a row. Try again, or consider a different model / higher max_tokens in the connection settings.",
         "retry": "Try again",
         "generic": "Error: {{message}}",
         "rateLimitRetry": "The model's request limit is exhausted. Try again in about {{seconds}} s (button below).",

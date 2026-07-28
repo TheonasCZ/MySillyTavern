@@ -49,7 +49,9 @@ export function ChatErrorBanner({
           ? t("room.errors.noConnection")
           : error === "offline"
             ? t("room.errors.offline")
-            : formatProviderError(error, t)}
+            : error === "empty-response"
+              ? t("room.errors.emptyResponse")
+              : formatProviderError(error, t)}
       </span>
       <span className="flex shrink-0 items-center gap-3">
         {errorRetryable && retry && (

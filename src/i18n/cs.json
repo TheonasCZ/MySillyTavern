@@ -104,6 +104,7 @@
       "errors": {
         "noConnection": "Tento chat nemá vybrané připojení. Nastav ho v seznamu chatů.",
         "offline": "Jsi offline. Zkontroluj připojení k internetu a zkus to znovu.",
+        "emptyResponse": "Model dvakrát po sobě vrátil prázdnou odpověď. Zkus to znovu, nebo zvaž jiný model/vyšší max_tokens v nastavení připojení.",
         "retry": "Zkusit znovu",
         "generic": "Chyba: {{message}}",
         "rateLimitRetry": "Model má vyčerpaný limit požadavků. Zkus to znovu asi za {{seconds}} s (tlačítko níže).",
