@@ -34,14 +34,14 @@ Return ONLY the JSON object, no other text, no markdown fences. The JSON must us
 Rules:
 - If nothing changed in a category, use an empty array or null.
 - time_elapsed_minutes: how many minutes passed in the story (e.g. "two hours later" = 120). If unclear, use null.
-- inventory: items gained, lost, or whose qty changed. "He found a sword" = add sword qty 1. "He dropped his shield" = remove shield qty 1.
+- inventory: items gained, lost, or whose qty changed. "He found a sword" = add sword qty 1. "He dropped his shield" = remove shield qty 1. Only emit a "remove" for an item the FIRST time this exchange shows it actually leaving the character's possession (handed over, consumed, destroyed). If the text is still describing the same physical item being worked on, held, or installed across several consecutive messages of one continuous scene, do NOT emit another "remove" for it — it already left the inventory the first time. Never list an item here if it is also an ingredient or result of a "crafting"/"crafted" entry below — crafting/crafted already remove the ingredients and add the result on their own, so duplicating them in "inventory" would apply the change twice.
 - skills: new skills learned or existing ones improved. Delta is the change (positive = improved, negative = worsened).
 - levels: xp_delta is XP change, level_delta is level change.
 - conditions: temporary effects like "exhausted", "injured", "blessed".
 - modifications: permanent body changes like "scar on cheek", "tattoo".
 - factions: reputation changes with named groups.
 - crafting: new recipes discovered (result_item + ingredients).
-- crafted: items successfully crafted (result_item + perks).
+- crafted: items successfully crafted (result_item + perks). If the result is a modified/upgraded version of an item the character ALREADY owns (e.g. a rune, socket, or component added to their own existing weapon or gear), this is a modification, not a brand-new item: you MUST also emit a matching "crafting" entry whose ingredients list includes the original item's exact inventory name, so it gets consumed and replaced instead of duplicated. Never leave the original base item sitting in the inventory next to its own upgraded/crafted result.
 - quests: new quests started, completed, failed, or noted.
 - game_over: if the character died, state the reason. Otherwise null.
 - check_skill: if a skill check was called, name the skill. Otherwise null.
