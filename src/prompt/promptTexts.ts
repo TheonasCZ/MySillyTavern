@@ -35,6 +35,15 @@ export const EXTRACTION_SYSTEM_PROMPT = (lang: string) =>
   "this prevents the first fact from being overwritten by the second. If you don't fill in sub_key, an empty string is used. " +
   "Record only facts of a permanent nature (who is who, what happened, where we are, quest objectives) — " +
   "not transient descriptions of mood or dialogue. Use 'remove' for facts that are no longer true.\n\n" +
+  "Do NOT record individual item pickups/finds as category 'player' facts (e.g. \"has found an iron " +
+  "crowbar\") — items the player is actually carrying are already tracked exactly and authoritatively " +
+  "by the game's own inventory system via [INV:...] tags, which you do not see or produce here. A " +
+  "generic sub_key like 'possessions' reused for each new item silently overwrites the previous one " +
+  "instead of creating a separate fact (sub_key only disambiguates when it's distinct per item), which " +
+  "has caused the ledger to \"forget\" earlier finds and the GM to contradict its own earlier narration " +
+  "about where an item came from. Only record something about an item as a 'player' fact when it's not " +
+  "just possession but a genuinely permanent trait or plot thread (e.g. \"has proposed adding forbidden " +
+  "runes to their blade\", \"carries a parchment with a blade design\") — never plain ownership.\n\n" +
   "Be careful with category 'world': record deliberate, established worldbuilding (how magic works, what " +
   "a place is, a recurring rule), not a one-off in-fiction rationalization the GM improvised in the moment " +
   "to justify a single scene event (e.g. an offhand explanation for why a new threat showed up). Recording " +

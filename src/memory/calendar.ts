@@ -110,6 +110,15 @@ export function defaultCalendarDate(): CalendarDate {
   return calendarDateFromDays(847, 1, 6, 0);
 }
 
+/** Days elapsed since the campaign's fixed start date (year 847, day 1) —
+ * the model is only ever told the absolute in-fiction date, never how many
+ * days that represents since the story began, so it has no anchor to
+ * answer "how many days has it been?" consistently. 0 on the start day. */
+export function daysSinceCampaignStart(date: CalendarDate): number {
+  const start = defaultCalendarDate();
+  return (date.year - start.year) * DAYS_PER_YEAR + (date.dayOfYear - start.dayOfYear);
+}
+
 /** Advances the calendar by a number of whole minutes (may be more than an
  * hour or a day — wraps hours/days/years as needed). This is the one
  * primitive all other `advance*` helpers are built on. */
@@ -290,7 +299,9 @@ export function calendarDescription(date: CalendarDate, mode: CalendarMode = "fa
   const period = timeOfDay(hour);
   const time = formatTimeHHMM(hour, minute);
   const tagNote = `KDYKOLI v příběhu uplyne čas (spánek, cestování, čekání, práce trvající hodiny), MUSÍŠ použít [TIME:...] tag. Bez něj se hodiny posunou jen o pár minut a časované stavy nikdy nevyprší. Pro posun: [TIME:+1d] (den), [TIME:+1h] (hodina) nebo [TIME:+15m] (minuty). Aktuálně je ${time} (${period}) — nenabízej hráči noční/tmavé taktiky (schování se ve tmě, noční přesun apod.), pokud právě není noc.`;
-  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${time} — ${period})\n${effects}\n${tagNote}`;
+  const elapsedDays = daysSinceCampaignStart(date);
+  const dayCountNote = `Dnešek je ${elapsedDays + 1}. den vaší cesty (${elapsedDays === 0 ? "začali jste dnes" : `uplynul${elapsedDays === 1 ? "" : elapsedDays < 5 ? "y" : "o"} ${elapsedDays} ${elapsedDays === 1 ? "den" : elapsedDays < 5 ? "dny" : "dní"} od začátku`}) — pokud se hráč zeptá, kolik dní uplynulo, vycházej z tohoto čísla, ne z odhadu podle vyprávění.`;
+  return `[DNEŠNÍ DATUM] ${formatCalendarDate(date, mode)} (${date.season}, ${time} — ${period})\n${effects}\n${tagNote}\n${dayCountNote}`;
 }
 
 // ---- Serialization ---------------------------------------------------------
