@@ -29,7 +29,7 @@ const DEFAULT_DRAFT: ConnectionDraft = {
   model: "",
   temperature: 0.8,
   topP: 0.95,
-  maxTokens: 8192,
+  maxTokens: 16384,
   contextBudget: 12000,
 };
 
