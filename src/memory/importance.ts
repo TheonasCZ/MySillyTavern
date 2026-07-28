@@ -158,13 +158,19 @@ export function scoreImportance(
 
 // ---- Formatting ---------------------------------------------------------
 
+/** Routine messages keep an excerpt instead of being dropped outright — the
+ * heuristic score is noisy (see IMPORTANCE_THRESHOLD), so the summarizer
+ * model, which is explicitly told to skip uninformative [routine] content
+ * on its own judgment, needs something to actually judge. */
+const ROUTINE_EXCERPT_LENGTH = 160;
+
 /**
  * Format messages with importance markers for the summarizer prompt.
  *
  * Important messages (score > IMPORTANCE_THRESHOLD) are prefixed with
- * `[důležité]`; routine messages get `[rutinní]`. Adjacent routine
- * messages from the *same speaker* are compressed into a single summary
- * line listing speaker names and message count.
+ * `[important]` and kept verbatim. Adjacent routine messages are grouped
+ * onto a single `[routine]` line, each as a short excerpt — compressed for
+ * token budget, but never fully discarded.
  */
 export function formatScoredMessages(
   messages: TranscriptMessage[],
@@ -184,22 +190,22 @@ export function formatScoredMessages(
       lines.push(`[important] ${speaker}: ${m.content}`);
       i++;
     } else {
-      // Collect adjacent routine messages
-      const start = i;
-      const speakers = new Set<string>();
+      // Collect adjacent routine messages, keeping a short excerpt of each.
+      const excerpts: string[] = [];
       while (
         i < messages.length &&
         (scores.get(messages[i].id) ?? 0) <= IMPORTANCE_THRESHOLD
       ) {
-        const sp = messages[i].speakerName ?? (messages[i].role === "assistant" ? "AI" : "Hráč");
-        speakers.add(sp);
+        const sp = messages[i].speakerName ?? (messages[i].role === "assistant" ? "AI" : "Player");
+        const content = messages[i].content.trim();
+        const excerpt =
+          content.length > ROUTINE_EXCERPT_LENGTH
+            ? `${content.slice(0, ROUTINE_EXCERPT_LENGTH)}…`
+            : content;
+        excerpts.push(`${sp}: ${excerpt}`);
         i++;
       }
-      const count = i - start;
-      const speakerList = [...speakers].join(", ");
-      lines.push(
-        `[routine] Brief exchange between ${speakerList} (${count} ${count === 1 ? "message" : "messages"})`,
-      );
+      lines.push(`[routine] ${excerpts.join(" / ")}`);
     }
   }
 

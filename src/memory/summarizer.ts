@@ -10,7 +10,9 @@ import type { Message } from "../db/repositories/messagesRepo";
 import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import { scoreImportance, formatScoredMessages } from "./importance";
+import { listAllFacts } from "../db/repositories/ledgerRepo";
 import { SUMMARY_SYSTEM_PROMPT } from "../prompt/promptTexts";
+import { logMemoryEvent } from "../db/repositories/memoryLogRepo";
 
 
 
@@ -62,16 +64,33 @@ export async function runSummarization(
   if (messagesToFold.length === 0) return;
   try {
     const existing = await getSummary(chatId);
-    const scores = scoreImportance(messagesToFold);
+    const factSubjects = (await listAllFacts(chatId))
+      .filter((f) => f.status === "active")
+      .map((f) => f.subject);
+    const scores = scoreImportance(messagesToFold, { factSubjects });
     const prompt = buildSummaryPrompt(existing?.text ?? "", messagesToFold, scores, lang);
     const text = await chatComplete(connection, prompt);
     const inputTokens = prompt.reduce((sum, m) => sum + estimateTokens(m.content), 0);
     void logUsage("memory", connection.id, inputTokens, estimateTokens(text), chatId).catch(() => {});
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      void logMemoryEvent(chatId, "summarizer", "warn", "summary_empty", "Model returned an empty summary — not persisted", {
+        messagesFolded: messagesToFold.length,
+        promptFormattedLength: prompt[1]?.content.length ?? 0,
+      });
+      return;
+    }
     const upToMessageId = messagesToFold[messagesToFold.length - 1].id;
     await upsertSummary(chatId, upToMessageId, trimmed);
+    void logMemoryEvent(chatId, "summarizer", "info", "summary_updated", "Summary folded and persisted", {
+      messagesFolded: messagesToFold.length,
+      summaryLength: trimmed.length,
+      factSubjectsUsed: factSubjects.length,
+    });
   } catch (err) {
+    void logMemoryEvent(chatId, "summarizer", "error", "summarize_failed", "runSummarization threw", {
+      error: String(err),
+    });
     console.warn("summarizer: summarization failed for chat", chatId, err);
   }
 }

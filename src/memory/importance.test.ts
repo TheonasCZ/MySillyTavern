@@ -129,7 +129,7 @@ describe("formatScoredMessages", () => {
     expect(result).toContain("Našel jsem meč v jeskyni.");
   });
 
-  it("compresses adjacent routine messages", () => {
+  it("groups adjacent routine messages onto one line, keeping excerpts", () => {
     const messages = [
       msg("1", "ok", "user", "Hráč"),
       msg("2", "dobře", "assistant", "AI"),
@@ -142,14 +142,25 @@ describe("formatScoredMessages", () => {
     ]);
 
     const result = formatScoredMessages(messages, scores);
+    expect(result.split("\n")).toHaveLength(1);
     expect(result).toContain("[routine]");
-    expect(result).not.toContain("ok");
-    expect(result).not.toContain("dobře");
-    expect(result).not.toContain("jo");
-    // Should mention speaker names and message count
+    // Content must NOT be discarded — this is what the summarizer judges.
+    expect(result).toContain("ok");
+    expect(result).toContain("dobře");
+    expect(result).toContain("jo");
     expect(result).toContain("Hráč");
     expect(result).toContain("AI");
-    expect(result).toContain("3");
+  });
+
+  it("truncates long routine excerpts instead of dropping them", () => {
+    const long = "a".repeat(400);
+    const messages = [msg("1", long, "user", "Hráč")];
+    const scores = new Map([["1", 0.1]]);
+
+    const result = formatScoredMessages(messages, scores);
+    expect(result).toContain("[routine]");
+    expect(result).toContain("a".repeat(160));
+    expect(result.length).toBeLessThan(long.length);
   });
 
   it("handles mixed important and routine messages", () => {
@@ -193,22 +204,17 @@ describe("formatScoredMessages", () => {
     expect(formatScoredMessages(messages, justAbove)).toContain("[important]");
   });
 
-  it("uses correct Czech plural for message counts", () => {
-    const single = [msg("1", "ok")];
-    const singleScores = new Map([["1", 0.1]]);
-    expect(formatScoredMessages(single, singleScores)).toContain("1 message");
-
-    const two = [msg("1", "ok"), msg("2", "jo")];
-    const twoScores = new Map([["1", 0.1], ["2", 0.1]]);
-    expect(formatScoredMessages(two, twoScores)).toContain("2 messages");
-
+  it("keeps one excerpt per routine message, separated", () => {
     const five = [
-      msg("1", "ok"), msg("2", "ok"), msg("3", "ok"),
-      msg("4", "ok"), msg("5", "ok"),
+      msg("1", "ok", "user", "Hráč"), msg("2", "jo", "user", "Hráč"), msg("3", "hm", "user", "Hráč"),
+      msg("4", "dobře", "user", "Hráč"), msg("5", "jasně", "user", "Hráč"),
     ];
     const fiveScores = new Map([
       ["1", 0.1], ["2", 0.1], ["3", 0.1], ["4", 0.1], ["5", 0.1],
     ]);
-    expect(formatScoredMessages(five, fiveScores)).toContain("5 messages");
+    const result = formatScoredMessages(five, fiveScores);
+    for (const word of ["ok", "jo", "hm", "dobře", "jasně"]) {
+      expect(result).toContain(word);
+    }
   });
 });
