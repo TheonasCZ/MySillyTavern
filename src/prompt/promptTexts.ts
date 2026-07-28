@@ -54,6 +54,11 @@ export const EXTRACTION_SYSTEM_PROMPT = (lang: string) =>
   "limit fact even when the conversation only indirectly confirms it by showing the player struggling " +
   "or failing on the first try — this defends against the player gradually and imperceptibly gaining " +
   "unlimited power.\n" +
+  "- category 'world', subject 'world', sub_key 'location': always keep this one fact updated with " +
+  "the player's current physical location/scene (e.g. \"in the ruined mill east of the swamp camp, " +
+  "converting it into a smithy\") — this is a pointer to *where the story is right now*, not permanent " +
+  "worldbuilding, so update (upsert) it every time the scene's location meaningfully changes, even for " +
+  "an unremarkable move. Never leave it pointing at a location the party has since left.\n" +
   "In case of a conflict between what happened in the latest message and an earlier locked " +
   "([LOCKED]) fact, never overwrite the earlier locked fact (do not upsert or remove it) — the conversation " +
   "must align with it, not the other way around. Facts marked [CANON] are verified " +
