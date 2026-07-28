@@ -10,7 +10,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ChatMessage } from "../providers/types";
 
-const MAX_SECTION_CHARS = 16_000; // per section (prompt / response), before the 32KB Rust cap
+// Connections here run context budgets up to 50,000 tokens (~150,000+ chars
+// for Czech text — see memory-anchoring-tuning notes on chars/token). The
+// old 16,000 cap was far smaller than a real prompt, so it silently cut
+// into the character card/canon block on essentially every exchange once a
+// campaign had any history — never even reaching later sections. Generous
+// but still bounded; see formatPrompt for why truncation now keeps the
+// *tail*, not the head, of an oversized prompt.
+const MAX_SECTION_CHARS = 100_000; // per section (prompt / response), before the Rust cap (see logging.rs)
 
 /** Formats `apiMessages` (the exact array sent to the model) into a
  *  human-readable text block. System/user/assistant roles are labeled;
@@ -42,7 +49,16 @@ function formatPrompt(apiMessages: ChatMessage[]): string {
     const body = content.slice(0, MAX_SECTION_CHARS);
     lines.push(`--- ${label} ---\n${body}`);
   }
-  return lines.join("\n").slice(0, MAX_SECTION_CHARS);
+  const full = lines.join("\n");
+  if (full.length <= MAX_SECTION_CHARS) return full;
+  // Keep the *tail*, not the head. The array is ordered system → history →
+  // newest user turn last, and the mostly-static character card/canon
+  // block at the front repeats near-identically across every exchange —
+  // the least useful thing to preserve when something has to give. The
+  // newest player message and the trailing canon reminder are always at
+  // the end and are what a debugging session actually needs.
+  const omittedChars = full.length - MAX_SECTION_CHARS;
+  return `…[${omittedChars} chars trimmed from the start of the prompt]…\n${full.slice(-MAX_SECTION_CHARS)}`;
 }
 
 /** Formats a single prompt+response exchange into one log block. Each

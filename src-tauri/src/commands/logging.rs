@@ -26,8 +26,15 @@ const MAX_LINE_CHARS: usize = 4000;
 // log file is deleted too.
 const CHAT_LOG_PREFIX: &str = "chat-";
 const CHAT_LOG_SUFFIX: &str = ".log";
-const CHAT_LOG_ROTATE_AT: u64 = 5 * 1024 * 1024; // 5 MB
-const CHAT_LOG_MAX_LINE_CHARS: usize = 32_768; // 32 KB per entry
+// Raised 2026-07-28: real prompts here run up to ~50,000-token context
+// budgets (~150,000+ chars), far bigger than the old 32 KB cap — which
+// combined with chatLogger.ts's old head-first truncation meant the
+// player's actual latest message (always at the end of the prompt) was
+// silently missing from the log on every exchange once a campaign grew any
+// real history. Rotation size raised to match — otherwise bigger entries
+// would fill 5 MB (and start discarding history) far faster than before.
+const CHAT_LOG_ROTATE_AT: u64 = 20 * 1024 * 1024; // 20 MB
+const CHAT_LOG_MAX_LINE_CHARS: usize = 220_000; // ~220 KB per entry (prompt + response + headers)
 
 fn chat_log_name(chat_id: &str) -> String {
     format!("{CHAT_LOG_PREFIX}{chat_id}{CHAT_LOG_SUFFIX}")
