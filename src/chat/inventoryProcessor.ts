@@ -299,8 +299,9 @@ export async function processGameResponse(
       currentCal = nextCal;
       // Only re-roll weather on an explicit jump, not idle drift, so it
       // can't flicker within one stationary scene (see advanceAndPersistWeather).
+      let weather: string | null = null;
       if (tagMinutes > 0) {
-        await advanceAndPersistWeather(chatId, nextCal.season);
+        weather = await advanceAndPersistWeather(chatId, nextCal.season);
       }
 
       // Auto-expire timed conditions (e.g. "6 hodin" burns/exhaustion) once
@@ -318,8 +319,9 @@ export async function processGameResponse(
       if (expiredConditionNames.length > 0) {
         await setChatConditions(chatId, stillActive);
       }
-    } catch {
-      // Non-critical
+      appendLog(`${new Date().toISOString()} [info] [time] chat=${chatId} +${minutes}min (${tagMinutes > 0 ? "tag" : "idle"}) -> ${formatCalendarDate(nextCal)} ${String(nextCal.hourOfDay).padStart(2, "0")}:${String(nextCal.minuteOfHour).padStart(2, "0")}, season=${nextCal.season}${weather ? `, weather=${weather}` : ""}${expiredConditionNames.length ? `, expired=[${expiredConditionNames.join(", ")}]` : ""}`);
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [time] chat=${chatId} calendar/weather advance failed: ${String(err).slice(0, 200)}`);
     }
   }
 
@@ -337,9 +339,10 @@ export async function processGameResponse(
       const chat = await getChat(chatId);
       if (chat?.hardcoreMode) {
         await setGameOverState(chatId, gameOverReason);
+        appendLog(`${new Date().toISOString()} [info] [gameover] chat=${chatId} reason=${gameOverReason.slice(0, 200)}`);
       }
-    } catch {
-      // Non-critical
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [gameover] chat=${chatId} failed: ${String(err).slice(0, 200)}`);
     }
   }
 
@@ -349,8 +352,8 @@ export async function processGameResponse(
   if (checkSkill !== null && chatId) {
     try {
       await setPendingCheckSkill(chatId, checkSkill);
-    } catch {
-      // Non-critical
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [check] chat=${chatId} skill=${checkSkill} failed: ${String(err).slice(0, 200)}`);
     }
   }
 
@@ -395,8 +398,8 @@ export async function processGameResponse(
           const quest = existing ?? (await createQuest({ chatId, name: qm.name }));
           if (qm.note) await addQuestNote(quest.id, qm.note);
         }
-      } catch {
-        // Non-critical
+      } catch (err) {
+        appendLog(`${new Date().toISOString()} [warn] [quest] chat=${chatId} op=${qm.op} name=${qm.name} failed: ${String(err).slice(0, 200)}`);
       }
     }
   }
@@ -613,8 +616,8 @@ export async function processGameResponse(
         await createFaction(persona.id, fm.name, fm.delta);
       }
       summaryParts.push({ text: `🤝 ${fm.name} ${fm.delta > 0 ? "+" : ""}${fm.delta}`, kind: fm.delta > 0 ? "add" : "remove" });
-      } catch {
-        // Non-critical
+      } catch (err) {
+        appendLog(`${new Date().toISOString()} [warn] [faction] persona=${persona.id} name=${fm.name} failed: ${String(err).slice(0, 200)}`);
       }
     }
   }
@@ -669,8 +672,9 @@ export async function processGameResponse(
           if (entry.qty <= 0) inv.splice(inv.indexOf(entry), 1);
         }
       }
-    } catch {
-      // Non-critical
+      appendLog(`${new Date().toISOString()} [info] [craft] chat=${chatId ?? "-"} result=${cm.resultItem} ingredients=[${cm.ingredients.join(", ")}]`);
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [craft] chat=${chatId ?? "-"} result=${cm.resultItem} failed: ${String(err).slice(0, 200)}`);
     }
   }
   } // if (persona) — craft mutations
@@ -701,8 +705,9 @@ export async function processGameResponse(
           await updateRecipePerks(recipe.id, cdm.perks);
         }
       }
-    } catch {
-      // Non-critical
+      appendLog(`${new Date().toISOString()} [info] [crafted] chat=${chatId ?? "-"} result=${cdm.resultItem}${cdm.perks.length ? ` perks=[${cdm.perks.join(", ")}]` : ""}`);
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [crafted] chat=${chatId ?? "-"} result=${cdm.resultItem} failed: ${String(err).slice(0, 200)}`);
     }
   }
   } // if (persona || chatId) — crafted mutations
@@ -718,8 +723,10 @@ export async function processGameResponse(
       if (hasLevelChanges) {
         await setChatXpLevel(chatId, xp, level);
       }
-    } catch {
-      // Non-critical
+    } catch (err) {
+      // Not actually "non-critical" — a failure here silently drops every
+      // inventory/skill/condition/mod/level change this turn produced.
+      appendLog(`${new Date().toISOString()} [error] [persist] chat=${chatId} state write failed, turn's changes lost: ${String(err).slice(0, 300)}`);
     }
   }
 
@@ -731,8 +738,8 @@ export async function processGameResponse(
       for (const itemName of newlyAddedItems) {
         enqueueIllustration("inventory", chatId, `Fantasy game item icon: ${itemName}`, itemName);
       }
-    } catch {
-      // Non-critical
+    } catch (err) {
+      appendLog(`${new Date().toISOString()} [warn] [illustration] chat=${chatId} enqueue failed: ${String(err).slice(0, 200)}`);
     }
   }
 
@@ -794,5 +801,26 @@ export async function processGameResponse(
     }
   }
 
-  return { cleanText, changeSummary: serializeChangeSummary(summaryParts) };
+  const changeSummary = serializeChangeSummary(summaryParts);
+  appendLog(
+    `${new Date().toISOString()} [info] [turn] chat=${chatId ?? "-"} mode=${isAiMode ? "ai" : "regex"} ` +
+      JSON.stringify({
+        inv: mutations.length,
+        itemNotes: itemNoteMutations.length,
+        skills: skillChanges.length,
+        xpDelta: totalXpDelta,
+        levelDelta: totalLevelDelta,
+        factions: factionMutations.length,
+        craft: craftMutations.length,
+        crafted: craftedMutations.length,
+        cond: conditionMutations.length,
+        mod: modMutations.length,
+        quest: questMutations.length,
+        expiredCond: expiredConditionNames.length,
+        staleErrors: staleTargetErrors.length,
+      }) +
+      (changeSummary ? ` summary="${changeSummary.slice(0, 300)}"` : ""),
+  );
+
+  return { cleanText, changeSummary };
 }

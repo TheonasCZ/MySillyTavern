@@ -18,6 +18,7 @@ import { DEFAULT_VERBATIM_WINDOW } from "../prompt/promptBuilder";
 import { embedTexts } from "../providers/embeddings";
 import type { ConnectionConfig } from "../providers/types";
 import { cosineSimilarity, decodeVector, encodeVector } from "./vector";
+import { logMemoryEvent } from "../db/repositories/memoryLogRepo";
 
 /** Providers that have been auto-detected as non-embeddable (e.g. the API
  * returned 404/405). Stored as a comma-separated list under the
@@ -226,6 +227,11 @@ export async function syncFactEmbeddings(
       }
     } catch (err) {
       await markEmbeddingUnavailable(connection.provider);
+      void logMemoryEvent(chatId, "embeddingsEngine", "error", "fact_embedding_failed", "Fact embedding call failed — provider marked unavailable", {
+        provider: connection.provider,
+        dirtyCount: dirty.length,
+        error: String(err),
+      });
       console.warn("fact embedding failed for provider", connection.provider, err);
     }
   }
@@ -272,6 +278,11 @@ export async function syncMessageChunkEmbeddings(
     }
   } catch (err) {
     await markEmbeddingUnavailable(connection.provider);
+    void logMemoryEvent(chatId, "embeddingsEngine", "error", "chunk_embedding_failed", "Message-chunk embedding call failed — provider marked unavailable", {
+      provider: connection.provider,
+      chunkCount: chunks.length,
+      error: String(err),
+    });
     console.warn("message chunk embedding failed for provider", connection.provider, err);
   }
 }

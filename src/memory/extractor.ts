@@ -22,6 +22,7 @@ import { canEmbed } from "./embeddingsEngine";
 import { listEmbeddings } from "../db/repositories/embeddingsRepo";
 import { cosineSimilarity, decodeVector } from "./vector";
 import { EXTRACTION_SYSTEM_PROMPT } from "../prompt/promptTexts";
+import { logMemoryEvent } from "../db/repositories/memoryLogRepo";
 
 export type ExtractAction = "upsert" | "remove";
 
@@ -360,6 +361,17 @@ export async function runExtraction(
     void logUsage("memory", connection.id, inputTokens, estimateTokens(raw), chatId).catch(() => {});
     const extracted = parseExtractorOutput(raw);
 
+    if (extracted.length === 0 && raw.trim().length > 0) {
+      // Non-empty response but nothing usable came out of it — either the
+      // model genuinely found nothing new, or the response didn't parse
+      // (see parseExtractorOutput). Worth a log line either way since both
+      // look identical from the caller's side otherwise.
+      void logMemoryEvent(chatId, "extractor", "debug", "extraction_empty_result", "Extraction produced no facts", {
+        rawLength: raw.length,
+        rawPreview: raw.slice(0, 300),
+      });
+    }
+
     const ops = mergeExtractedFacts(snapshot, extracted);
     for (const op of ops) {
       if (op.kind === "update" && op.demote && op.factId) {
@@ -385,7 +397,22 @@ export async function runExtraction(
     for (const id of promoteIds) {
       await setFactCanon(id, true);
     }
+
+    const opCounts = ops.reduce<Record<string, number>>((acc, op) => {
+      acc[op.kind] = (acc[op.kind] ?? 0) + 1;
+      return acc;
+    }, {});
+    void logMemoryEvent(chatId, "extractor", "info", "extraction_applied", "Extraction pass applied", {
+      extractedCount: extracted.length,
+      opCounts,
+      confirmedCount: confirmedIds.length,
+      promotedCount: promoteIds.length,
+      factsConsidered: filtered.length,
+    });
   } catch (err) {
+    void logMemoryEvent(chatId, "extractor", "error", "extraction_failed", "runExtraction threw", {
+      error: String(err),
+    });
     console.warn("extractor: ledger extraction failed for chat", chatId, err);
   }
 }

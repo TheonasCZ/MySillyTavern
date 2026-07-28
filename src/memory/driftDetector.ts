@@ -17,6 +17,7 @@ import { logUsage } from "../db/repositories/usageRepo";
 import { estimateTokens } from "../prompt/tokenEstimate";
 import type { TranscriptChatMessage } from "./extractor";
 import { DRIFT_CHECK_SYSTEM_PROMPT } from "../prompt/promptTexts";
+import { logMemoryEvent } from "../db/repositories/memoryLogRepo";
 
 export interface DriftFinding {
   /** Subject of the canon fact that was contradicted. */
@@ -351,7 +352,23 @@ export async function runDriftCheck(
       lastCheckedAt: new Date().toISOString(),
     };
     await saveDriftState(chatId, next);
+    void logMemoryEvent(
+      chatId,
+      "driftDetector",
+      findings.length > 0 ? "warn" : "debug",
+      "drift_checked",
+      findings.length > 0 ? `Drift check found ${findings.length} contradiction(s)` : "Drift check clean",
+      {
+        findings,
+        scoreBefore: state.score,
+        scoreAfter: next.score,
+        activeCorrections: next.corrections.length,
+      },
+    );
   } catch (err) {
+    void logMemoryEvent(chatId, "driftDetector", "error", "drift_check_failed", "runDriftCheck threw", {
+      error: String(err),
+    });
     console.warn("driftDetector: drift check failed for chat", chatId, err);
   }
 }

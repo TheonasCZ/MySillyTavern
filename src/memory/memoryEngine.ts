@@ -27,6 +27,7 @@ import { runDriftCheck } from "./driftDetector";
 import { runExtraction, type TranscriptChatMessage } from "./extractor";
 import { listAllFacts } from "../db/repositories/ledgerRepo";
 import { runSummarization, type TranscriptMessage } from "./summarizer";
+import { logMemoryEvent } from "../db/repositories/memoryLogRepo";
 import {
   advanceMinutes,
   calendarToJSON,
@@ -170,9 +171,20 @@ async function resolveExtractionConnection(
  * the second time. */
 async function runDueWork(chatId: string): Promise<void> {
   const chat = await getChat(chatId);
-  if (!chat) return;
+  if (!chat) {
+    void logMemoryEvent(chatId, "memoryEngine", "warn", "pass_aborted", "runDueWork: chat not found — nothing to do");
+    return;
+  }
   const messages = await listMessages(chatId);
   if (messages.length === 0) return;
+
+  void logMemoryEvent(chatId, "memoryEngine", "debug", "pass_start", "Memory pass starting", {
+    messageCount: messages.length,
+    lastExtractedMessageId: chat.lastExtractedMessageId,
+    lastSummarizedMessageId: chat.lastSummarizedMessageId,
+    connectionId: chat.connectionId,
+    extractionConnectionId: chat.extractionConnectionId,
+  });
 
   const [extractionInterval, verbatimWindow, members] = await Promise.all([
     readNumberSetting("extraction_interval", DEFAULT_EXTRACTION_INTERVAL),
@@ -203,6 +215,14 @@ async function runDueWork(chatId: string): Promise<void> {
       ? MIN_EXTRACTION_MESSAGES
       : extractionInterval;
 
+  void logMemoryEvent(chatId, "memoryEngine", "debug", "extraction_check", "Evaluated extraction trigger", {
+    newSinceExtraction: newSinceExtraction.length,
+    density: Number(density.toFixed(3)),
+    extractionInterval,
+    effectiveInterval,
+    willTrigger: newSinceExtraction.length >= effectiveInterval,
+  });
+
   if (newSinceExtraction.length >= effectiveInterval) {
     const connection = await resolveExtractionConnection(
       chat.extractionConnectionId,
@@ -210,6 +230,10 @@ async function runDueWork(chatId: string): Promise<void> {
     );
     if (connection) {
       const transcript = toApiMessages(newSinceExtraction, memberNames);
+      void logMemoryEvent(chatId, "memoryEngine", "info", "extraction_triggered", "Running extraction pass", {
+        connectionId: connection.id,
+        transcriptLength: transcript.length,
+      });
       await runExtraction(chatId, connection, transcript, chat.gameLanguage);
       await setLastExtractedMessageId(chatId, messages[messages.length - 1].id);
 
@@ -223,8 +247,19 @@ async function runDueWork(chatId: string): Promise<void> {
         );
         await runDriftCheck(chatId, connection, allActive, transcript, chat.gameLanguage);
       } catch (err) {
+        void logMemoryEvent(chatId, "memoryEngine", "error", "drift_check_failed", "Drift check threw", {
+          error: String(err),
+        });
         console.warn("memoryEngine: drift check scheduling failed for chat", chatId, err);
       }
+    } else {
+      void logMemoryEvent(
+        chatId,
+        "memoryEngine",
+        "warn",
+        "extraction_skipped_no_connection",
+        "Extraction was due but no connection could be resolved (extractionConnectionId and connectionId both empty/invalid)",
+      );
     }
   }
 
@@ -235,13 +270,31 @@ async function runDueWork(chatId: string): Promise<void> {
   const foldableEnd = messages.length - verbatimWindow; // exclusive upper bound
   const toFold =
     foldableEnd > lastSummarizedIdx + 1 ? messages.slice(lastSummarizedIdx + 1, foldableEnd) : [];
+  void logMemoryEvent(chatId, "memoryEngine", "debug", "summarize_check", "Evaluated summarization trigger", {
+    toFold: toFold.length,
+    verbatimWindow,
+    willTrigger: toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD,
+  });
+
   let folded: Message[] = [];
   if (toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD) {
     const connection = chat.connectionId ? await getConnection(chat.connectionId) : null;
     if (connection) {
+      void logMemoryEvent(chatId, "memoryEngine", "info", "summarize_triggered", "Running summarization pass", {
+        connectionId: connection.id,
+        messagesFolded: toFold.length,
+      });
       await runSummarization(chatId, connection, withSpeakerNames(toFold, memberNames), chat.gameLanguage);
       await setLastSummarizedMessageId(chatId, toFold[toFold.length - 1].id);
       folded = toFold;
+    } else {
+      void logMemoryEvent(
+        chatId,
+        "memoryEngine",
+        "warn",
+        "summarize_skipped_no_connection",
+        "Summarization was due but chat.connectionId resolved to no connection",
+      );
     }
   }
 
@@ -265,6 +318,9 @@ async function runDueWork(chatId: string): Promise<void> {
     );
     await syncLoreEmbeddings(connection, loreEntries);
   } catch (err) {
+    void logMemoryEvent(chatId, "memoryEngine", "error", "embedding_sync_failed", "Embedding sync threw", {
+      error: String(err),
+    });
     console.warn("memoryEngine: embedding sync failed for chat", chatId, err);
   }
 }
@@ -275,6 +331,9 @@ async function drainQueue(chatId: string, entry: QueueEntry): Promise<void> {
   } catch (err) {
     // Belt and suspenders: extractor/summarizer already catch their own
     // errors, but a DB read/write here (e.g. getChat) could still throw.
+    void logMemoryEvent(chatId, "memoryEngine", "error", "due_work_failed", "runDueWork threw", {
+      error: String(err),
+    });
     console.warn("memoryEngine: due-work job failed for chat", chatId, err);
   } finally {
     entry.running = false;
@@ -339,13 +398,27 @@ export async function ensureCalendarInitialized(chatId: string): Promise<Calenda
  * concurrent triggers into a single rerun per chat so at most one job runs
  * at a time. */
 export function scheduleMemoryWork(chatId: string): void {
+  // `queues` is an in-memory Map — it resets on every app restart. That's
+  // fine: it only coalesces concurrent triggers within one process's
+  // lifetime, it is NOT what tracks progress (lastExtractedMessageId /
+  // lastSummarizedMessageId are DB columns and survive restarts fine). The
+  // `isFreshEntry` flag below makes that restart boundary visible in the
+  // log, so "did extraction seem to restart from scratch" is answerable
+  // from the log instead of guessed at.
+  const isFreshEntry = !queues.has(chatId);
   const entry = queues.get(chatId) ?? { running: false, pendingRerun: false };
   queues.set(chatId, entry);
 
   if (entry.running) {
     entry.pendingRerun = true;
+    void logMemoryEvent(chatId, "memoryEngine", "debug", "schedule_coalesced", "Memory work already running — coalesced into pending rerun", {
+      isFreshEntry,
+    });
     return;
   }
   entry.running = true;
+  void logMemoryEvent(chatId, "memoryEngine", "debug", "schedule_started", "Memory work scheduled and starting", {
+    isFreshEntry,
+  });
   void drainQueue(chatId, entry);
 }

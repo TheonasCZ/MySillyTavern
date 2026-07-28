@@ -227,6 +227,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_037,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 38,
+            description: "memory_debug_log: persistent structured log for the memory pipeline",
+            sql: MIGRATION_038,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -705,4 +711,22 @@ INSERT INTO quests_new SELECT * FROM quests;
 DROP TABLE quests;
 ALTER TABLE quests_new RENAME TO quests;
 CREATE INDEX idx_quests_chat ON quests(chat_id, status);
+"#;
+
+/// Structured debug log for the memory pipeline (extraction/summarization/
+/// drift/embeddings) — persists across app restarts, unlike console.log, so
+/// intermittent issues ("why didn't extraction fire for 40 messages?") can
+/// be diagnosed after the fact instead of only while watching devtools live.
+const MIGRATION_038: &str = r#"
+CREATE TABLE memory_debug_log (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  source TEXT NOT NULL,
+  event TEXT NOT NULL,
+  level TEXT NOT NULL DEFAULT 'info' CHECK (level IN ('debug','info','warn','error')),
+  message TEXT NOT NULL,
+  data TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX idx_memory_debug_log_chat ON memory_debug_log(chat_id, created_at);
 "#;
