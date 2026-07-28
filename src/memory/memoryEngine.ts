@@ -278,7 +278,11 @@ async function runDueWork(chatId: string): Promise<void> {
 
   let folded: Message[] = [];
   if (toFold.length >= SUMMARIZE_TRIGGER_THRESHOLD) {
-    const connection = chat.connectionId ? await getConnection(chat.connectionId) : null;
+    // Same connection as extraction/drift (falls back to the main chat
+    // connection only when no extraction connection is set) — summarization
+    // is background work like the rest of the memory pipeline and must not
+    // compete with the live chat stream for the same provider/API key.
+    const connection = await resolveExtractionConnection(chat.extractionConnectionId, chat.connectionId);
     if (connection) {
       void logMemoryEvent(chatId, "memoryEngine", "info", "summarize_triggered", "Running summarization pass", {
         connectionId: connection.id,
@@ -293,7 +297,7 @@ async function runDueWork(chatId: string): Promise<void> {
         "memoryEngine",
         "warn",
         "summarize_skipped_no_connection",
-        "Summarization was due but chat.connectionId resolved to no connection",
+        "Summarization was due but no connection could be resolved",
       );
     }
   }
