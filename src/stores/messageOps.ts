@@ -26,6 +26,7 @@ import { processGameResponse, extractTagsWithAI } from "../chat/inventoryProcess
 import { parseGameTags } from "../chat/inventoryTags";
 import { logChatUsage, resolveChatPersona, resolveConnection, applyPreset, clearInterrupted, markInterrupted, buildApiMessages, MAX_FUNCTION_CALL_ROUND_TRIPS } from "./configOps";
 import { logChatExchange } from "../chat/chatLogger";
+import { appendLog } from "../logging";
 import { useConnectionsStore } from "./connectionsStore";
 import { toConnectionDto } from "../providers/dto";
 import { updateMessageContent } from "../db/repositories/messagesRepo";
@@ -183,6 +184,9 @@ export function startStream(
       onError: (err) => {
         const text = get().streamingText;
         const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+        appendLog(
+          `${new Date().toISOString()} [warn] [chatStream] connection=${connection.name}/${connection.model} chat=${get().chatId ?? "-"} error retryable=${err.retryable} offline=${isOffline} streamedChars=${text.length}: ${err.message.slice(0, 300)}`,
+        );
         set({
           handle: null,
           pendingFinalize: null,
