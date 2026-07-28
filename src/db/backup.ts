@@ -1,16 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { openDialog, saveDialog, relaunchApp } from "../platform";
-import { getDb } from "./database";
+import { execute } from "./database";
 import { getSetting, setSetting } from "./repositories/settingsRepo";
 
 /** Flushes SQLite's write-ahead log into the main DB file so a copy of that
  * file alone (no `-wal`/`-shm` sidecars needed) is a complete, consistent
- * snapshot. Safe to call at any time — it's a normal checkpoint, not an
- * exclusive lock. */
+ * snapshot. Routed through `execute()` (not a raw `getDb()` call) so it
+ * queues behind/ahead of other writes instead of racing them — a TRUNCATE
+ * checkpoint running concurrently with an unrelated write is exactly what
+ * produced the SQLITE_IOERR_SHORT_READ crashes this queue fixes. */
 async function checkpoint(): Promise<void> {
-  const db = await getDb();
-  await db.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+  await execute("PRAGMA wal_checkpoint(TRUNCATE)");
 }
 
 /** Opens a save dialog and writes a full backup (DB + avatars) to the
