@@ -129,8 +129,16 @@ export const SOFT_CANON_CORRECTION_STREAK = 2;
 /** Confirmed-unchanged passes needed before a fact becomes soft canon. */
 export const SOFT_CANON_STABILITY_THRESHOLD = 3;
 /** Genre/limit-guarding categories promote faster — these are exactly the
- * facts whose drift ruins long campaigns. */
-export const PRIORITY_CANON_CATEGORIES: LedgerCategory[] = ["world", "player"];
+ * facts whose drift ruins long campaigns. `quest` joined this list after a
+ * real case (2026-07-28): a major discovery (a sealed cylinder's contents,
+ * a hand-drawn map) took 3 confirmed extraction passes to earn canon
+ * protection — by the time it crossed the threshold, the conversation had
+ * moved on to unrelated scenes, the fact was still just a regular
+ * relevance-trimmable fact, and the GM asked about the discovery as if it
+ * had never happened. Quest facts often record exactly this kind of
+ * one-off plot-critical event, so they need the same fast-track as
+ * world/player. */
+export const PRIORITY_CANON_CATEGORIES: LedgerCategory[] = ["world", "player", "quest"];
 export const PRIORITY_CANON_STABILITY_THRESHOLD = 2;
 
 export function stabilityThresholdFor(category: LedgerCategory): number {
