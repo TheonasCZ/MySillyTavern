@@ -47,6 +47,7 @@ export function ChatScreen() {
     streamingSpeakerId,
     messages,
     loading,
+    preparingMessage,
     streaming,
     streamingMessageId,
     streamingText,
@@ -465,6 +466,7 @@ export function ChatScreen() {
           chatId={id}
           disabled={loading || !connection || !!gameOver}
           streaming={streaming}
+          preparing={preparingMessage}
           onSend={(content) => void sendMessage(content)}
           onDiceRoll={(expression) => void actions.handleDiceRoll(expression)}
           skills={chat?.skills}

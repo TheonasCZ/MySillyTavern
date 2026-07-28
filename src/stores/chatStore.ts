@@ -60,6 +60,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingSpeakerId: null,
   messages: [],
   loading: false,
+  preparingMessage: false,
   streaming: false,
   streamingMessageId: null,
   streamingText: "",

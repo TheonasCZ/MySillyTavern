@@ -22,6 +22,11 @@ interface Props {
   chatId: string;
   disabled: boolean;
   streaming: boolean;
+  /** True from send-click until the LLM stream actually starts — prompt
+   *  building (lorebook/facts/summary/embedding lookups) has no other
+   *  visible feedback, so without this the send button looks inert for
+   *  however long that takes even though the message was already sent. */
+  preparing?: boolean;
   onSend: (content: string) => void;
   onDiceRoll?: (expression: string) => void;
   /** Chat-scoped skills — matched against `pendingCheckSkill` to auto-add a
@@ -59,6 +64,7 @@ export function ChatInput({
   chatId,
   disabled,
   streaming,
+  preparing = false,
   onSend,
   onDiceRoll,
   skills = [],
@@ -524,6 +530,16 @@ export function ChatInput({
           style={{ borderColor: "var(--color-danger)", backgroundColor: "var(--color-danger)", color: "var(--color-accent-contrast)" }}
         >
           ⏹
+        </button>
+      ) : preparing ? (
+        <button
+          type="button"
+          disabled
+          title={t("room.preparing") ?? "Připravuji odpověď…"}
+          className="shrink-0 rounded-[var(--radius-md)] border px-2.5 py-2 text-base disabled:opacity-70"
+          style={{ borderColor: "var(--color-accent)", backgroundColor: "var(--color-accent)", color: "var(--color-accent-contrast)" }}
+        >
+          ⏳
         </button>
       ) : (
         <button

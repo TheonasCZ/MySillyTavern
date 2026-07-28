@@ -30,6 +30,14 @@ export interface ChatState {
   streamingSpeakerId: string | null;
   messages: Message[];
   loading: boolean;
+  /** True from the moment the user hits send until the actual LLM stream
+   * starts (`streaming` flips true) — covers prompt building: lorebook
+   * activation, ledger/summary reads, and a real embedding API call for
+   * semantic memory retrieval, all of which run before generation even
+   * begins and previously had zero UI feedback (looked like the app had
+   * frozen). Distinct from `streaming` so the input can show a lighter
+   * "preparing" state instead of the full streaming/stop-button UI. */
+  preparingMessage: boolean;
   streaming: boolean;
   /** Set while regenerating an existing assistant message; null while
    * streaming a brand new message. */

@@ -335,16 +335,24 @@ export async function sendMessage(
   const trimmed = content.trim();
   const { chatId, messages, streaming, members, memberCharacters, autoReply, selectedSpeakerId, gameOver } = get();
   if (!chatId || !trimmed || streaming || gameOver) return;
+  // Covers prompt-building (lorebook/facts/summary reads + a real embedding
+  // API call for semantic retrieval) — all of which run before `streaming`
+  // turns true and previously showed no feedback at all. Cleared on every
+  // early return below and once buildApiMessages resolves.
+  set({ preparingMessage: true });
   if (typeof navigator !== "undefined" && !navigator.onLine) {
-    set({ error: "offline", errorRetryable: true, retry: () => void get().sendMessage(content) });
+    set({ preparingMessage: false, error: "offline", errorRetryable: true, retry: () => void get().sendMessage(content) });
     return;
   }
 
   const chat = await getChat(chatId);
-  if (!chat) return;
+  if (!chat) {
+    set({ preparingMessage: false });
+    return;
+  }
   const connection = resolveConnection(chat.connectionId);
   if (!connection) {
-    set({ error: "no-connection", errorRetryable: false, retry: null });
+    set({ preparingMessage: false, error: "no-connection", errorRetryable: false, retry: null });
     return;
   }
 
@@ -358,19 +366,26 @@ export async function sendMessage(
 
   const speakerId = pickSpeakerId(chat, members, memberCharacters, autoReply, selectedSpeakerId, trimmed, messages);
   const speaker = await resolveSpeaker(chat, memberCharacters, speakerId);
-  if (!speaker) return;
+  if (!speaker) {
+    set({ preparingMessage: false });
+    return;
+  }
 
   const userMessage = await createMessage(chatId, "user", trimmed);
   set((s) => ({ messages: [...s.messages, userMessage], suggestions: null }));
   void touchChat(chatId);
 
+  const buildStartedAt = performance.now();
   const { messages: apiMessages, report, regexRules, presetParams } = await buildApiMessages(
     chat,
     [...messages, userMessage],
     speaker,
     memberCharacters,
   );
-  set({ lastPromptReport: report, streamingSpeakerId: speaker.id });
+  appendLog(
+    `${new Date().toISOString()} [debug] [buildApiMessages] chat=${chatId} took ${(performance.now() - buildStartedAt).toFixed(0)}ms before streaming could start`,
+  );
+  set({ preparingMessage: false, lastPromptReport: report, streamingSpeakerId: speaker.id });
 
   const effectiveConnection = applyPreset(connection, presetParams);
 
