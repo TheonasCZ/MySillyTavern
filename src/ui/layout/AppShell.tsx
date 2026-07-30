@@ -11,7 +11,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ color: "var(--color-text)" }}>
       <Sidebar />
-      <main className="flex flex-1 flex-col overflow-hidden" style={{ backgroundColor: "var(--color-bg)" }}>
+      <main
+        className="flex flex-1 flex-col overflow-hidden"
+        style={{ backgroundColor: "var(--color-bg)", paddingTop: "var(--safe-top)", paddingBottom: "var(--safe-bottom)" }}
+      >
         {!online && (
           <div
             className="shrink-0 px-4 py-1.5 text-center text-xs font-medium"

@@ -70,8 +70,12 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen((o) => !o)}
-        className="fixed left-3 top-3 z-50 rounded-[var(--radius-sm)] p-2 sm:hidden"
-        style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}
+        className="fixed left-3 z-50 rounded-[var(--radius-sm)] p-2 sm:hidden"
+        style={{
+          top: "calc(var(--safe-top) + 0.75rem)",
+          backgroundColor: "var(--color-surface-2)",
+          color: "var(--color-text)",
+        }}
         aria-label="Menu"
       >
         {mobileOpen ? "✕" : "☰"}
@@ -89,8 +93,8 @@ export function Sidebar() {
         style={{
           borderColor: "var(--color-border)",
           backgroundColor: "var(--color-bg-elevated)",
-          paddingTop: "3rem", // room for mobile burger
-          paddingBottom: "1rem",
+          paddingTop: "calc(var(--safe-top) + 3rem)", // room for status bar + mobile burger
+          paddingBottom: "calc(var(--safe-bottom) + 1rem)",
         }}
         aria-label={t("appName")}
       >

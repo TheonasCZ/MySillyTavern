@@ -15,6 +15,11 @@
   --radius-sm: 0.375rem;
   --radius-md: 0.625rem;
   --radius-lg: 1rem;
+
+  /* Android/iOS WebViews draw edge-to-edge; without these the header and
+     the mobile burger button render underneath the status bar. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 html.dark {
