@@ -56,6 +56,17 @@ export interface ConnectionConfig {
 
 export type ConnectionDraft = Omit<ConnectionConfig, "id" | "createdAt" | "updatedAt">;
 
+/** The "openai" provider is generic (any OpenAI-compatible /chat/completions
+ *  endpoint — see providers/openai.rs) and covers several distinct services
+ *  distinguished only by baseUrl. Detects well-known ones so the UI can show
+ *  a recognizable name instead of a bare "OpenAI" for all of them. */
+export function detectOpenAiCompatibleService(baseUrl: string | null | undefined): "deepseek" | "qwen" | null {
+  if (!baseUrl) return null;
+  if (baseUrl.includes("deepseek")) return "deepseek";
+  if (baseUrl.includes("dashscope") || baseUrl.includes("aliyuncs")) return "qwen";
+  return null;
+}
+
 export interface ChatParams {
   temperature: number;
   topP: number;

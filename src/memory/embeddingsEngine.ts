@@ -28,12 +28,12 @@ const EMBEDDING_DISABLED_KEY = "embedding_disabled_providers";
 /** Mirrors the per-provider defaults in src-tauri/src/providers/embeddings.rs
  * — used to detect rows embedded by a different model than the current one. */
 const DEFAULT_EMBEDDING_MODELS: Record<string, string> = {
-  gemini: "gemini-embedding-2",
+  gemini: "gemini-embedding-001",
   openai: "text-embedding-3-small",
 };
 
-export const DEFAULT_MEMORY_TOP_K = 3;
-export const DEFAULT_MEMORY_MIN_SCORE = 0.35;
+export const DEFAULT_MEMORY_TOP_K = 5;
+export const DEFAULT_MEMORY_MIN_SCORE = 0.3;
 /** Time-decay half-life for scene memories (M25.4): a scene this many days
  * old scores half its raw cosine similarity. Facts are timeless and never
  * decayed — only message-chunk memories fade. */
@@ -91,30 +91,31 @@ export async function markEmbeddingUnavailable(providerId: string): Promise<void
 }
 
 export interface EmbeddingSettings {
-  model: string | null;
   topK: number;
   minScore: number;
 }
 
 export async function getEmbeddingSettings(): Promise<EmbeddingSettings> {
-  const [model, topK, minScore] = await Promise.all([
-    getSetting("embedding_model").catch(() => null),
+  const [topK, minScore] = await Promise.all([
     getSetting("memory_top_k").catch(() => null),
     getSetting("memory_min_score").catch(() => null),
   ]);
   const k = Number(topK);
   const score = Number(minScore);
   return {
-    model: model?.trim() || null,
     topK: Number.isFinite(k) && k > 0 ? Math.floor(k) : DEFAULT_MEMORY_TOP_K,
     minScore: Number.isFinite(score) && score >= 0 && score <= 1 ? score : DEFAULT_MEMORY_MIN_SCORE,
   };
 }
 
-/** The model rows are expected to carry — the override setting, or the
- * provider default. Rows with a different model are considered stale. */
-export function expectedModel(connection: ConnectionConfig, settings: EmbeddingSettings): string {
-  return settings.model ?? DEFAULT_EMBEDDING_MODELS[connection.provider] ?? "";
+/** The model rows are expected to carry — the connection's own model field,
+ * or the provider default if it's blank. Rows with a different model are
+ * considered stale. Each embedding connection carries its own model (same as
+ * chat/image connections) rather than one global override, since a chat can
+ * pick any embedding connection and a single override couldn't fit every
+ * provider at once. */
+export function expectedModel(connection: ConnectionConfig): string {
+  return connection.model.trim() || DEFAULT_EMBEDDING_MODELS[connection.provider] || "";
 }
 
 /** The text a fact is embedded as — must stay deterministic, since it's
@@ -193,8 +194,7 @@ export async function syncFactEmbeddings(
 ): Promise<void> {
   if (!canEmbed(connection)) return;
   if (!(await isEmbeddingAvailable(connection.provider))) return;
-  const settings = await getEmbeddingSettings();
-  const model = expectedModel(connection, settings);
+  const model = expectedModel(connection);
 
   const [facts, stored] = await Promise.all([
     listActiveFacts(chatId),
@@ -211,7 +211,7 @@ export async function syncFactEmbeddings(
       const { model: usedModel, vectors } = await embedTexts(
         connection,
         dirty.map(factEmbeddingText),
-        settings.model,
+        connection.model,
       );
       for (let i = 0; i < dirty.length; i++) {
         const vec = Float32Array.from(vectors[i]);
@@ -253,7 +253,6 @@ export async function syncMessageChunkEmbeddings(
 ): Promise<void> {
   if (!canEmbed(connection) || foldedMessages.length === 0) return;
   if (!(await isEmbeddingAvailable(connection.provider))) return;
-  const settings = await getEmbeddingSettings();
 
   const chunks = chunkMessagesForEmbedding(foldedMessages, 3);
   if (chunks.length === 0) return;
@@ -262,7 +261,7 @@ export async function syncMessageChunkEmbeddings(
     const { model, vectors } = await embedTexts(
       connection,
       chunks.map((c) => c.text),
-      settings.model,
+      connection.model,
     );
     for (let i = 0; i < chunks.length; i++) {
       const vec = Float32Array.from(vectors[i]);
@@ -311,12 +310,11 @@ export async function backfillSceneEmbeddings(
   const missing = chunks.filter((c) => !existingRefIds.has(c.refId));
   if (missing.length === 0) return 0;
 
-  const settings = await getEmbeddingSettings();
   try {
     const { model, vectors } = await embedTexts(
       connection,
       missing.map((c) => c.text),
-      settings.model,
+      connection.model,
     );
     for (let i = 0; i < missing.length; i++) {
       const vec = Float32Array.from(vectors[i]);
@@ -347,8 +345,7 @@ export async function syncLoreEmbeddings(
     .filter((e) => e.text.length > 0);
   if (candidates.length === 0) return;
 
-  const settings = await getEmbeddingSettings();
-  const model = expectedModel(connection, settings);
+  const model = expectedModel(connection);
   const stored = await listEmbeddingsByRefIds(
     "lore",
     candidates.map((e) => e.id),
@@ -365,7 +362,7 @@ export async function syncLoreEmbeddings(
     const { model: usedModel, vectors } = await embedTexts(
       connection,
       dirty.map((e) => e.text),
-      settings.model,
+      connection.model,
     );
     for (let i = 0; i < dirty.length; i++) {
       const vec = Float32Array.from(vectors[i]);
@@ -384,14 +381,13 @@ export async function reindexChatEmbeddings(
   chatId: string,
   connection: ConnectionConfig,
 ): Promise<number> {
-  const settings = await getEmbeddingSettings();
   const rows = await listAllChatEmbeddings(chatId);
   if (rows.length > 0) {
     try {
       const { model, vectors } = await embedTexts(
         connection,
         rows.map((r) => r.text),
-        settings.model,
+        connection.model,
       );
       for (let i = 0; i < rows.length; i++) {
         const vec = Float32Array.from(vectors[i]);
@@ -489,7 +485,7 @@ export async function retrieveSemanticContext(args: {
   const settings = await getEmbeddingSettings();
   let queryVec: Float32Array;
   try {
-    const { vectors } = await embedTexts(args.connection, [queryText], settings.model);
+    const { vectors } = await embedTexts(args.connection, [queryText], args.connection.model);
     queryVec = Float32Array.from(vectors[0]);
   } catch (err) {
     await markEmbeddingUnavailable(args.connection.provider);
@@ -580,10 +576,9 @@ export async function semanticSearch(
   const rows = [...factRows, ...messageRows];
   if (rows.length === 0 || !queryText.trim()) return [];
 
-  const settings = await getEmbeddingSettings();
   let queryVec: Float32Array;
   try {
-    const { vectors } = await embedTexts(connection, [queryText], settings.model);
+    const { vectors } = await embedTexts(connection, [queryText], connection.model);
     queryVec = Float32Array.from(vectors[0]);
   } catch (err) {
     await markEmbeddingUnavailable(connection.provider);

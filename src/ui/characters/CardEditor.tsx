@@ -1,4 +1,6 @@
-import { showConfirm } from "../../platform";
+import { openDialog, showConfirm } from "../../platform";
+import { appDataDir, join } from "@tauri-apps/api/path";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -166,7 +168,7 @@ export function CardEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation(["characters", "common"]);
-  const { remove } = useCharactersStore();
+  const { remove, applyPatch, setAvatar } = useCharactersStore();
 
   const [character, setCharacter] = useState<Character | null>(null);
   const [draft, setDraft] = useState<CharacterUpdate | null>(null);
@@ -174,6 +176,7 @@ export function CardEditor() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [exportState, setExportState] = useState<"idle" | "running" | "error">("idle");
   const [exportError, setExportError] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -201,9 +204,35 @@ export function CardEditor() {
     try {
       await updateCharacter(id, draft);
       setCharacter({ ...character, ...draft });
+      // Also patch the gallery's list (useCharactersStore) — updateCharacter
+      // only writes the DB row, it doesn't touch the store, so without this
+      // a renamed character kept showing its old name in the gallery until
+      // a full app reload.
+      applyPatch(id, draft);
       setSavedAt(Date.now());
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    setAvatarError(null);
+    try {
+      const avatarsDir = await appDataDir().then((d) => join(d, "avatars")).catch(() => undefined);
+      const path = await openDialog({
+        multiple: false,
+        defaultPath: avatarsDir,
+        filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      });
+      if (!path || Array.isArray(path)) return;
+      // Copy into $APPDATA/avatars — the asset protocol scope only allows
+      // that directory, so a path picked from outside it would fail to load
+      // once the strict scope check re-runs on the next app start.
+      const savedPath = await invoke<string>("save_avatar_file", { path });
+      await setAvatar(id, savedPath);
+      setCharacter((c) => (c ? { ...c, avatarPath: savedPath } : c));
+    } catch (e: unknown) {
+      setAvatarError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -320,6 +349,22 @@ export function CardEditor() {
               onChange={(e) => patch({ name: e.target.value })}
             />
           </label>
+
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => void handlePickAvatar()}
+              className="self-start rounded-[var(--radius-sm)] px-2 py-1 text-xs"
+              style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text-muted)" }}
+            >
+              {t("editor.pickAvatar")}
+            </button>
+            {avatarError && (
+              <span className="text-xs" style={{ color: "var(--color-danger)" }}>
+                {avatarError}
+              </span>
+            )}
+          </div>
 
           <div className="flex flex-wrap gap-1 text-xs" style={{ color: "var(--color-text-faint)" }}>
             {t("editor.specVersion", { version: character.specVersion.toUpperCase() })}

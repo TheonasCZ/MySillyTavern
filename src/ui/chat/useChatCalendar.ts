@@ -13,11 +13,15 @@ import {
 } from "../../db/repositories/calendarEventsRepo";
 
 /** Calendar date/weather/events state for a chat, plus the two effects that
- * keep it in sync: initial load on chat change, and a re-sync after every
- * AI reply (the DB is updated by `advanceAndPersistCalendar` during tag
- * processing — see inventoryProcessor.ts — but the UI state only loaded
- * once on mount, so the displayed time appeared frozen without this). */
-export function useChatCalendar(id: string | undefined, messagesLength: number) {
+ * keep it in sync: initial load on chat change, and a re-sync once game-tag
+ * processing has actually landed. `calendarVersion` (bumped by
+ * `refreshChatState` in chatStore.ts) is used instead of `messages.length`
+ * because the DB write from `advanceAndPersistCalendar` happens async,
+ * after the AI-tag extractor round-trip — keying off message count alone
+ * re-fetches too early and freezes the display on the stale pre-advance
+ * time (see 2026-07-30 report: clock stuck at 06:00 despite the DB
+ * already holding 09:15). */
+export function useChatCalendar(id: string | undefined, calendarVersion: number) {
   const [calendarDate, setCalendarDate] = useState<CalendarDate | null>(null);
   const [weather, setWeather] = useState<string>("jasno");
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -60,14 +64,14 @@ export function useChatCalendar(id: string | undefined, messagesLength: number) 
     return () => { cancelled = true; };
   }, [id]);
 
-  // Keep the calendar date in sync after each AI reply.
-  const prevMsgCountRef = useRef(messagesLength);
+  // Keep the calendar date in sync once game-tag processing lands.
+  const prevVersionRef = useRef(calendarVersion);
   useEffect(() => {
-    if (!id || messagesLength <= prevMsgCountRef.current) {
-      prevMsgCountRef.current = messagesLength;
+    if (!id || calendarVersion <= prevVersionRef.current) {
+      prevVersionRef.current = calendarVersion;
       return;
     }
-    prevMsgCountRef.current = messagesLength;
+    prevVersionRef.current = calendarVersion;
     let cancelled = false;
     void (async () => {
       try {
@@ -85,7 +89,7 @@ export function useChatCalendar(id: string | undefined, messagesLength: number) 
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, messagesLength]);
+  }, [id, calendarVersion]);
 
   const addEvent = (draft: { day: number; monthName: string; title: string; description: string }) => {
     if (!id || !calendarDate) return;

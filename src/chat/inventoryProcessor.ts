@@ -194,7 +194,10 @@ export async function extractTagsWithAI(
       .filter((i) => i.item && i.op)
       .map((i) => ({
         op: i.op,
-        item: String(i.item).trim(),
+        // Same colon-description guard as the regex path in inventoryTags.ts
+        // — the extractor sometimes echoes a tag where the model tacked a
+        // description onto the name after a colon.
+        item: String(i.item).trim().split(":")[0].trim(),
         qty: Math.max(1, Math.min(MAX_ITEM_QTY, i.qty || 1)),
       }));
     const invNotes: ItemNoteMutation[] = [];
@@ -736,7 +739,7 @@ export async function processGameResponse(
     try {
       const { enqueueIllustration } = await import("../memory/imageGenQueue");
       for (const itemName of newlyAddedItems) {
-        enqueueIllustration("inventory", chatId, `Fantasy game item icon: ${itemName}`, itemName);
+        enqueueIllustration("inventory", chatId, `Fantasy game item icon: ${itemName}`, chatId, itemName);
       }
     } catch (err) {
       appendLog(`${new Date().toISOString()} [warn] [illustration] chat=${chatId} enqueue failed: ${String(err).slice(0, 200)}`);

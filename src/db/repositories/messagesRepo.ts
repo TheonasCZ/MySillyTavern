@@ -2,6 +2,25 @@ import { foldForSearch } from "../../chat/searchSnippet";
 import { execute, newId, nowIso, query } from "../database";
 import { journalEntityWrite } from "../syncJournal";
 
+/** Builds the journal payload for a message row — array fields are
+ * stringified to match the `messages` TEXT columns they map to, since the
+ * sync reader binds them straight into SQL params. */
+function messageJournalEntity(message: Message, updatedAt: string): Record<string, unknown> {
+  return {
+    id: message.id,
+    chat_id: message.chatId,
+    role: message.role,
+    content: message.content,
+    swipes: JSON.stringify(message.swipes),
+    active_swipe: message.activeSwipe,
+    character_id: message.characterId,
+    created_at: message.createdAt,
+    change_summary: message.changeSummary,
+    change_summaries: JSON.stringify(message.changeSummaries),
+    updated_at: updatedAt,
+  };
+}
+
 export type MessageRole = "user" | "assistant" | "system";
 
 export interface Message {
@@ -38,6 +57,7 @@ interface MessageRow {
   created_at: string;
   change_summary: string | null;
   change_summaries: string;
+  updated_at: string;
 }
 
 function parseChangeSummaries(raw: string | null | undefined, fallback: string | null): (string | null)[] {
@@ -76,6 +96,15 @@ export async function listMessages(chatId: string): Promise<Message[]> {
     [chatId],
   );
   return rows.map(toMessage);
+}
+
+/** Raw rows (already snake_case, matching the journal entity shape exactly)
+ * for the sync backfill export — needs the real `updated_at` per message,
+ * which `Message`/`toMessage` don't carry since the rest of the app never
+ * needs it. */
+export async function listMessageRowsForSyncExport(chatId: string): Promise<Record<string, unknown>[]> {
+  const rows = await query<MessageRow>("SELECT * FROM messages WHERE chat_id = $1", [chatId]);
+  return rows as unknown as Record<string, unknown>[];
 }
 
 /** Page size for `listRecentMessages`/`listOlderMessages` — long chats load
@@ -169,8 +198,8 @@ export async function createMessage(
   const swipes = JSON.stringify([content]);
   const changeSummaries = JSON.stringify([changeSummary]);
   await execute(
-    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at, change_summary, change_summaries)
-     VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9)`,
+    `INSERT INTO messages (id, chat_id, role, content, swipes, active_swipe, character_id, created_at, change_summary, change_summaries, updated_at)
+     VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8, $9, $7)`,
     [id, chatId, role, content, swipes, characterId, now, changeSummary, changeSummaries],
   );
   const msg: Message = {
@@ -185,7 +214,7 @@ export async function createMessage(
     changeSummary,
     changeSummaries: [changeSummary],
   };
-  journalEntityWrite("message", msg as unknown as Record<string, unknown>);
+  journalEntityWrite("message", messageJournalEntity(msg, now));
   return msg;
 }
 
@@ -203,17 +232,20 @@ export async function updateMessageContent(
   swipes[message.activeSwipe] = content;
   const changeSummaries = [...message.changeSummaries];
   if (changeSummary !== undefined) changeSummaries[message.activeSwipe] = changeSummary;
+  const now = nowIso();
   await execute(
     changeSummary !== undefined
-      ? "UPDATE messages SET content = $2, swipes = $3, change_summary = $4, change_summaries = $5 WHERE id = $1"
-      : "UPDATE messages SET content = $2, swipes = $3 WHERE id = $1",
+      ? "UPDATE messages SET content = $2, swipes = $3, change_summary = $4, change_summaries = $5, updated_at = $6 WHERE id = $1"
+      : "UPDATE messages SET content = $2, swipes = $3, updated_at = $4 WHERE id = $1",
     changeSummary !== undefined
-      ? [message.id, content, JSON.stringify(swipes), changeSummary, JSON.stringify(changeSummaries)]
-      : [message.id, content, JSON.stringify(swipes)],
+      ? [message.id, content, JSON.stringify(swipes), changeSummary, JSON.stringify(changeSummaries), now]
+      : [message.id, content, JSON.stringify(swipes), now],
   );
-  return changeSummary !== undefined
+  const updated = changeSummary !== undefined
     ? { ...message, content, swipes, changeSummary, changeSummaries }
     : { ...message, content, swipes };
+  journalEntityWrite("message", messageJournalEntity(updated, now));
+  return updated;
 }
 
 /** Appends a new swipe variant (regeneration) and makes it active. */
@@ -225,11 +257,14 @@ export async function appendSwipe(
   const swipes = [...message.swipes, content];
   const activeSwipe = swipes.length - 1;
   const changeSummaries = [...message.changeSummaries, changeSummary];
+  const now = nowIso();
   await execute(
-    "UPDATE messages SET content = $2, swipes = $3, active_swipe = $4, change_summary = $5, change_summaries = $6 WHERE id = $1",
-    [message.id, content, JSON.stringify(swipes), activeSwipe, changeSummary, JSON.stringify(changeSummaries)],
+    "UPDATE messages SET content = $2, swipes = $3, active_swipe = $4, change_summary = $5, change_summaries = $6, updated_at = $7 WHERE id = $1",
+    [message.id, content, JSON.stringify(swipes), activeSwipe, changeSummary, JSON.stringify(changeSummaries), now],
   );
-  return { ...message, content, swipes, activeSwipe, changeSummary, changeSummaries };
+  const updated = { ...message, content, swipes, activeSwipe, changeSummary, changeSummaries };
+  journalEntityWrite("message", messageJournalEntity(updated, now));
+  return updated;
 }
 
 /** Switches the active swipe by a relative offset (-1 / +1), clamped to
@@ -242,13 +277,14 @@ export async function shiftActiveSwipe(message: Message, offset: number): Promis
   }
   const content = message.swipes[nextIndex];
   const changeSummary = message.changeSummaries[nextIndex] ?? null;
-  await execute("UPDATE messages SET content = $2, active_swipe = $3, change_summary = $4 WHERE id = $1", [
-    message.id,
-    content,
-    nextIndex,
-    changeSummary,
-  ]);
-  return { ...message, content, activeSwipe: nextIndex, changeSummary };
+  const now = nowIso();
+  await execute(
+    "UPDATE messages SET content = $2, active_swipe = $3, change_summary = $4, updated_at = $5 WHERE id = $1",
+    [message.id, content, nextIndex, changeSummary, now],
+  );
+  const updated = { ...message, content, activeSwipe: nextIndex, changeSummary };
+  journalEntityWrite("message", messageJournalEntity(updated, now));
+  return updated;
 }
 
 export async function deleteMessage(id: string): Promise<void> {

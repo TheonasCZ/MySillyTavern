@@ -5,6 +5,10 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-size",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-center",
     "opener:default",
     "sql:default",
     "sql:allow-execute",

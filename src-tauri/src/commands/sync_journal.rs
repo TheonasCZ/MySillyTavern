@@ -4,41 +4,29 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use tauri::{AppHandle, Manager};
-
-/// Rejects paths that resolve outside the app data directory (or its
-/// `logs/` subdirectory).
-fn validate_sync_path(app: &AppHandle, raw: &str) -> Result<(), String> {
-    let p = Path::new(raw);
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("app data dir: {e}"))?;
-    let logs_dir = data_dir.join("logs");
-
-    let resolved: PathBuf = if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map_err(|e| format!("current dir: {e}"))?
-            .join(p)
-    };
-
-    if resolved.starts_with(&data_dir) || resolved.starts_with(&logs_dir) {
-        Ok(())
-    } else {
-        Err("access denied: path is outside app directory".to_string())
+/// Sanity check for sync paths — unlike `commands/files.rs`'s
+/// `validate_app_path`, this is deliberately *not* scoped to the app's own
+/// data directory: the entire point of folder sync is writing to a
+/// user-chosen external folder (Syncthing/Dropbox/Nextcloud), always picked
+/// via a native OS directory dialog, never attacker-controlled input from
+/// remote content (this webview never loads any). Restricting to
+/// `app_data_dir` here previously made every sync write silently fail with
+/// "access denied" the moment the user picked a real sync folder.
+fn validate_sync_path(raw: &str) -> Result<(), String> {
+    if raw.trim().is_empty() {
+        return Err("sync path is empty".to_string());
     }
+    Ok(())
 }
 
 /// Appends `line` + "\n" to `path`, creating the file (and its parent
 /// directories) if they don't exist yet. Returns the new file size in bytes
 /// (so the TS side can trigger rotation when it crosses ~10 MB).
 #[tauri::command]
-pub fn append_journal_line(app: AppHandle, path: String, line: String) -> Result<u64, String> {
-    validate_sync_path(&app, &path)?;
+pub fn append_journal_line(path: String, line: String) -> Result<u64, String> {
+    validate_sync_path(&path)?;
     let p = Path::new(&path);
     if let Some(parent) = p.parent() {
         fs::create_dir_all(parent)
@@ -58,8 +46,8 @@ pub fn append_journal_line(app: AppHandle, path: String, line: String) -> Result
 /// Returns an empty array when the directory does not exist (sync disabled /
 /// folder not yet created) so the frontend never sees a hard error.
 #[tauri::command]
-pub fn list_sync_entries(app: AppHandle, dir: String) -> Result<Vec<SyncDirEntry>, String> {
-    validate_sync_path(&app, &dir)?;
+pub fn list_sync_entries(dir: String) -> Result<Vec<SyncDirEntry>, String> {
+    validate_sync_path(&dir)?;
     let p = Path::new(&dir);
     if !p.is_dir() {
         return Ok(Vec::new());
@@ -94,12 +82,11 @@ pub fn list_sync_entries(app: AppHandle, dir: String) -> Result<Vec<SyncDirEntry
 /// reader to incrementally consume large journals.
 #[tauri::command]
 pub fn read_journal_chunk(
-    app: AppHandle,
     path: String,
     start_byte: u64,
     max_bytes: u64,
 ) -> Result<JournalChunk, String> {
-    validate_sync_path(&app, &path)?;
+    validate_sync_path(&path)?;
     use std::io::Read;
     let mut f = fs::File::open(&path).map_err(|e| format!("cannot open journal for reading: {e}"))?;
     let total = f.metadata().map_err(|e| format!("cannot stat journal: {e}"))?.len();
@@ -148,8 +135,8 @@ pub fn read_journal_chunk(
 /// Deletes a file — used by the journal reader to clean up fully-processed
 /// rotated journals after they've been consumed.
 #[tauri::command]
-pub fn delete_sync_file(app: AppHandle, path: String) -> Result<(), String> {
-    validate_sync_path(&app, &path)?;
+pub fn delete_sync_file(path: String) -> Result<(), String> {
+    validate_sync_path(&path)?;
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

@@ -56,12 +56,13 @@ pub async fn list_models(
     connection_id: String,
     provider: String,
     base_url: Option<String>,
+    purpose: Option<String>,
 ) -> Result<Vec<String>, String> {
     let api_key = get_api_key(&connection_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Pro toto připojení není uložen žádný API klíč.".to_string())?;
 
-    providers::list_models(&provider, base_url.as_deref(), &api_key)
+    providers::list_models(&provider, base_url.as_deref(), &api_key, purpose.as_deref().unwrap_or("chat"))
         .await
         .map_err(|e| e.to_string())
 }

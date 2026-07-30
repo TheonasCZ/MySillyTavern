@@ -1,6 +1,6 @@
 [package]
 name = "mysillytavern"
-version = "0.1.5"
+version = "0.1.7"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -34,6 +34,8 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 rand = "0.8"
+aes-gcm = "0.10"
+argon2 = "0.5"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 # tauri-plugin-dialog and tauri-plugin-process are desktop-only; excluding them

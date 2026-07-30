@@ -199,7 +199,7 @@ export async function setFactLocked(id: string, locked: boolean): Promise<void> 
     const fact = await getFact(id);
     if (fact && !fact.imagePath) {
       const { enqueueIllustration } = await import("../../memory/imageGenQueue");
-      enqueueIllustration("fact", id, `Fantasy illustration: ${fact.fact}`);
+      enqueueIllustration("fact", id, `Fantasy illustration: ${fact.fact}`, fact.chatId);
     }
   }
 }

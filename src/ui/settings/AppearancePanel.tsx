@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
 
-import { FONT_SCALES, useSettingsStore, type Theme } from "../../stores/settingsStore";
+import { FONT_SCALES, WINDOW_SIZES, useSettingsStore, type Theme } from "../../stores/settingsStore";
 import { supportedLanguages, type SupportedLanguage } from "../../i18n";
 
 export function AppearancePanel() {
   const { t } = useTranslation("settings");
-  const { theme, language, fontScale, setTheme, setLanguage, setFontScale } = useSettingsStore();
+  const { theme, language, fontScale, windowSize, setTheme, setLanguage, setFontScale, setWindowSize } =
+    useSettingsStore();
 
   return (
     <section
@@ -85,6 +86,28 @@ export function AppearancePanel() {
               </button>
             ))}
           </div>
+        </div>
+
+        <div>
+          <span className="mb-2 block text-xs font-medium uppercase tracking-wide" style={{ color: "var(--color-text-faint)" }}>
+            {t("appearance.windowSize")}
+          </span>
+          <select
+            className="rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
+            style={{
+              backgroundColor: "var(--color-surface-2)",
+              borderColor: "var(--color-border-strong)",
+              color: "var(--color-text)",
+            }}
+            value={windowSize}
+            onChange={(e) => void setWindowSize(e.target.value as (typeof WINDOW_SIZES)[number])}
+          >
+            {WINDOW_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size === "maximized" ? t("appearance.windowSizeMaximized") : size.replace("x", " × ")}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </section>

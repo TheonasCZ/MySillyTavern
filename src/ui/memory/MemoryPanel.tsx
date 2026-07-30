@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { StoryConnectionPicker } from "./StoryConnectionPicker";
+import { EmbeddingConnectionPicker } from "./EmbeddingConnectionPicker";
 import { ExtractionConnectionPicker } from "./ExtractionConnectionPicker";
+import { TagExtractionConnectionPicker } from "./TagExtractionConnectionPicker";
+import { ImageConnectionPicker } from "./ImageConnectionPicker";
 import { FactsTab } from "./FactsTab";
 import { SummaryTab } from "./SummaryTab";
 import { ChronicleTab } from "./ChronicleTab";
@@ -50,8 +54,12 @@ export function MemoryPanel({
         </button>
       </div>
 
-      <div className="border-b px-4 py-2" style={{ borderColor: "var(--color-border)" }}>
+      <div className="flex flex-wrap gap-4 border-b px-4 py-2" style={{ borderColor: "var(--color-border)" }}>
+        <StoryConnectionPicker chatId={chatId} />
         <ExtractionConnectionPicker chatId={chatId} />
+        <TagExtractionConnectionPicker chatId={chatId} />
+        <EmbeddingConnectionPicker chatId={chatId} />
+        <ImageConnectionPicker chatId={chatId} />
       </div>
 
       <div

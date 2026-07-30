@@ -1,4 +1,5 @@
 import { execute, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 export interface CalendarEvent {
   id: string;
@@ -51,6 +52,7 @@ export interface CreateCalendarEventInput {
 
 /** Insert a calendar event. */
 export async function createCalendarEvent(input: CreateCalendarEventInput): Promise<void> {
+  const now = nowIso();
   await execute(
     `INSERT INTO calendar_events (id, chat_id, day, month_name, year, title, description, icon, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -63,9 +65,20 @@ export async function createCalendarEvent(input: CreateCalendarEventInput): Prom
       input.title,
       input.description,
       input.icon,
-      nowIso(),
+      now,
     ],
   );
+  journalEntityWrite("calendarEvent", {
+    id: input.id,
+    chat_id: input.chatId,
+    day: input.day,
+    month_name: input.monthName,
+    year: input.year,
+    title: input.title,
+    description: input.description,
+    icon: input.icon,
+    created_at: now,
+  });
 }
 
 /** List all calendar events for a chat, ordered by month and day. */
@@ -81,4 +94,5 @@ export async function listCalendarEvents(chatId: string): Promise<CalendarEvent[
 /** Delete a calendar event by id. */
 export async function deleteCalendarEvent(id: string): Promise<void> {
   await execute("DELETE FROM calendar_events WHERE id = $1", [id]);
+  journalEntityDelete("calendarEvent", { id });
 }

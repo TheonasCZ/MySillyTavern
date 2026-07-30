@@ -8,7 +8,7 @@ use commands::backup::{
     list_backups, request_import_backup, run_auto_backup,
 };
 use commands::balance::get_user_balance;
-use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
+use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file, save_avatar_file};
 use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
@@ -24,7 +24,10 @@ use commands::logging::{
     append_chat_log, append_log, delete_chat_log, get_chat_log_path, get_extractor_log_path,
     get_log_path, list_chat_logs, read_chat_log, read_extractor_log, tail_extractor_log,
 };
-use commands::secrets::{delete_api_key, has_api_key, init_store, set_api_key};
+use commands::secrets::{
+    apply_synced_secret, clear_sync_passphrase, delete_api_key, encrypt_secret_for_sync,
+    has_api_key, has_sync_passphrase, init_store, set_api_key, set_sync_passphrase,
+};
 use commands::sync_journal::{
     append_journal_line, delete_sync_file, list_sync_entries, read_journal_chunk,
 };
@@ -59,6 +62,11 @@ pub fn run() {
             set_api_key,
             delete_api_key,
             has_api_key,
+            set_sync_passphrase,
+            has_sync_passphrase,
+            clear_sync_passphrase,
+            encrypt_secret_for_sync,
+            apply_synced_secret,
             get_user_balance,
             chat_complete,
             chat_stream,
@@ -69,6 +77,7 @@ pub fn run() {
             export_card_png,
             read_card_json_file,
             ensure_placeholder_avatar,
+            save_avatar_file,
             read_text_file,
             write_text_file,
             export_backup,

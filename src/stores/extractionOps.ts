@@ -1,6 +1,6 @@
 import { getSetting, setSetting } from "../db/repositories/settingsRepo";
 import { storeVoiceEmbedding } from "../db/repositories/embeddingsRepo";
-import { canEmbed, getEmbeddingSettings } from "../memory/embeddingsEngine";
+import { canEmbed } from "../memory/embeddingsEngine";
 import { encodeVector } from "../memory/vector";
 import { embedTexts } from "../providers/embeddings";
 import type { ConnectionConfig } from "../providers/types";
@@ -41,8 +41,7 @@ export async function scheduleVoiceEmbedding(
   }
   // Compute and store the embedding.
   try {
-    const settings = await getEmbeddingSettings();
-    const { model: usedModel, vectors } = await embedTexts(connection, [text], settings.model);
+    const { model: usedModel, vectors } = await embedTexts(connection, [text], connection.model);
     const vec = Float32Array.from(vectors[0]);
     await storeVoiceEmbedding(chatId, messageId, text, usedModel, vec.length, encodeVector(vec));
   } catch {

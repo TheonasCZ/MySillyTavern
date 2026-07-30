@@ -22,7 +22,6 @@ export function MemorySettingsPanel() {
   const { t } = useTranslation(["settings", "common"]);
   const [extractionInterval, setExtractionInterval] = useState(String(DEFAULT_EXTRACTION_INTERVAL));
   const [verbatimWindow, setVerbatimWindow] = useState(String(DEFAULT_VERBATIM_WINDOW));
-  const [embeddingModel, setEmbeddingModel] = useState("");
   const [topK, setTopK] = useState(String(DEFAULT_MEMORY_TOP_K));
   const [minScore, setMinScore] = useState(String(DEFAULT_MEMORY_MIN_SCORE));
   const [saved, setSaved] = useState(false);
@@ -40,10 +39,9 @@ export function MemorySettingsPanel() {
 
   useEffect(() => {
     void (async () => {
-      const [interval, window, model, k, score, disabled, imgEn, imgLi, imgConn, voiceEx] = await Promise.all([
+      const [interval, window, k, score, disabled, imgEn, imgLi, imgConn, voiceEx] = await Promise.all([
         getSetting("extraction_interval"),
         getSetting("verbatim_window"),
-        getSetting("embedding_model"),
         getSetting("memory_top_k"),
         getSetting("memory_min_score"),
         getDisabledEmbeddingProviders(),
@@ -54,7 +52,6 @@ export function MemorySettingsPanel() {
       ]);
       if (interval) setExtractionInterval(interval);
       if (window) setVerbatimWindow(window);
-      if (model) setEmbeddingModel(model);
       if (k) setTopK(k);
       if (score) setMinScore(score);
       if (disabled.length > 0) setDisabledProviders(disabled);
@@ -81,7 +78,6 @@ export function MemorySettingsPanel() {
       await Promise.all([
         setSetting("extraction_interval", String(interval)),
         setSetting("verbatim_window", String(window)),
-        setSetting("embedding_model", embeddingModel.trim()),
         setSetting("memory_top_k", String(k)),
         setSetting("memory_min_score", String(score)),
         setSetting("image_gen_enabled", imgEnabled ? "1" : "0"),
@@ -139,19 +135,6 @@ export function MemorySettingsPanel() {
         {t("memory.embedding.subtitle")}
       </p>
       <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-1">
-            {t("memory.embedding.model")}
-            <FieldHelp text={t("memory.help.embeddingModel")} />
-          </span>
-          <input
-            className="w-56 rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={embeddingModel}
-            placeholder={t("memory.embedding.modelPlaceholder") ?? ""}
-            onChange={(e) => setEmbeddingModel(e.target.value)}
-          />
-        </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="flex items-center gap-1">
             {t("memory.embedding.topK")}

@@ -1,5 +1,6 @@
 import type { ConnectionConfig, ConnectionDraft, ConnectionPurpose } from "../../providers/types";
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 interface ConnectionRow {
   id: string;
@@ -61,7 +62,9 @@ export async function createConnection(draft: ConnectionDraft): Promise<Connecti
       draft.contextBudget, now, now,
     ],
   );
-  return { id, createdAt: now, updatedAt: now, ...draft };
+  const connection: ConnectionConfig = { id, createdAt: now, updatedAt: now, ...draft };
+  journalEntityWrite("connection", connection as unknown as Record<string, unknown>);
+  return connection;
 }
 
 export async function updateConnection(id: string, draft: ConnectionDraft): Promise<ConnectionConfig> {
@@ -81,9 +84,11 @@ export async function updateConnection(id: string, draft: ConnectionDraft): Prom
   );
   const existing = await getConnection(id);
   if (!existing) throw new Error(`Connection ${id} not found after update`);
+  journalEntityWrite("connection", existing as unknown as Record<string, unknown>);
   return existing;
 }
 
 export async function deleteConnection(id: string): Promise<void> {
   await execute("DELETE FROM connections WHERE id = $1", [id]);
+  journalEntityDelete("connection", { id });
 }

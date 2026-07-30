@@ -29,6 +29,18 @@ pub async fn generate_image(
         connection.model
     );
 
+    // 512px (the smallest size Gemini offers) is only valid on
+    // gemini-3.1-flash-lite-image — other models reject it, so only use it
+    // there and fall back to the 1K default everywhere else. Most images
+    // here end up as small avatar/inventory-icon thumbnails in the UI, so
+    // there's no benefit to the larger, slower, more expensive sizes when
+    // this model is in use.
+    let image_size = if connection.model.contains("flash-lite-image") {
+        "512"
+    } else {
+        "1K"
+    };
+
     let body = json!({
         "contents": [{
             "parts": [{ "text": prompt }]
@@ -37,7 +49,7 @@ pub async fn generate_image(
             "responseModalities": ["TEXT", "IMAGE"],
             "imageConfig": {
                 "aspectRatio": "1:1",
-                "imageSize": "1K"
+                "imageSize": image_size
             }
         }
     });
@@ -57,23 +69,59 @@ pub async fn generate_image(
     }
 
     let v: Value = serde_json::from_str(&text).map_err(|e| api_err(200, format!("Invalid JSON: {e}")))?;
-    let parts = v["candidates"][0]["content"]["parts"]
-        .as_array()
-        .ok_or_else(|| api_err(200, "No parts in Gemini image response"))?;
 
-    for part in parts {
-        if let Some(inline) = part["inlineData"].as_object() {
-            if inline.get("mimeType").and_then(|m| m.as_str()) == Some("image/png") {
-                if let Some(b64) = inline.get("data").and_then(|d| d.as_str()) {
-                    return base64::engine::general_purpose::STANDARD
-                        .decode(b64)
-                        .map_err(|e| api_err(200, format!("Failed to decode base64 image: {e}")));
+    // Surfaced only on failure below — a 200 with no image usually means
+    // Gemini's safety filter silently declined (promptFeedback.blockReason)
+    // or the model just replied with text instead of an image
+    // (candidates[0].finishReason + any text part). The previous version
+    // discarded all of this and always said the same opaque "no image
+    // data", making it impossible to tell a safety block from a model
+    // quirk from an actual bug here.
+    let block_reason = v["promptFeedback"]["blockReason"].as_str();
+    let finish_reason = v["candidates"][0]["finishReason"].as_str();
+
+    let parts = v["candidates"][0]["content"]["parts"].as_array();
+
+    if let Some(parts) = parts {
+        for part in parts {
+            if let Some(inline) = part["inlineData"].as_object() {
+                // Accept any image/* mime type, not just image/png — some
+                // models/response variants don't use png specifically.
+                let is_image = inline
+                    .get("mimeType")
+                    .and_then(|m| m.as_str())
+                    .is_some_and(|m| m.starts_with("image/"));
+                if is_image {
+                    if let Some(b64) = inline.get("data").and_then(|d| d.as_str()) {
+                        return base64::engine::general_purpose::STANDARD
+                            .decode(b64)
+                            .map_err(|e| api_err(200, format!("Failed to decode base64 image: {e}")));
+                    }
                 }
             }
         }
     }
 
-    Err(api_err(200, "No image data found in Gemini response"))
+    let text_reply: String = parts
+        .map(|ps| {
+            ps.iter()
+                .filter_map(|p| p["text"].as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+
+    let mut detail = String::from("No image data found in Gemini response");
+    if let Some(br) = block_reason {
+        detail.push_str(&format!(" (promptFeedback.blockReason: {br})"));
+    }
+    if let Some(fr) = finish_reason {
+        detail.push_str(&format!(" (finishReason: {fr})"));
+    }
+    if !text_reply.trim().is_empty() {
+        detail.push_str(&format!(" — model replied with text instead: \"{}\"", text_reply.trim()));
+    }
+    Err(api_err(200, detail))
 }
 
 /// Free image generation via pollinations.ai — no API key needed.

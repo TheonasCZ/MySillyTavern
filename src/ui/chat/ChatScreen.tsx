@@ -59,6 +59,7 @@ export function ChatScreen() {
     loadingOlderMessages,
     gameOver,
     pendingCheckSkill,
+    calendarVersion,
     openChat,
     closeChat,
     loadOlderMessages,
@@ -89,7 +90,7 @@ export function ChatScreen() {
   // ── Panel state ────────────────────────────────────────────────────
   const panels = useChatPanels();
 
-  const { calendarDate, weather, calendarEvents, addEvent, deleteEvent } = useChatCalendar(id, messages.length);
+  const { calendarDate, weather, calendarEvents, addEvent, deleteEvent } = useChatCalendar(id, calendarVersion);
 
   // ── Store-driven derived values ────────────────────────────────────
   const connection = chat?.connectionId

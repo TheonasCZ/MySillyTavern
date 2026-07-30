@@ -7,8 +7,8 @@ use serde_json::json;
 
 use super::{check_status, ProviderError};
 
-const GEMINI_EMBEDDING_MODEL: &str = "gemini-embedding-2";
-/// gemini-embedding-2 defaults to 3072 dims; 768 keeps storage/compute
+const GEMINI_EMBEDDING_MODEL: &str = "gemini-embedding-001";
+/// gemini-embedding-001 defaults to 3072 dims; 768 keeps storage/compute
 /// small with negligible retrieval quality loss at this scale.
 const GEMINI_OUTPUT_DIMS: u32 = 768;
 const OPENAI_EMBEDDING_MODEL: &str = "text-embedding-3-small";
@@ -18,8 +18,8 @@ const CHUNK_SIZE: usize = 100;
 
 /// Returns one vector per input text, in input order, plus the model id
 /// that produced them (stored alongside each vector so a model switch can
-/// invalidate stale rows). `model_override` (the `embedding_model` setting)
-/// replaces the per-provider default when set.
+/// invalidate stale rows). `model_override` (the embedding connection's own
+/// `model` field) replaces the per-provider default when set.
 pub async fn embed_texts(
     provider: &str,
     base_url: Option<&str>,
