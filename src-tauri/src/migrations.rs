@@ -227,6 +227,12 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_037,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 38,
+            description: "remove the seeded default Gemini embedding connection — it pre-filled a bogus model name and just confused setup",
+            sql: MIGRATION_038,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -705,4 +711,11 @@ INSERT INTO quests_new SELECT * FROM quests;
 DROP TABLE quests;
 ALTER TABLE quests_new RENAME TO quests;
 CREATE INDEX idx_quests_chat ON quests(chat_id, status);
+"#;
+
+/// The migration 32 seed connection pre-filled a model name that doesn't
+/// exist ("gemini-embedding-2") and just caused confusing 404s — drop it so
+/// a clean install starts with no connections instead of one broken one.
+const MIGRATION_038: &str = r#"
+DELETE FROM connections WHERE id = '00000000-0000-0000-0000-000000000001';
 "#;

@@ -122,10 +122,15 @@ pub enum StreamEvent {
 
 /// Lists the models available for the given provider/key. Returns bare
 /// model ids (e.g. "gemini-2.0-flash") suitable for the `model` field.
+/// `purpose` narrows Gemini's result to embedding-capable models
+/// ("embedContent") instead of the default chat-capable ones
+/// ("generateContent") — the two are disjoint on Gemini, so without this an
+/// embedding connection's model picker always came back empty.
 pub async fn list_models(
     provider: &str,
     base_url: Option<&str>,
     api_key: &str,
+    purpose: &str,
 ) -> Result<Vec<String>, ProviderError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
@@ -167,6 +172,11 @@ pub async fn list_models(
                     .await?,
             )
             .await?;
+            let wanted_method = if purpose == "embedding" {
+                "embedContent"
+            } else {
+                "generateContent"
+            };
             body["models"]
                 .as_array()
                 .map(|arr| {
@@ -174,7 +184,7 @@ pub async fn list_models(
                         .filter(|m| {
                             m["supportedGenerationMethods"]
                                 .as_array()
-                                .is_some_and(|ms| ms.iter().any(|x| x == "generateContent"))
+                                .is_some_and(|ms| ms.iter().any(|x| x == wanted_method))
                         })
                         .filter_map(|m| m["name"].as_str())
                         .map(|name| name.trim_start_matches("models/").to_string())

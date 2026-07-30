@@ -263,6 +263,7 @@
       "exporting": "Exportuji…",
       "exportError": "Export selhal: {{message}}",
       "saved": "Uloženo.",
+      "pickAvatar": "Vybrat avatar",
       "deleteConfirm": "Opravdu smazat tuto postavu? Chaty na ni navázané zůstanou, ale ztratí referenci.",
       "specVersion": "Formát karty: {{version}}",
       "addGreeting": "Přidat variantu",
@@ -413,6 +414,10 @@
     "extractionConnection": {
       "label": "Extrakční připojení",
       "useDefault": "Stejné jako herní připojení"
+    },
+    "embeddingConnection": {
+      "label": "Embedding připojení",
+      "none": "Bez embeddingu (vypnuto)"
     },
     "facts": {
       "empty": "Zatím žádná fakta.",

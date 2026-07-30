@@ -278,7 +278,7 @@ export async function buildApiMessages(
     history: mappedHistory,
     // Kept in sync with ConnectionForm's DEFAULT_DRAFT.contextBudget — this
     // only applies when a chat has no connection configured at all.
-    contextBudget: connection?.contextBudget ?? 12000,
+    contextBudget: connection?.contextBudget ?? 22000,
     verbatimWindow,
     factRelevance,
     retrievedMemories,

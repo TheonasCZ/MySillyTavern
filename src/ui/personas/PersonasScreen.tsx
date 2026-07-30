@@ -194,8 +194,13 @@ export function PersonasScreen() {
         <PersonaForm
           initial={null}
           onSave={async (draft) => {
-            await create(draft as PersonaDraft);
-            setEditingId(null);
+            // Switch straight into edit mode for the new persona instead of
+            // closing — only then does it have an id, which is what the
+            // avatar picker/generator (onPickAvatar) needs to attach a file.
+            // Closing here meant a freshly created persona could never pick
+            // an avatar without a separate manual "Edit" click afterward.
+            const created = await create(draft as PersonaDraft);
+            setEditingId(created.id);
           }}
           onCancel={() => setEditingId(null)}
         />

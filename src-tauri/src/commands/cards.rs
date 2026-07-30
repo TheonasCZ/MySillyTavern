@@ -63,6 +63,27 @@ pub fn export_card_png(card_json: String, avatar_path: String, out_path: String)
     Ok(())
 }
 
+/// Copies a user-picked image (any path the native file dialog returned)
+/// into the app's avatars directory and returns the new path. The asset
+/// protocol scope (tauri.conf.json) only allows `$APPDATA/avatars/*` — an
+/// avatar left at its original picked location (e.g. Pictures/foo.png)
+/// can't be loaded by the webview at all after a restart, since scope is
+/// re-validated strictly on every load rather than just cached from the
+/// picking session.
+#[tauri::command]
+pub fn save_avatar_file(app: AppHandle, path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| format!("nepodařilo se přečíst soubor: {e}"))?;
+    let ext = std::path::Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png");
+    let dir = avatars_dir(&app)?;
+    let filename = format!("{}.{}", uuid::Uuid::new_v4(), ext);
+    let dest = dir.join(&filename);
+    fs::write(&dest, &bytes).map_err(|e| format!("nepodařilo se uložit avatar: {e}"))?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
 /// Ensures a placeholder avatar PNG exists under the app data directory and
 /// returns its path. Used as the source image for exporting/creating
 /// characters that were imported from plain JSON (no original PNG) or

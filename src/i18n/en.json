@@ -264,6 +264,7 @@
       "exportError": "Export failed: {{message}}",
       "deleteConfirm": "Delete this character? Chats pointing to it will keep working but lose the reference.",
       "saved": "Saved.",
+      "pickAvatar": "Pick avatar",
       "specVersion": "Card format: {{version}}",
       "addGreeting": "Add variant",
       "tagsPlaceholder": "tag1, tag2, tag3",
@@ -413,6 +414,10 @@
     "extractionConnection": {
       "label": "Extraction connection",
       "useDefault": "Same as the game connection"
+    },
+    "embeddingConnection": {
+      "label": "Embedding connection",
+      "none": "No embedding (disabled)"
     },
     "facts": {
       "empty": "No facts yet.",

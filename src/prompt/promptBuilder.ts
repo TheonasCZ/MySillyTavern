@@ -342,7 +342,7 @@ export interface PromptBuildResult {
   report: PromptReport;
 }
 
-export const DEFAULT_VERBATIM_WINDOW = 6;
+export const DEFAULT_VERBATIM_WINDOW = 8;
 export const MIN_VERBATIM_MESSAGES = 4;
 
 /** Default number of most-recent entries rendered in full detail (qty/level/

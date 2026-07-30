@@ -8,7 +8,7 @@ use commands::backup::{
     list_backups, request_import_backup, run_auto_backup,
 };
 use commands::balance::get_user_balance;
-use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file};
+use commands::cards::{ensure_placeholder_avatar, export_card_png, import_card_png, read_card_json_file, save_avatar_file};
 use commands::chat::{
     chat_abort, chat_complete, chat_stream, embed_texts, list_models, StreamRegistry,
 };
@@ -69,6 +69,7 @@ pub fn run() {
             export_card_png,
             read_card_json_file,
             ensure_placeholder_avatar,
+            save_avatar_file,
             read_text_file,
             write_text_file,
             export_backup,

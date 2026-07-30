@@ -2,13 +2,38 @@ import { showConfirm } from "../../platform";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { invoke } from "@tauri-apps/api/core";
+
 import { getConnection } from "../../db/repositories/connectionsRepo";
 import { chatComplete } from "../../providers/chatComplete";
+import { toConnectionDto } from "../../providers/dto";
+import { embedTexts } from "../../providers/embeddings";
 import { deleteApiKey, hasApiKey, saveApiKey } from "../../providers/keyring";
 import { listModels } from "../../providers/models";
 import type { ConnectionConfig, ConnectionDraft, ConnectionPurpose, Provider } from "../../providers/types";
 import { FieldHelp } from "../common/FieldHelp";
 import { inputStyle } from "../common/inputStyle";
+
+/** Embedding and image models don't support chat completion, so testing
+ * them via `chatComplete` fails regardless of which valid model is picked
+ * (embedding: 404s; image-only models like gemini-2.5-flash-image: 400
+ * "Thinking is not enabled for this model", since chatComplete's request
+ * shape assumes a reasoning-capable chat model). Ping each purpose's
+ * actual endpoint instead. */
+async function pingConnection(cfg: ConnectionConfig): Promise<string> {
+  if (cfg.purpose === "embedding") {
+    const { model, vectors } = await embedTexts(cfg, ["ping"], cfg.model);
+    return `OK (${model}, ${vectors[0]?.length ?? 0}d)`;
+  }
+  if (cfg.purpose === "image") {
+    await invoke<string>("generate_illustration", {
+      connection: toConnectionDto(cfg),
+      prompt: "a small red circle on white background",
+    });
+    return "OK";
+  }
+  return chatComplete(cfg, [{ role: "user", content: "ping" }]);
+}
 
 const PROVIDERS: Provider[] = ["gemini", "openai", "claude"];
 
@@ -27,10 +52,10 @@ const DEFAULT_DRAFT: ConnectionDraft = {
   purpose: "chat",
   baseUrl: null,
   model: "",
-  temperature: 0.8,
+  temperature: 1.0,
   topP: 0.95,
-  maxTokens: 1024,
-  contextBudget: 12000,
+  maxTokens: 4096,
+  contextBudget: 22000,
 };
 
 interface Props {
@@ -100,18 +125,26 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
       await saveApiKey(id, apiKeyInput.trim());
       setApiKeyInput("");
       await refreshKeyStatus(id);
-      // Test connection
       const cfg = await getConnection(id);
       if (!cfg) throw new Error("Připojení nenalezeno po uložení.");
-      const reply = await chatComplete(cfg, [{ role: "user", content: "ping" }]);
-      setTestState({ status: "success", reply });
-      // Load models
+      // Load models first — this only needs a valid key, not a model, so it
+      // works even on a brand-new connection with no model picked yet. Doing
+      // the real ping test first (as this used to) meant a fresh connection
+      // could never get past step one: chatComplete/embedTexts need a model
+      // to build the request URL, which doesn't exist until this list loads.
       setModelsLoading(true);
       setModelsError(null);
-      const list = await listModels(id, draft.provider, draft.baseUrl);
+      const list = await listModels(id, draft.provider, draft.baseUrl, draft.purpose);
       setModels(list);
       setManualModel(false);
       setModelsLoading(false);
+      // Only attempt the real test once there's a model to test with.
+      if (cfg.model.trim()) {
+        const reply = await pingConnection(cfg);
+        setTestState({ status: "success", reply });
+      } else {
+        setTestState({ status: "idle" });
+      }
       onCreated?.(cfg);
     } catch (err) {
       setTestState({ status: "error", message: String(err) });
@@ -147,12 +180,18 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
     try {
       const cfg = await getConnection(savedId);
       if (!cfg) throw new Error("Připojení nenalezeno.");
-      await chatComplete(cfg, [{ role: "user", content: "ping" }]);
-      setTestState({ status: "success", reply: "OK" });
+      // Same ordering as setupAndTest: load models first (needs only the
+      // key), only ping if a model is actually picked.
       setModelsLoading(true);
-      const list = await listModels(savedId, draft.provider, draft.baseUrl);
+      const list = await listModels(savedId, draft.provider, draft.baseUrl, draft.purpose);
       setModels(list);
       setManualModel(false);
+      if (cfg.model.trim()) {
+        await pingConnection(cfg);
+        setTestState({ status: "success", reply: "OK" });
+      } else {
+        setTestState({ status: "idle" });
+      }
     } catch (err) {
       setTestState({ status: "error", message: String(err) });
     } finally {
@@ -363,61 +402,67 @@ export function ConnectionForm({ initial, onSave, onDelete, onCancel, onCreated 
         )}
       </div>
 
-      {/* Row 4: Temperature + Top P + Max Tokens + Context Budget */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-1">
-            {t("connections.fields.temperature")}
-            <FieldHelp text={t("connections.help.temperature")} />
-          </span>
-          <input
-            type="number" min={0} max={2} step={0.1}
-            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={draft.temperature}
-            onChange={(e) => setDraft({ ...draft, temperature: parseFloat(e.target.value) || 0 })}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-1">
-            {t("connections.fields.topP")}
-            <FieldHelp text={t("connections.help.topP")} />
-          </span>
-          <input
-            type="number" min={0} max={1} step={0.05}
-            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={draft.topP}
-            onChange={(e) => setDraft({ ...draft, topP: parseFloat(e.target.value) || 0 })}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-1">
-            {t("connections.fields.maxTokens")}
-            <FieldHelp text={t("connections.help.maxTokens")} />
-          </span>
-          <input
-            type="number" min={1}
-            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={draft.maxTokens}
-            onChange={(e) => setDraft({ ...draft, maxTokens: Number(e.target.value) })}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="flex items-center gap-1">
-            {t("connections.fields.contextBudget")}
-            <FieldHelp text={t("connections.help.contextBudget")} />
-          </span>
-          <input
-            type="number" min={1}
-            className="rounded-[var(--radius-sm)] border px-2 py-1.5"
-            style={inputStyle}
-            value={draft.contextBudget}
-            onChange={(e) => setDraft({ ...draft, contextBudget: Number(e.target.value) })}
-          />
-        </label>
-      </div>
+      {/* Row 4: Temperature + Top P + Max Tokens + Context Budget — only
+          chat completion uses any of these. Embedding is model + text in,
+          vector out; image generation (image_gen.rs) hardcodes its own
+          generationConfig (responseModalities/aspectRatio/imageSize) and
+          never touches temperature/topP/maxTokens/contextBudget either. */}
+      {draft.purpose === "chat" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1">
+              {t("connections.fields.temperature")}
+              <FieldHelp text={t("connections.help.temperature")} />
+            </span>
+            <input
+              type="number" min={0} max={2} step={0.1}
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.temperature}
+              onChange={(e) => setDraft({ ...draft, temperature: parseFloat(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1">
+              {t("connections.fields.topP")}
+              <FieldHelp text={t("connections.help.topP")} />
+            </span>
+            <input
+              type="number" min={0} max={1} step={0.05}
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.topP}
+              onChange={(e) => setDraft({ ...draft, topP: parseFloat(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1">
+              {t("connections.fields.maxTokens")}
+              <FieldHelp text={t("connections.help.maxTokens")} />
+            </span>
+            <input
+              type="number" min={1}
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.maxTokens}
+              onChange={(e) => setDraft({ ...draft, maxTokens: Number(e.target.value) })}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1">
+              {t("connections.fields.contextBudget")}
+              <FieldHelp text={t("connections.help.contextBudget")} />
+            </span>
+            <input
+              type="number" min={1}
+              className="rounded-[var(--radius-sm)] border px-2 py-1.5"
+              style={inputStyle}
+              value={draft.contextBudget}
+              onChange={(e) => setDraft({ ...draft, contextBudget: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex flex-col gap-2 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>

@@ -76,7 +76,12 @@ export function PersonaForm({ initial, onSave, onDelete, onSetDefault, onPickAva
       filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "webp"] }],
     });
     if (!path || Array.isArray(path)) return;
-    await onPickAvatar(path);
+    // Copy into $APPDATA/avatars — the asset protocol scope (tauri.conf.json)
+    // only allows that directory, so a path picked from outside it (e.g.
+    // Pictures) would fail to load once the strict scope check re-runs on
+    // the next app start.
+    const savedPath = await invoke<string>("save_avatar_file", { path });
+    await onPickAvatar(savedPath);
   };
 
   /* --- Skills helpers --- */

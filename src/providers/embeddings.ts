@@ -12,7 +12,7 @@ export interface EmbedResult {
 /** Embeds a batch of texts via the connection's provider (Gemini/OpenAI;
  * Claude has no embedding API and rejects). Returns the embedding model id
  * plus one vector per text, in input order. `model` overrides the
- * per-provider default (the `embedding_model` setting). */
+ * per-provider default (the embedding connection's own `model` field). */
 export async function embedTexts(
   connection: ConnectionConfig,
   texts: string[],
