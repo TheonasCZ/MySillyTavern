@@ -28,8 +28,10 @@ use commands::secrets::{
     apply_synced_secret, clear_sync_passphrase, delete_api_key, encrypt_secret_for_sync,
     has_api_key, has_sync_passphrase, init_store, set_api_key, set_sync_passphrase,
 };
+use commands::sync_assets::{sync_asset_pull, sync_asset_push};
 use commands::sync_journal::{
-    append_journal_line, delete_sync_file, list_sync_entries, read_journal_chunk,
+    append_journal_line, delete_sync_file, list_sync_entries, pick_sync_folder,
+    read_journal_chunk,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,6 +45,11 @@ pub fn run() {
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_process::init())
             .plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(tauri_plugin_android_fs::init());
     }
 
     builder
@@ -108,6 +115,9 @@ pub fn run() {
             list_sync_entries,
             read_journal_chunk,
             delete_sync_file,
+            pick_sync_folder,
+            sync_asset_push,
+            sync_asset_pull,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

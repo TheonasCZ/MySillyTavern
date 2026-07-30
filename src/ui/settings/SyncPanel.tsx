@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { openDialog, showConfirm } from "../../platform";
+import { pickSyncFolder, showConfirm } from "../../platform";
 
 import {
   pushAllLocalSecretsToSync,
@@ -15,6 +15,10 @@ import { runSyncOnStartup } from "../../db/syncReader";
 export function SyncPanel() {
   const { t } = useTranslation("settings");
   const [folderPath, setFolderPath] = useState("");
+  // Display-only label — on Android `folderPath` is a JSON SAF URI, not
+  // something a user should have to read, so the picked directory's display
+  // name is stored separately and shown instead.
+  const [folderLabel, setFolderLabel] = useState("");
   const [deviceId, setDeviceId] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -27,8 +31,10 @@ export function SyncPanel() {
   useEffect(() => {
     void (async () => {
       const folder = (await getSetting("sync_folder_path")) ?? "";
+      const label = (await getSetting("sync_folder_label")) || folder;
       const devId = await ensureDeviceId();
       setFolderPath(folder);
+      setFolderLabel(label);
       setDeviceId(devId);
       const last = await getSetting("sync_last_run");
       setLastSync(last);
@@ -60,18 +66,23 @@ export function SyncPanel() {
   };
 
   const handlePickFolder = async () => {
-    const selected = await openDialog({ directory: true, title: t("sync.pickFolder") ?? "Choose sync folder" });
-    if (selected && typeof selected === "string") {
-      setFolderPath(selected);
-      await setSetting("sync_folder_path", selected);
+    const picked = await pickSyncFolder(t("sync.pickFolder") ?? "Choose sync folder");
+    if (picked) {
+      setFolderPath(picked.root);
+      setFolderLabel(picked.label);
+      await setSetting("sync_folder_path", picked.root);
+      await setSetting("sync_folder_label", picked.label);
       await ensureDeviceId();
       resetSyncJournal(); // re-init journal with new path
+      await runSyncNow(); // pull in whatever's already in the folder — no restart needed
     }
   };
 
   const handleClearFolder = async () => {
     setFolderPath("");
+    setFolderLabel("");
     await setSetting("sync_folder_path", "");
+    await setSetting("sync_folder_label", "");
     resetSyncJournal();
   };
 
@@ -88,7 +99,7 @@ export function SyncPanel() {
     }
   };
 
-  const handleSyncNow = async () => {
+  const runSyncNow = async () => {
     setSyncing(true);
     try {
       await runSyncOnStartup();
@@ -122,7 +133,7 @@ export function SyncPanel() {
           <input
             type="text"
             readOnly
-            value={folderPath}
+            value={folderLabel}
             placeholder={t("sync.disabled") ?? ""}
             className="flex-1 rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
             style={{
@@ -186,7 +197,7 @@ export function SyncPanel() {
           </span>
           <button
             type="button"
-            onClick={handleSyncNow}
+            onClick={runSyncNow}
             disabled={syncing}
             className="rounded-[var(--radius-sm)] px-3 py-1.5 text-sm"
             style={{ backgroundColor: "var(--color-surface-2)", color: "var(--color-text)" }}

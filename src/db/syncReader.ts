@@ -36,7 +36,7 @@ export async function runSyncOnStartup(): Promise<void> {
 
     // List device directories in the sync folder
     const rootEntries: Array<{ name: string; is_dir: boolean; size_bytes: number }> =
-      await invoke("list_sync_entries", { dir: folder });
+      await invoke("list_sync_entries", { root: folder, relative: "" });
 
     const foreignDevices = rootEntries.filter(
       (e) => e.is_dir && e.name !== deviceId && !e.name.startsWith("."),
@@ -63,9 +63,8 @@ async function processDeviceJournals(
   foreignDeviceId: string,
   positions: Array<{ file: string; byteOffset: number }>,
 ): Promise<void> {
-  const deviceDir = `${folder}/${foreignDeviceId}`;
   const entries: Array<{ name: string; is_dir: boolean; size_bytes: number }> =
-    await invoke("list_sync_entries", { dir: deviceDir });
+    await invoke("list_sync_entries", { root: folder, relative: foreignDeviceId });
 
   const journals = entries
     .filter((e) => !e.is_dir && e.name.startsWith("journal") && e.name.endsWith(".jsonl"))
@@ -78,12 +77,13 @@ async function processDeviceJournals(
 
     if (startByte >= j.size_bytes) continue; // fully consumed
 
-    await processJournalFile(`${deviceDir}/${j.name}`, fileKey, startByte, positions);
+    await processJournalFile(folder, fileKey, fileKey, startByte, positions);
   }
 }
 
 async function processJournalFile(
-  fullPath: string,
+  root: string,
+  relative: string,
   fileKey: string,
   startByte: number,
   positions: Array<{ file: string; byteOffset: number }>,
@@ -94,7 +94,8 @@ async function processJournalFile(
   while (true) {
     const chunk: { text: string; next_start_byte: number | null; total_bytes: number } =
       await invoke("read_journal_chunk", {
-        path: fullPath,
+        root,
+        relative,
         startByte: offset,
         maxBytes: CHUNK_SIZE,
       });
@@ -112,7 +113,7 @@ async function processJournalFile(
       }
       try {
         const entry: JournalEntry = JSON.parse(trimmed);
-        await applyJournalEntry(entry);
+        await applyJournalEntry(entry, root);
       } catch (err) {
         console.warn("[sync] failed to parse/apply journal line:", err);
       }
@@ -146,20 +147,20 @@ function upsertPosition(
 
 // ---- Entry applicator ------------------------------------------------------
 
-async function applyJournalEntry(entry: JournalEntry): Promise<void> {
+async function applyJournalEntry(entry: JournalEntry, root: string): Promise<void> {
   switch (entry.type) {
     case "message":
       return applyMessage(entry);
     case "chat":
       return applyChat(entry);
     case "fact":
-      return applyFact(entry);
+      return applyFact(entry, root);
     case "summary":
       return applySummary(entry);
     case "character":
-      return applyCharacter(entry);
+      return applyCharacter(entry, root);
     case "persona":
-      return applyPersona(entry);
+      return applyPersona(entry, root);
     case "preset":
       return applyPreset(entry);
     case "lorebook":
@@ -178,6 +179,30 @@ async function applyJournalEntry(entry: JournalEntry): Promise<void> {
       return applySetting(entry);
     default:
       break;
+  }
+}
+
+// Mirrors `IMAGE_FIELDS`/`basename` in `syncJournal.ts` — those strip a local
+// path down to a bare filename before writing it to the journal; this
+// resolves that filename back to *this* device's own local absolute path,
+// pulling the file from the sync folder first if it isn't already present
+// locally. Mutates `entity` in place. A field is left as `null` (not the
+// bare filename!) when the sync folder doesn't have the file yet, so the UI
+// falls back to a placeholder instead of trying to load a nonsense path —
+// a later sync run heals it once the source device's push lands.
+const IMAGE_FIELDS = ["avatarPath", "avatar_path", "imagePath", "image_path"];
+
+async function pullImageFields(root: string, entity: Record<string, unknown>): Promise<void> {
+  for (const field of IMAGE_FIELDS) {
+    const value = entity[field];
+    if (typeof value !== "string" || !value) continue;
+    try {
+      const localPath: string | null = await invoke("sync_asset_pull", { root, filename: value });
+      entity[field] = localPath;
+    } catch (err) {
+      console.warn(`[sync] failed to pull image asset ${value}:`, err);
+      entity[field] = null;
+    }
   }
 }
 
@@ -321,7 +346,7 @@ async function applyChat(entry: JournalEntry): Promise<void> {
   }
 }
 
-async function applyFact(entry: JournalEntry): Promise<void> {
+async function applyFact(entry: JournalEntry, root: string): Promise<void> {
   const e = entry.entity;
   const id = e.id as string;
   if (!id) return;
@@ -335,6 +360,8 @@ async function applyFact(entry: JournalEntry): Promise<void> {
     }
     return;
   }
+
+  await pullImageFields(root, e);
 
   const local = await query<{ updated_at: string }>(
     "SELECT updated_at FROM ledger_facts WHERE id = $1", [id],
@@ -432,12 +459,12 @@ async function applySummary(entry: JournalEntry): Promise<void> {
   }
 }
 
-async function applyCharacter(entry: JournalEntry): Promise<void> {
-  await applyGenericEntity("characters", entry);
+async function applyCharacter(entry: JournalEntry, root: string): Promise<void> {
+  await applyGenericEntity("characters", entry, root);
 }
 
-async function applyPersona(entry: JournalEntry): Promise<void> {
-  await applyGenericEntity("personas", entry);
+async function applyPersona(entry: JournalEntry, root: string): Promise<void> {
+  await applyGenericEntity("personas", entry, root);
 }
 
 async function applyPreset(entry: JournalEntry): Promise<void> {
@@ -649,8 +676,10 @@ async function applyCalendarEvent(entry: JournalEntry): Promise<void> {
 }
 
 /** Generic last-write-wins applicator for entities that have `id` and
- *  `updated_at` columns. Handles both upsert and delete. */
-async function applyGenericEntity(table: string, entry: JournalEntry): Promise<void> {
+ *  `updated_at` columns. Handles both upsert and delete. `root` is only
+ *  needed for tables with an `avatarPath` field (characters, personas) —
+ *  omitted by callers for tables that never have one. */
+async function applyGenericEntity(table: string, entry: JournalEntry, root?: string): Promise<void> {
   const e = entry.entity;
   const id = e.id as string;
   if (!id) return;
@@ -664,6 +693,8 @@ async function applyGenericEntity(table: string, entry: JournalEntry): Promise<v
     }
     return;
   }
+
+  if (root) await pullImageFields(root, e);
 
   const local = await query<{ updated_at: string }>(
     `SELECT updated_at FROM ${table} WHERE id = $1`, [id],

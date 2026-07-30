@@ -19,6 +19,7 @@ interface SettingRow {
 export const SYNC_EXCLUDED_SETTINGS = new Set([
   "device_id",
   "sync_folder_path",
+  "sync_folder_label",
   "sync_positions",
   "sync_last_run",
   "window_size",

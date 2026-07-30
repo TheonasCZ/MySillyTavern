@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android",
+  "description": "Android-only plugins (Storage Access Framework folder picker for sync — no native dialog plugin on Android)",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": [
+    "android-fs:all"
+  ]
+}

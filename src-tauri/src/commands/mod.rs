@@ -10,4 +10,5 @@ pub mod files;
 pub mod image_gen;
 pub mod logging;
 pub mod secrets;
+pub mod sync_assets;
 pub mod sync_journal;

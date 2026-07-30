@@ -55,6 +55,36 @@ export async function openDialog(opts?: Record<string, unknown>): Promise<string
   return (result as FileDialogResult).path ?? null;
 }
 
+export interface SyncFolderPick {
+  /** Opaque value to store as `sync_folder_path` and pass back as `root` to
+   *  every sync command — a plain path on desktop, a JSON `FsUri` on Android. */
+  root: string;
+  /** Human-readable label for display in Settings. On Android this is the
+   *  picked directory's display name, since the URI itself isn't readable. */
+  label: string;
+}
+
+/**
+ * Opens a folder picker for sync. Desktop uses the native dialog plugin
+ * (`openDialog`). Android has no directory dialog in `tauri-plugin-dialog`,
+ * so this goes through a custom Rust command backed by the Storage Access
+ * Framework (see `commands/sync_journal.rs::pick_sync_folder`) instead.
+ */
+export async function pickSyncFolder(title?: string): Promise<SyncFolderPick | null> {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const picked = await invoke<{ root: string; display_name: string } | null>(
+      "pick_sync_folder",
+    );
+    if (picked) return { root: picked.root, label: picked.display_name };
+    return null; // user cancelled the SAF picker
+  } catch {
+    // Not Android (command returns an error there) — fall through.
+  }
+  const selected = await openDialog({ directory: true, title });
+  return selected ? { root: selected, label: selected } : null;
+}
+
 /** Open a save dialog. Returns null on Android (not supported). */
 export async function saveDialog(opts?: {
   filters?: FileDialogFilter[];
