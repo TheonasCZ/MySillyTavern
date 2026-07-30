@@ -11,7 +11,79 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use argon2::Argon2;
+use base64::Engine;
+use rand::RngCore;
+
 const FILE_NAME: &str = "secrets.json";
+
+/// Reserved key (not a real connection id) under which the sync passphrase
+/// itself is stored — reuses the same file/permissions as API keys instead
+/// of introducing a second secrets store.
+const SYNC_PASSPHRASE_KEY: &str = "__sync_passphrase__";
+
+const SALT_LEN: usize = 16;
+const NONCE_LEN: usize = 12;
+
+/// Derives a 256-bit AES key from a user passphrase + salt via Argon2id.
+/// The salt doesn't need to be secret, only unique per encryption — it
+/// travels alongside the ciphertext in the blob itself.
+fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32], String> {
+    let mut key = [0u8; 32];
+    Argon2::default()
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|e| format!("odvození klíče selhalo: {e}"))?;
+    Ok(key)
+}
+
+/// Encrypts `plaintext` with a key derived from `passphrase`. Output is
+/// `base64(salt ‖ nonce ‖ ciphertext+tag)` — self-contained, no separate
+/// metadata file needed since the salt/nonce aren't secret.
+fn encrypt_with_passphrase(passphrase: &str, plaintext: &str) -> Result<String, String> {
+    let mut salt = [0u8; SALT_LEN];
+    rand::thread_rng().fill_bytes(&mut salt);
+    let key_bytes = derive_key(passphrase, &salt)?;
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = cipher
+        .encrypt(nonce, plaintext.as_bytes())
+        .map_err(|e| format!("šifrování selhalo: {e}"))?;
+
+    let mut blob = Vec::with_capacity(SALT_LEN + NONCE_LEN + ciphertext.len());
+    blob.extend_from_slice(&salt);
+    blob.extend_from_slice(&nonce_bytes);
+    blob.extend_from_slice(&ciphertext);
+    Ok(base64::engine::general_purpose::STANDARD.encode(blob))
+}
+
+/// Decrypts a blob produced by `encrypt_with_passphrase`. A wrong passphrase
+/// or corrupted blob fails the AEAD tag check and returns `Err` — never
+/// panics, so callers can treat it as "not decryptable yet" and move on.
+fn decrypt_with_passphrase(passphrase: &str, blob_b64: &str) -> Result<String, String> {
+    let blob = base64::engine::general_purpose::STANDARD
+        .decode(blob_b64)
+        .map_err(|e| format!("neplatný blob: {e}"))?;
+    if blob.len() < SALT_LEN + NONCE_LEN {
+        return Err("blob je příliš krátký".to_string());
+    }
+    let (salt, rest) = blob.split_at(SALT_LEN);
+    let (nonce_bytes, ciphertext) = rest.split_at(NONCE_LEN);
+
+    let key_bytes = derive_key(passphrase, salt)?;
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let nonce = Nonce::from_slice(nonce_bytes);
+
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| "dešifrování selhalo (špatné heslo?)".to_string())?;
+    String::from_utf8(plaintext).map_err(|e| format!("neplatné UTF-8: {e}"))
+}
 
 /// Cached secrets directory, set once by `init_store` so `get_api_key`
 /// always uses the same path as the Tauri-managed store.
@@ -141,6 +213,56 @@ pub fn delete_api_key(app: AppHandle, connection_id: String) -> Result<(), Strin
 #[tauri::command]
 pub fn has_api_key(app: AppHandle, connection_id: String) -> Result<bool, String> {
     Ok(store_from_app(&app)?.get(&connection_id)?.is_some())
+}
+
+// ---- Encrypted key sync (M14 follow-up) ----
+//
+// The sync passphrase itself lives in the same `FileStore` as API keys
+// (under a reserved key) — it never leaves this device and is never sent
+// to JS. Encrypt/decrypt of individual connection keys always happens
+// entirely on the Rust side; only the resulting ciphertext blob crosses
+// into JS (to be written into the sync journal / applied from it).
+
+#[tauri::command]
+pub fn set_sync_passphrase(app: AppHandle, passphrase: String) -> Result<(), String> {
+    store_from_app(&app)?.set(&app, SYNC_PASSPHRASE_KEY, &passphrase)
+}
+
+#[tauri::command]
+pub fn has_sync_passphrase(app: AppHandle) -> Result<bool, String> {
+    Ok(store_from_app(&app)?.get(SYNC_PASSPHRASE_KEY)?.is_some())
+}
+
+#[tauri::command]
+pub fn clear_sync_passphrase(app: AppHandle) -> Result<(), String> {
+    store_from_app(&app)?.delete(&app, SYNC_PASSPHRASE_KEY)
+}
+
+/// Encrypts the locally stored API key for `connection_id` with the sync
+/// passphrase, for writing into the sync journal. `Ok(None)` when this
+/// connection has no key stored locally (nothing to sync).
+#[tauri::command]
+pub fn encrypt_secret_for_sync(app: AppHandle, connection_id: String) -> Result<Option<String>, String> {
+    let store = store_from_app(&app)?;
+    let passphrase = store
+        .get(SYNC_PASSPHRASE_KEY)?
+        .ok_or("sync heslo není nastavené")?;
+    match store.get(&connection_id)? {
+        Some(key) => Ok(Some(encrypt_with_passphrase(&passphrase, &key)?)),
+        None => Ok(None),
+    }
+}
+
+/// Decrypts a blob received via sync and stores it as the API key for
+/// `connection_id` — the plaintext never crosses back into JS.
+#[tauri::command]
+pub fn apply_synced_secret(app: AppHandle, connection_id: String, blob: String) -> Result<(), String> {
+    let store = store_from_app(&app)?;
+    let passphrase = store
+        .get(SYNC_PASSPHRASE_KEY)?
+        .ok_or("sync heslo není nastavené")?;
+    let plaintext = decrypt_with_passphrase(&passphrase, &blob)?;
+    store.set(&app, &connection_id, &plaintext)
 }
 
 /// Internal helper for other commands (e.g. chat_complete) that need the

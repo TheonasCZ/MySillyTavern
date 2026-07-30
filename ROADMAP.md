@@ -1,6 +1,6 @@
 # MySillyTavern — roadmapa
 
-Stav k 2026-07-25. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odložené featury.
+Stav k 2026-07-30. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odložené featury.
 
 ---
 
@@ -9,7 +9,7 @@ Stav k 2026-07-25. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odlo�
 - **M11** — Stabilita (E2E testy, virtualizace, logování) ✅
 - **M12** — Kronika, export, statistiky, prompt presety ✅
 - **M13** — TTS Web Speech ✅
-- **M14** — Zálohy + sync přes složku (JSONL žurnál, SyncPanel, 9× repo) ✅; konfliktní UI ⬜ odloženo
+- **M14** — Zálohy + sync přes složku (JSONL žurnál, SyncPanel, plná synchronizace zpráv/inventáře/kalendáře/sestav, periodický background sync) ✅; konfliktní UI ⬜ odloženo
 - **M15** — Mobil (průzkum, platform.ts, feature flags, touch swipe, useAndroidBack, burger menu) ✅
 - **M25** — Kánon, drift detektor, režie ✅
 - **M25.5** — Plná automatika paměti ✅
@@ -35,6 +35,127 @@ Stav k 2026-07-25. Hotovo M1–M15, M25–M32. Zbývá: M33 housekeeping + odlo�
 | **Gemma fallback** (system prompt do user msg) | ⬜ výhledově |
 | **M34 — Lokální AI, duálně přepínatelná (fáze A: desktop)** | ⬜ zadáno 2026-07-19, nezačato |
 | **M34 fáze B — Mobil** | ⬜ podmíněno úspěchem fáze A |
+
+---
+
+## M14 kritická oprava — sync do externí složky byl od začátku tiše rozbitý (2026-07-30, Claude)
+
+Po přidání zpětného exportu uživatel nahlásil, že se do sync složky pořád
+nic nezapisuje. Kořenová příčina, nalezená přímým dotazem do SQLite a
+kontrolou Rust strany: `validate_sync_path()` v `sync_journal.rs` odmítala
+jakoukoliv cestu **mimo adresář appky** (`app_data_dir`). Jenže celý smysl
+"sync přes složku" je zapisovat *mimo* appku — do uživatelovy Syncthing/
+Dropbox/Nextcloud složky. Každý zápis (`append_journal_line`,
+`list_sync_entries` atd.) proto od úplného začátku M14 tiše selhával s
+"access denied" a chyba se jen zalogovala do konzole — appka vypadala, že
+funguje, ale žurnál nikdy nic neobsahoval, u nikoho, kdo kdy sync použil.
+
+- ✅ Kontrola nahrazena jen základní sanity (neprázdná cesta) — cesta vždy
+  pochází z nativního OS dialogu (uživatelský výběr), ne z nedůvěryhodného
+  zdroje, takže scoping na `app_data_dir` nedával smysl.
+- Odstraněn i teď už nepotřebný `app: AppHandle` parametr ze všech 4 sync
+  příkazů.
+
+Ověřeno: `cargo check`, `vitest run` (498/498). Tauri dev sleduje
+`src-tauri/` a appku po uložení sám přerekompiloval a restartoval.
+
+---
+
+## M14 zpětný export existujících dat (2026-07-30, Claude)
+
+Uživatel zjistil, že po nastavení sync složky a kliknutí na "Synchronizovat"
+se do složky nic nezapsalo. Příčina: `runSyncOnStartup` je čistě **pull** —
+čte cizí žurnály a aplikuje je lokálně, samo nic nezapisuje. Žurnál roste
+jen z budoucích zápisů (`journalEntityWrite` volání v repozitářích), takže
+existující rozehraná data z doby před zapnutím syncu se do něj nikdy sama
+nedostanou — sync byl navržený pro dvě zařízení, co rostou spolu od
+začátku, ne pro migraci starého stavu na nové zařízení.
+
+- ✅ **`exportAllToSync()`** (`src/db/syncExport.ts`) — nová jednorázová
+  akce, tlačítko "Exportovat vše do sync složky" v `SyncPanel`. Projde
+  postavy/persony/presety/spojení/lorebooky+entries/chat_members a pak
+  chat po chatu zprávy/fakty/summary/questy/kalendář, zapíše vše do
+  žurnálu. Bezpečné spustit opakovaně (LWW podle `updated_at`, nebo
+  idempotentní upsert u entit bez timestampu).
+- ✅ **Bugfix nalezený při stavbě exportu**: lore entries (world info)
+  se v `syncReader.ts`'s `applyLorebook` posílaly do `applyGenericEntity
+  ("lorebooks", ...)` bez ohledu na to, že jde o úplně jinou tabulku
+  (`lore_entries`) s jiným schématem — sync world infa byl od začátku M14
+  tiše rozbitý. Opraveno dispatchem podle `_entry_type` tagu na nový
+  `applyLoreEntry` (insert-or-replace-by-id, žádný `updated_at` k porovnání
+  stejně jako entries samy o sobě nikdy neměly).
+
+Ověřeno: `tsc --noEmit`, `vite build`, `vitest run` (498/498), `cargo check`.
+
+---
+
+## M14 rozšíření — spojení, nastavení a šifrované API klíče (2026-07-30, Claude)
+
+Navazuje na opravu níže — cíl "plug & play" na novém zařízení znamenal i
+přenos konfigurace, ne jen herních dat:
+
+- ✅ **`connections`** (providery/modely/teplota) do žurnálu — stejný vzor
+  jako presety/postavy (`applyGenericEntity`), tabulka už měla `updated_at`.
+- ✅ **Obecná nastavení** (`settings` tabulka — motiv, jazyk, TTS, ladění
+  paměti, image-gen...) — nová migrace přidává `updated_at`, centrální hák
+  přímo v `setSetting()` pokrývá všechna volání bez nutnosti upravovat
+  desítky call-sites. Deny-list zařízení-specifických klíčů (`device_id`,
+  `sync_folder_path`, `sync_positions`, `sync_last_run`, `window_size`) —
+  všechno ostatní se synchronizuje defaultně, ať nový klíč nezůstane tiše
+  mimo sync.
+- ✅ **Šifrovaná synchronizace API klíčů** — klíče samotné žily jen v
+  `secrets.json` (Rust-only, nikdy se nevrací do JS). Uživatel chtěl klíče
+  synchronizovat, ale ne v plaintextu přes cloudovou sync složku. Řešení:
+  sync heslo (passphrase), zadané stejné na každém zařízení zvlášť (nikdy se
+  nesynchronizuje), z něj Argon2id odvodí AES-256-GCM klíč. Šifrování i
+  dešifrování běží čistě na Rust straně (`encrypt_secret_for_sync`,
+  `apply_synced_secret`) — plaintext klíč se nikdy nevrací do JS, ani při
+  synchronizaci. Nová lokální mirror tabulka `connection_secrets` (jen
+  zašifrovaný blob + timestamp) umožňuje LWW porovnání bez nutnosti
+  dešifrovat při každém sync ticku. `SyncPanel` dostal UI pro zadání/
+  vymazání hesla, po uložení hesla appka rovnou (a) pushne všechny lokálně
+  uložené klíče zašifrované do žurnálu (retroaktivně, i ty zadané před
+  nastavením hesla) a (b) zkusí dešifrovat cokoliv, co už dorazilo přes sync
+  dřív, než bylo heslo na tomhle zařízení nastavené.
+
+Ověřeno: `tsc --noEmit`, `vite build` (schválně kvůli cyklickému importu
+mezi `settingsRepo.ts` a `syncJournal.ts` — bezpečné, protože obě strany
+importy používají jen uvnitř async funkcí), `vitest run`, `cargo check`.
+
+---
+
+## M14 dokončení — sync skutečně udrží rozehraný chat napříč zařízeními (2026-07-30, Claude)
+
+Roadmapa označovala M14 (sdílená složka, JSONL žurnál) za hotové, ale
+průzkumem `syncJournal.ts`/`syncReader.ts` se našlo několik chyb, kvůli
+kterým sync ve skutečnosti neudržel rozehraný chat konzistentní:
+
+- ✅ **Editace zpráv se nesynchronizovaly vůbec** — `updateMessageContent`
+  (edit/continue), `appendSwipe` (regenerace), `shiftActiveSwipe` (přepnutí
+  swipe) do žurnálu nezapisovaly, jen `createMessage`. Přidán
+  `messages.updated_at` (MIGRATION_039) a všechny čtyři mutace teď zapisují
+  do žurnálu; `applyMessage` v readeru přepsán z "jen INSERT OR IGNORE" na
+  last-write-wins update.
+- ✅ **`applyChat` tiše zahazoval inventář/dovednosti/podmínky/XP/level** —
+  hardcoded seznam sloupců v UPDATE statementu tyhle klíče vůbec neznal.
+  Přepsáno na dynamické sestavení UPDATE z klíčů žurnálového záznamu (stejný
+  vzor jako `applyGenericEntity`).
+- ✅ **Systémová chyba serializace** — `createCharacter`/`createPersona`/
+  `createPreset` a další posílaly do žurnálu in-memory objekt s poli jako
+  `alternateGreetings`/`skills`/`inventory` jako skutečná JS pole místo
+  stringified JSON (nekonzistentní s vlastními INSERT voláními těch samých
+  funkcí). Opraveno jedním místem — `appendJournalEntry` teď před zápisem
+  normalizuje všechny pole/objekty na JSON string.
+- ✅ **`chat_members` (skupinové sestavy) a `calendar_events` (herní
+  kalendář)** nebyly v `JournalEntityType` vůbec — přidány nové typy +
+  applikátory.
+- ✅ **Periodický background sync** — dřív běžel jen při startu appky a na
+  ruční tlačítko; teď navíc `setInterval` (45s) v `App.tsx`, s guardem proti
+  překrývajícím se běhům v `runSyncOnStartup`.
+
+Vědomě ponecháno: konfliktní UI (banner pro ruční merge) zůstává odloženo —
+last-write-wins beze změny, potvrzeno uživatelem jako dostatečné pro
+jednoho hráče na více zařízeních.
 
 ---
 

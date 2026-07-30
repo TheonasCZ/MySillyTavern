@@ -170,7 +170,14 @@ export function parseGameTags(text: string): ParsedTags {
       const n = parseInt(qtyPrefix.replace(":", ""), 10);
       if (!isNaN(n) && n > 0) qty = n;
     }
-    mutations.push({ op: op === "+" ? "add" : "remove", item: item.trim(), qty });
+    // The model occasionally mimics [ITEM:name:note] syntax here and tacks
+    // a free-text description onto the name after a colon — but [INV:...]
+    // has no note field, so that colon-and-description would otherwise
+    // become part of the stored item name verbatim (e.g. "Zapečetěná
+    // cínová placatka:obsahuje hustou tmavě zelenou bylinnou emulzi").
+    // Only the part before the first colon is a real item name.
+    const cleanItem = item.split(":")[0].trim();
+    mutations.push({ op: op === "+" ? "add" : "remove", item: cleanItem, qty });
     return "";
   });
 

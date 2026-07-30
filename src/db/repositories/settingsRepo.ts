@@ -1,9 +1,28 @@
-import { execute, query } from "../database";
+import { execute, nowIso, query } from "../database";
+// Note: syncJournal.ts imports `getSetting` from this file (to resolve the
+// sync folder/device id), so this creates a circular module reference. Both
+// sides only use the import inside async function bodies, never at
+// top-level evaluation, so this is safe under ESM/Vite — verified via a
+// full `vite build`, not just `tsc --noEmit`.
+import { journalEntityWrite } from "../syncJournal";
 
 interface SettingRow {
   key: string;
   value: string;
 }
+
+/** Settings that must never leave this device — either they identify the
+ *  device/sync machinery itself (syncing them would corrupt sync) or are
+ *  plainly device-specific (e.g. window size makes no sense shared between
+ *  a desktop and a phone). Everything else syncs by default so a newly
+ *  added setting doesn't silently fail to reach other devices. */
+export const SYNC_EXCLUDED_SETTINGS = new Set([
+  "device_id",
+  "sync_folder_path",
+  "sync_positions",
+  "sync_last_run",
+  "window_size",
+]);
 
 export async function getSetting(key: string): Promise<string | null> {
   const rows = await query<SettingRow>("SELECT key, value FROM settings WHERE key = $1", [key]);
@@ -11,11 +30,15 @@ export async function getSetting(key: string): Promise<string | null> {
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {
+  const now = nowIso();
   await execute(
-    `INSERT INTO settings (key, value) VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
-    [key, value],
+    `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, $3)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    [key, value, now],
   );
+  if (!SYNC_EXCLUDED_SETTINGS.has(key)) {
+    journalEntityWrite("setting", { key, value, updated_at: now });
+  }
 }
 
 export async function resetAllSettings(): Promise<void> {

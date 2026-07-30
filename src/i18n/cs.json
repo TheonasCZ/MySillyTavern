@@ -411,13 +411,24 @@
       "search": "Hledání",
       "chronicle": "Kronika"
     },
+    "storyConnection": {
+      "label": "Vyprávěcí připojení"
+    },
     "extractionConnection": {
       "label": "Extrakční připojení",
       "useDefault": "Stejné jako herní připojení"
     },
+    "tagExtractionConnection": {
+      "label": "Extrakce tagů (mechaniky)",
+      "useDefault": "Stejné jako herní připojení (regex fallback)"
+    },
     "embeddingConnection": {
       "label": "Embedding připojení",
       "none": "Bez embeddingu (vypnuto)"
+    },
+    "imageConnection": {
+      "label": "Připojení pro ilustrace",
+      "useDefault": "Výchozí z Nastavení"
     },
     "facts": {
       "empty": "Zatím žádná fakta.",
@@ -628,7 +639,9 @@
       "theme": "Motiv",
       "themeDark": "Tmavý",
       "themeLight": "Světlý",
-      "fontSize": "Velikost písma"
+      "fontSize": "Velikost písma",
+      "windowSize": "Rozlišení okna",
+      "windowSizeMaximized": "Maximalizované"
     },
     "connections": {
       "title": "Připojení",
@@ -666,7 +679,9 @@
       "providers": {
         "gemini": "Gemini",
         "openai": "OpenAI-kompatibilní (ChatGPT, DeepSeek, OpenRouter)",
-        "claude": "Claude"
+        "claude": "Claude",
+        "deepseek": "DeepSeek",
+        "qwen": "Qwen"
       },
       "apiKey": {
         "placeholder": "Vlož API klíč…",
@@ -776,7 +791,23 @@
       "syncNow": "Synchronizovat",
       "syncing": "Synchronizuji…",
       "syncDone": "Synchronizace dokončena.",
-      "syncError": "Synchronizace selhala: {{message}}"
+      "syncError": "Synchronizace selhala: {{message}}",
+      "passphraseTitle": "Sync heslo pro API klíče",
+      "passphraseHelp": "Bez hesla se API klíče nesynchronizují (jen zbytek — spojení, chaty, nastavení...) a musíš je na každém zařízení zadat ručně. S heslem appka klíče zašifruje, než je pošle do sync složky — stejné heslo zadej na všech zařízeních.",
+      "passphrasePlaceholder": "Zadej heslo",
+      "passphraseSet": "Heslo nastaveno",
+      "passphraseNotSet": "Heslo není nastaveno",
+      "passphraseSave": "Uložit heslo",
+      "passphraseClear": "Vymazat heslo",
+      "passphraseClearConfirm": "Opravdu vymazat sync heslo? Klíče přestanou být šifrovaně synchronizovány.",
+      "passphraseSaving": "Ukládám…",
+      "passphraseSaved": "Heslo uloženo, klíče se synchronizují.",
+      "exportAllTitle": "Export existujících dat",
+      "exportAllHelp": "Normální sync propisuje jen nové změny od teď. Pokud zapínáš synchronizaci až teď a máš už rozehrané chaty/postavy/nastavení, tohle je jednorázově pošle do sync složky, aby je nové zařízení mělo hned k dispozici.",
+      "exportAllButton": "Exportovat vše do sync složky",
+      "exportAllRunning": "Exportuji…",
+      "exportAllDone": "Hotovo — vše bylo zapsáno do sync složky.",
+      "exportAllError": "Export selhal: {{message}}"
     },
     "tts": {
       "title": "Zvuk",

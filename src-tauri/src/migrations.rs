@@ -233,6 +233,24 @@ pub fn all_migrations() -> Vec<Migration> {
             sql: MIGRATION_038,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 39,
+            description: "messages: add updated_at so cross-device sync can last-write-wins edits/regenerations/swipes",
+            sql: MIGRATION_039,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 40,
+            description: "connection_secrets: local mirror of encrypted API keys received via sync (for last-write-wins comparisons)",
+            sql: MIGRATION_040,
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 41,
+            description: "settings: add updated_at so general app settings (theme, TTS, memory tuning...) can sync across devices",
+            sql: MIGRATION_041,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -718,4 +736,33 @@ CREATE INDEX idx_quests_chat ON quests(chat_id, status);
 /// a clean install starts with no connections instead of one broken one.
 const MIGRATION_038: &str = r#"
 DELETE FROM connections WHERE id = '00000000-0000-0000-0000-000000000001';
+"#;
+
+/// Sync (M14) journal edits/regenerations/swipe-switches never propagated
+/// across devices because `messages` had no `updated_at` — the reader had
+/// no way to tell "this foreign edit is newer than my local copy, apply it".
+const MIGRATION_039: &str = r#"
+ALTER TABLE messages ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
+UPDATE messages SET updated_at = created_at WHERE updated_at = '';
+"#;
+
+/// Local-only mirror of encrypted API keys received via sync — the real key
+/// lives in secrets.json (never in SQLite), this table just tracks the
+/// ciphertext blob + timestamp so the reader can decide "is this incoming
+/// synced key newer than what I already applied" without decrypting on
+/// every sync tick.
+const MIGRATION_040: &str = r#"
+CREATE TABLE connection_secrets (
+  connection_id TEXT PRIMARY KEY REFERENCES connections(id) ON DELETE CASCADE,
+  blob TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+"#;
+
+/// Sync follow-up: general app settings (theme, language, TTS, memory
+/// tuning...) never had a timestamp to sync by. Empty-string default is
+/// fine — any incoming synced entry has a real ISO timestamp that correctly
+/// beats it.
+const MIGRATION_041: &str = r#"
+ALTER TABLE settings ADD COLUMN updated_at TEXT NOT NULL DEFAULT '';
 "#;

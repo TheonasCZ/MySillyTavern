@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useConnectionsStore } from "../../stores/connectionsStore";
+import { detectOpenAiCompatibleService } from "../../providers/types";
 import { ConnectionForm } from "./ConnectionForm";
 
 export function ConnectionsPanel() {
@@ -62,7 +63,10 @@ export function ConnectionsPanel() {
                 <span>
                   <span className="block font-medium">{conn.name}</span>
                   <span className="block text-xs" style={{ color: "var(--color-text-muted)" }}>
-                    {t(`connections.providers.${conn.provider}`)} · {conn.model}
+                    {(() => {
+                      const known = detectOpenAiCompatibleService(conn.baseUrl);
+                      return known ? t(`connections.providers.${known}`) : t(`connections.providers.${conn.provider}`);
+                    })()} · {conn.model}
                   </span>
                 </span>
               </button>

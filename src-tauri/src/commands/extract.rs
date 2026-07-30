@@ -34,7 +34,7 @@ Return ONLY the JSON object, no other text, no markdown fences. The JSON must us
 Rules:
 - If nothing changed in a category, use an empty array or null.
 - time_elapsed_minutes: how many minutes passed in the story (e.g. "two hours later" = 120). If unclear, use null.
-- inventory: items gained, lost, or whose qty changed. "He found a sword" = add sword qty 1. "He dropped his shield" = remove shield qty 1.
+- inventory: items gained, lost, or whose qty changed. "He found a sword" = add sword qty 1. "He dropped his shield" = remove shield qty 1. If the narration refers back to something already listed under "Current inventory" in the context below — even using different wording, an added descriptor, or a partial/renamed reference to the same object — reuse that EXACT existing name. Do NOT add it again as a new/duplicate item just because the wording changed.
 - skills: new skills learned or existing ones improved. Delta is the change (positive = improved, negative = worsened).
 - levels: xp_delta is XP change, level_delta is level change.
 - conditions: temporary effects like "exhausted", "injured", "blessed".

@@ -17,7 +17,7 @@ import {
   listConnections,
 } from "../db/repositories/connectionsRepo";
 import { setFactImage } from "../db/repositories/ledgerRepo";
-import { setChatInventoryItemImage } from "../db/repositories/chatsRepo";
+import { getChat as getChatById, setChatInventoryItemImage } from "../db/repositories/chatsRepo";
 import type { Chat } from "../db/repositories/chatsRepo";
 import { toConnectionDto } from "../providers/dto";
 import type { ConnectionConfig } from "../providers/types";
@@ -31,6 +31,9 @@ interface QueueItem {
   prompt: string;
   /** Only for inventory items — which item within the chat's live inventory. */
   itemName?: string;
+  /** The chat this illustration belongs to — used to look up a per-chat
+   *  image connection override before falling back to the global setting. */
+  chatId: string;
 }
 
 const queue: QueueItem[] = [];
@@ -66,7 +69,14 @@ function resetDailyIfNeeded(): void {
 
 // ---- connection resolution ------------------------------------------------
 
-async function resolveConnection(): Promise<ConnectionConfig | null> {
+async function resolveConnection(chatId: string): Promise<ConnectionConfig | null> {
+  // Per-chat override takes priority over the global default (plan: chat
+  // settings always win over Settings → Memory when both are set).
+  const chat = await getChatById(chatId);
+  if (chat?.imageConnectionId) {
+    const chatConn = await getConnection(chat.imageConnectionId);
+    if (chatConn) return chatConn;
+  }
   const connId = await getSetting("image_gen_connection_id");
   if (connId) {
     return getConnection(connId);
@@ -106,15 +116,14 @@ async function processQueue(): Promise<void> {
         break;
       }
 
+      const item = queue.shift()!;
+
       // --- connection ---
-      const connection = await resolveConnection();
+      const connection = await resolveConnection(item.chatId);
       if (!connection) {
         console.warn("imageGenQueue: no connection available for image generation");
-        queue.length = 0;
-        break;
+        continue;
       }
-
-      const item = queue.shift()!;
 
       try {
         const imagePath: string = await invoke("generate_illustration", {
@@ -159,12 +168,15 @@ function scheduleProcess(): void {
  * @param type      `"fact"` for a ledger fact, `"inventory"` for a chat's live inventory item.
  * @param targetId  `fact.id` or `chat.id`.
  * @param prompt    The image-generation prompt.
+ * @param chatId    The chat this illustration belongs to — used to resolve a
+ *                  per-chat image connection override (`chat.imageConnectionId`).
  * @param itemName  Required for `"inventory"` — the `item` field of the inventory entry.
  */
 export function enqueueIllustration(
   type: "fact" | "inventory",
   targetId: string,
   prompt: string,
+  chatId: string,
   itemName?: string,
 ): void {
   // Don't queue duplicates (same type + target + item).
@@ -179,7 +191,7 @@ export function enqueueIllustration(
     return;
   }
 
-  queue.push({ type, targetId, prompt, itemName });
+  queue.push({ type, targetId, prompt, chatId, itemName });
   scheduleProcess();
 }
 
@@ -196,7 +208,7 @@ export async function backfillMissingInventoryImages(chat: Chat): Promise<void> 
   if (enabled === "0") return;
   for (const entry of chat.inventory ?? []) {
     if (!entry.image_path) {
-      enqueueIllustration("inventory", chat.id, `Fantasy game item icon: ${entry.item}`, entry.item);
+      enqueueIllustration("inventory", chat.id, `Fantasy game item icon: ${entry.item}`, chat.id, entry.item);
     }
   }
 }

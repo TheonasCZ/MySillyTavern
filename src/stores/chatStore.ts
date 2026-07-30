@@ -76,6 +76,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   suggesting: false,
   gameOver: null,
   pendingCheckSkill: null,
+  calendarVersion: 0,
 
   openChat: async (chatId) => openChatOp(chatId, set, get),
 
@@ -250,7 +251,12 @@ async function refreshChatState(chatId: string): Promise<void> {
     getPendingCheckSkill(chatId),
   ]);
   if (freshChat && useChatStore.getState().chatId === chatId) {
-    useChatStore.setState({ chat: freshChat, gameOver, pendingCheckSkill });
+    useChatStore.setState((s) => ({
+      chat: freshChat,
+      gameOver,
+      pendingCheckSkill,
+      calendarVersion: s.calendarVersion + 1,
+    }));
   }
 }
 

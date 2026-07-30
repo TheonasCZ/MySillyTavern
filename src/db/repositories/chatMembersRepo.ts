@@ -1,4 +1,5 @@
 import { execute, newId, nowIso, query } from "../database";
+import { journalEntityDelete, journalEntityWrite } from "../syncJournal";
 
 export interface ChatMember {
   id: string;
@@ -61,7 +62,9 @@ export async function addChatMember(chatId: string, characterId: string): Promis
     "SELECT * FROM chat_members WHERE chat_id = $1 AND character_id = $2",
     [chatId, characterId],
   );
-  return toChatMember(rows[0]);
+  const member = toChatMember(rows[0]);
+  journalEntityWrite("chatMember", rows[0] as unknown as Record<string, unknown>);
+  return member;
 }
 
 export async function removeChatMember(chatId: string, characterId: string): Promise<void> {
@@ -69,4 +72,5 @@ export async function removeChatMember(chatId: string, characterId: string): Pro
     chatId,
     characterId,
   ]);
+  journalEntityDelete("chatMember", { chat_id: chatId, character_id: characterId });
 }

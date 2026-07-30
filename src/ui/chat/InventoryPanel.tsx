@@ -75,8 +75,14 @@ export function InventoryPanel({ inventory, race, onClose, onGenerateImage }: Pr
   useEffect(() => { saveViewMode(viewMode); }, [viewMode]);
 
   const items = inventory ?? [];
+  // Grid always shows every item — pad with empty placeholder slots up to
+  // SLOT_COUNT only when there's room to spare (a full last row of "+"
+  // slots), never truncate: previously this capped at exactly SLOT_COUNT
+  // slots, so any item past the 8th silently never rendered in grid view
+  // (list view was unaffected, since it just maps over `items` directly).
+  const slotTotal = Math.max(SLOT_COUNT, items.length);
   const slots: (InventoryEntry | null)[] = [];
-  for (let i = 0; i < SLOT_COUNT; i++) {
+  for (let i = 0; i < slotTotal; i++) {
     slots.push(items[i] ?? null);
   }
 

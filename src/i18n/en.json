@@ -411,13 +411,24 @@
       "search": "Search",
       "chronicle": "Chronicle"
     },
+    "storyConnection": {
+      "label": "Story connection"
+    },
     "extractionConnection": {
       "label": "Extraction connection",
       "useDefault": "Same as the game connection"
     },
+    "tagExtractionConnection": {
+      "label": "Tag extraction (mechanics)",
+      "useDefault": "Same as the game connection (regex fallback)"
+    },
     "embeddingConnection": {
       "label": "Embedding connection",
       "none": "No embedding (disabled)"
+    },
+    "imageConnection": {
+      "label": "Image generation connection",
+      "useDefault": "Default from Settings"
     },
     "facts": {
       "empty": "No facts yet.",
@@ -628,7 +639,9 @@
       "theme": "Theme",
       "themeDark": "Dark",
       "themeLight": "Light",
-      "fontSize": "Font size"
+      "fontSize": "Font size",
+      "windowSize": "Window resolution",
+      "windowSizeMaximized": "Maximized"
     },
     "connections": {
       "title": "Connections",
@@ -666,7 +679,9 @@
       "providers": {
         "gemini": "Gemini",
         "openai": "OpenAI-compatible (ChatGPT, DeepSeek, OpenRouter)",
-        "claude": "Claude"
+        "claude": "Claude",
+        "deepseek": "DeepSeek",
+        "qwen": "Qwen"
       },
       "apiKey": {
         "placeholder": "Paste API key…",
@@ -776,7 +791,23 @@
       "syncNow": "Sync now",
       "syncing": "Syncing…",
       "syncDone": "Sync complete.",
-      "syncError": "Sync failed: {{message}}"
+      "syncError": "Sync failed: {{message}}",
+      "passphraseTitle": "Sync passphrase for API keys",
+      "passphraseHelp": "Without a passphrase, API keys don't sync (everything else — connections, chats, settings... still does) and you'll need to re-enter keys on each device. With a passphrase, the app encrypts keys before sending them through the sync folder — enter the same passphrase on every device.",
+      "passphrasePlaceholder": "Enter passphrase",
+      "passphraseSet": "Passphrase set",
+      "passphraseNotSet": "Passphrase not set",
+      "passphraseSave": "Save passphrase",
+      "passphraseClear": "Clear passphrase",
+      "passphraseClearConfirm": "Clear the sync passphrase? Keys will stop syncing encrypted.",
+      "passphraseSaving": "Saving…",
+      "passphraseSaved": "Passphrase saved, keys are syncing.",
+      "exportAllTitle": "Export existing data",
+      "exportAllHelp": "Normal sync only journals new changes from now on. If you're only enabling sync now and already have chats/characters/settings in progress, this pushes them all into the sync folder once so a new device has them right away.",
+      "exportAllButton": "Export everything to sync folder",
+      "exportAllRunning": "Exporting…",
+      "exportAllDone": "Done — everything was written to the sync folder.",
+      "exportAllError": "Export failed: {{message}}"
     },
     "tts": {
       "title": "Sound",

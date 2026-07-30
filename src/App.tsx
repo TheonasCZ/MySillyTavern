@@ -65,6 +65,19 @@ function App() {
     })();
   }, [hydrated]);
 
+  // Periodic background sync — picks up foreign-device changes (e.g. a
+  // regenerated reply or inventory update made on another device) while the
+  // app stays open, without needing a restart or the manual "Sync now"
+  // button. `runSyncOnStartup` no-ops cheaply when sync isn't configured.
+  useEffect(() => {
+    if (!hydrated) return;
+    const SYNC_INTERVAL_MS = 45_000;
+    const id = window.setInterval(() => {
+      void runSyncOnStartup();
+    }, SYNC_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [hydrated]);
+
   const ready = hydrated && backupDone && syncDone;
 
   if (!ready) {

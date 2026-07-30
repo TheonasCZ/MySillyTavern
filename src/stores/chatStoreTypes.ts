@@ -76,6 +76,12 @@ export interface ChatState {
    *  `openChat`/refreshed after every stream, cleared on the next
    *  `sendMessage` regardless of whether it was used. */
   pendingCheckSkill: string | null;
+  /** Bumped every time `refreshChatState` runs — i.e. right after game-tag
+   *  processing has actually written its DB mutations (calendar, inventory
+   *  images, ...), not merely when a new message appears. The calendar
+   *  panel keys its re-sync off this instead of `messages.length` so it
+   *  can't read the DB before `advanceAndPersistCalendar` has landed. */
+  calendarVersion: number;
 
   openChat: (chatId: string) => Promise<void>;
   closeChat: () => Promise<void>;

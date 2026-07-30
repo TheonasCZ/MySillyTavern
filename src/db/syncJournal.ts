@@ -123,6 +123,22 @@ async function resolveJournalPath(): Promise<string | null> {
 }
 
 /**
+ * Normalizes an entity's field values so they match how they're stored in
+ * SQLite: array/object values (e.g. `skills`, `alternateGreetings`) are
+ * stringified to JSON, matching the TEXT columns they'll be bound to on the
+ * reading side. Callers commonly pass the in-memory (already-parsed) object
+ * straight through, so without this, non-string values would hit the DB
+ * bind call with the wrong type.
+ */
+function normalizeEntityForJournal(entity: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(entity)) {
+    normalized[key] = typeof value === "object" && value !== null ? JSON.stringify(value) : value;
+  }
+  return normalized;
+}
+
+/**
  * Appends a journal entry to the current device journal.
  * Gracefully handles missing folders and other errors — never throws.
  */
@@ -131,7 +147,7 @@ export async function appendJournalEntry(entry: JournalEntry): Promise<void> {
     const path = await resolveJournalPath();
     if (!path) return; // sync disabled
 
-    const line = JSON.stringify(entry);
+    const line = JSON.stringify({ ...entry, entity: normalizeEntityForJournal(entry.entity) });
     const newSize: number = await invoke("append_journal_line", { path, line });
     currentJournalSize = newSize;
   } catch (err) {

@@ -11,7 +11,12 @@ export type JournalEntityType =
   | "persona"
   | "preset"
   | "lorebook"
-  | "quest";
+  | "quest"
+  | "chatMember"
+  | "calendarEvent"
+  | "connection"
+  | "connectionSecret"
+  | "setting";
 
 export type JournalAction = "upsert" | "delete";
 
